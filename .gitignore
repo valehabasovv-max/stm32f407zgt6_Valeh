@@ -1,0 +1,18 @@
+# Törəmə Fayllar və Qovluqlar
+/Debug/
+/Release/
+
+# İcra edilə bilən fayllar (Executable) və xəritələr
+*.o
+*.d
+*.elf
+*.map
+*.bin
+*.hex
+*.lst
+
+# Eclipse/IDE-yə xas Layihə Ayarları
+.cproject
+.project
+.settings/
+.launch
