@@ -45,9 +45,9 @@ extern "C" {
 #define DRV_PWM_MIN 0.0f     // Təzyiq Minimum (Açıq)
 #define DRV_PWM_MAX 40.0f    // Təzyiq Maksimum (Bağlı)
 
-// PID İdarəetmə Limitləri
-#define PID_OUTPUT_MIN -100.0f
-#define PID_OUTPUT_MAX 100.0f
+// PID İdarəetmə Limitləri (klapan trim limitləri ilə eyni saxlanılır)
+#define PID_OUTPUT_MIN (-PWM_TRIM_LIMIT)
+#define PID_OUTPUT_MAX (PWM_TRIM_LIMIT)
 
 // Motor İdarəetmə Limitləri (0-100% PWM)
 #define MOTOR_MAX_PWM 100.0f

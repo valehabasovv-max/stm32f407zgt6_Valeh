@@ -223,16 +223,13 @@ float AdvancedPressureControl_ReadPressure(void) {
                adc_raw, pressure, g_calibration.offset, g_calibration.slope);
     }
     
-    // KRİTİK DÜZƏLİŞ: Yalnız son təzyiq nəticəsini clamp etmək lazımdır
+    // KRİTİK DÜZƏLİŞ: Yalnız aşağı limit clamp edilir
     // Minimum təzyiq 0.0 bar ola bilər, mənfi təzyiq olmamalıdır
-    // Maksimum təzyiq kalibrləmə maksimumundan yuxarı ola bilər (sensor 300 bar-dan yuxarı göstərə bilər)
-    // Amma təhlükəsizlik üçün PRESSURE_MAX (300.0 bar) ilə limitləyirik
+    // Maksimum təzyiq clamp edilmir ki, sistem real >300 bar dəyərlərinə reaksiya verə bilsin
     float min_pressure_clamp = (g_calibration.pressure_min < 0.0f) ? 0.0f : g_calibration.pressure_min;
-    pressure = AdvancedPressureControl_ClampValue(
-        pressure, 
-        min_pressure_clamp, 
-        PRESSURE_MAX  // Təhlükəsizlik üçün maksimum təzyiq limiti
-    );
+    if (pressure < min_pressure_clamp) {
+        pressure = min_pressure_clamp;
+    }
     
     return pressure;
 }
@@ -646,6 +643,8 @@ void AdvancedPressureControl_SetPIDParams(PID_Controller_t* pid, float kp, float
     pid->Kp = kp;
     pid->Ki = ki;
     pid->Kd = kd;
+    pid->integral_sum = 0.0f;
+    pid->previous_error = 0.0f;
 }
 
 /* =========================================================================
