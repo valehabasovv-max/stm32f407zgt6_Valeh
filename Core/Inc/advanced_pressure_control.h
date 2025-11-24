@@ -139,7 +139,6 @@ typedef struct {
     bool control_enabled;       // Control system enabled
     bool auto_mode;             // Auto mode enabled
     bool safety_triggered;      // Safety system triggered
-    bool emergency_stop;        // Emergency stop active
 } SystemStatus_t;
 
 // Calibration Data Structure
@@ -193,7 +192,6 @@ void AdvancedPressureControl_SetMotor_PWM(float percent);
 void AdvancedPressureControl_Init(void);
 void AdvancedPressureControl_Step(void);
 void AdvancedPressureControl_Reset(void);
-void AdvancedPressureControl_EmergencyStop(void);
 
 /* PID Control Functions */
 void AdvancedPressureControl_InitPID(PID_Controller_t* pid, float kp, float ki, float kd);

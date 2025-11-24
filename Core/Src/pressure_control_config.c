@@ -70,8 +70,7 @@ Safety_Config_t g_safety_config = {
     .max_pressure = CONFIG_SAFETY_MAX_PRESSURE,
     .over_limit_margin = CONFIG_SAFETY_OVER_LIMIT_MARGIN,
     .emergency_threshold = CONFIG_SAFETY_EMERGENCY_THRESHOLD,
-    .safety_enabled = true,
-    .emergency_stop_enabled = true
+    .safety_enabled = true
 };
 
 /* =========================================================================
@@ -384,14 +383,6 @@ void PressureControlConfig_SetSafetyLimits(float max_pressure, float over_limit_
 void PressureControlConfig_EnableSafety(bool enable) {
     g_safety_config.safety_enabled = enable;
     printf("Safety system %s\r\n", enable ? "enabled" : "disabled");
-}
-
-/**
- * @brief Enable/disable emergency stop
- */
-void PressureControlConfig_EnableEmergencyStop(bool enable) {
-    g_safety_config.emergency_stop_enabled = enable;
-    printf("Emergency stop %s\r\n", enable ? "enabled" : "disabled");
 }
 
 /* =========================================================================
