@@ -548,7 +548,7 @@ void ILI9341_ShowPressureControlMain(void)
     // Show target pressure information (from Advanced system)
     SystemStatus_t* status = AdvancedPressureControl_GetStatus();
     char limit_str[30];
-    sprintf(limit_str, "Target: %.0f bar", status->target_pressure);
+    sprintf(limit_str, "SP: %.0f bar", status->target_pressure);
     ILI9341_DrawString(10, 140, limit_str, ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 1);
     
     // Show safety status (based on target pressure)
@@ -570,7 +570,7 @@ void ILI9341_ShowPressureControlMain(void)
     
     /* Show target pressure (from Advanced system) - eyni status dəyişənini istifadə edirik */
     char target_info[30];
-    sprintf(target_info, "Target: %.1f bar", status->target_pressure);
+    sprintf(target_info, "SP: %.1f bar", status->target_pressure);
     ILI9341_DrawString(20, 210, target_info, ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
     
     /* Show valve status (for NO valves: 0% = open, 100% = closed) */
@@ -644,7 +644,7 @@ void ILI9341_ShowPressureLimitPage(void)
     // Current target pressure display (from Advanced system)
     SystemStatus_t* status = AdvancedPressureControl_GetStatus();
     char limit_str[30];
-    sprintf(limit_str, "Target: %.1f BAR", status->target_pressure);
+    sprintf(limit_str, "SP: %.1f BAR", status->target_pressure);
     ILI9341_DrawString(80, 80, limit_str, ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 3);
     
     // Range display
