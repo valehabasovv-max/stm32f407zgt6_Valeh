@@ -983,7 +983,6 @@ void AdvancedPressureControl_Init(void) {
     // İlkin dəyərlər
     g_system_status.target_pressure = 70.0f; // İlkin hədəf təzyiq
     g_system_status.control_enabled = false;  // İlkin olaraq false, sonra true ediləcək
-    g_system_status.auto_mode = false;
     g_system_status.safety_triggered = false;
     
     // KRİTİK: target_pressure 0.0 və ya çox kiçik olarsa, default dəyər təyin et
@@ -1118,7 +1117,6 @@ void AdvancedPressureControl_PrintDebugInfo(void) {
            g_pid_zme.Kp, g_pid_zme.Ki, g_pid_zme.Kd);
     printf("Dead Band: ±%.2f bar\r\n", DEAD_BAND_BAR);
     printf("Control Enabled: %s\r\n", g_system_status.control_enabled ? "Yes" : "No");
-    printf("Auto Mode: %s\r\n", g_system_status.auto_mode ? "Yes" : "No");
     printf("Safety Triggered: %s\r\n", g_system_status.safety_triggered ? "Yes" : "No");
     printf("==========================================\r\n\n");
 }

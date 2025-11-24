@@ -100,7 +100,6 @@ typedef struct {
     char build_date[32];
     bool debug_enabled;
     bool safety_enabled;
-    bool auto_mode_enabled;
 } System_Config_t;
 
 // Calibration Data
@@ -182,7 +181,6 @@ void PressureControlConfig_EnableSafety(bool enable);
 
 /* System Configuration */
 void PressureControlConfig_SetDebugMode(bool enable);
-void PressureControlConfig_SetAutoMode(bool enable);
 void PressureControlConfig_PrintSystemInfo(void);
 
 /* Parameter Validation */

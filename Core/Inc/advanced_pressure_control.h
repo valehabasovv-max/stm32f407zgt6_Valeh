@@ -137,7 +137,6 @@ typedef struct {
     float pid_output;           // PID controller output
     float error;                // Current error (setpoint - current)
     bool control_enabled;       // Control system enabled
-    bool auto_mode;             // Auto mode enabled
     bool safety_triggered;      // Safety system triggered
 } SystemStatus_t;
 

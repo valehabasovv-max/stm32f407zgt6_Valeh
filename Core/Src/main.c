@@ -150,7 +150,6 @@ int main(void)
   /* AdvancedPressureControl_Init() artıq g_control_initialized və control_enabled-ı true edir */
   SystemStatus_t* pid_status = AdvancedPressureControl_GetStatus();
   pid_status->control_enabled = true;  // Təsdiq et (Init-də artıq true-dur)
-  pid_status->auto_mode = true;  // Auto rejim aktivləşdir
   
   // KRİTİK DÜZƏLİŞ: Sistemin aktiv olduğunu təsdiq et
   if (!pid_status->control_enabled) {
@@ -160,8 +159,8 @@ int main(void)
   
   // KRİTİK DÜZƏLİŞ: g_control_initialized-ın true olduğunu təsdiq et
   // (Bu dəyişən static-dir, amma Init() funksiyası onu true edir)
-  printf("Sistem Status: control_enabled=%d, auto_mode=%d\r\n", 
-         pid_status->control_enabled, pid_status->auto_mode);
+  printf("Sistem Status: control_enabled=%d\r\n", 
+         pid_status->control_enabled);
   
   // KRİTİK DÜZƏLİŞ: target_pressure 0.0 və ya çox kiçik olarsa, default dəyər istifadə et
   if (pid_status->target_pressure < 0.1f) {
