@@ -107,17 +107,30 @@ static bool AdvancedPressureControl_IsCalibrationRangeValid(uint16_t adc_min_val
  * @brief ADC-dən xam dəyəri oxu
  * @retval Raw ADC value (0-4095)
  *
- * Continuous mode-da ADC davamlı işləyir, ona görə də dəyəri ən son tamamlanmış
- * konversiyadan birbaşa oxumaq kifayətdir. EOC flaqına güvənmək əvəzinə dəyəri
- * həmişə oxuyuruq və yalnız konversiya baş verməyibsə əvvəlki etibarlı dəyəri
- * qaytarırıq.
+ * KRİTİK DÜZƏLİŞ: Continuous mode-da ADC davamlı konversiya edir, amma dəyəri oxumazdan
+ * əvvəl konversiyanın tamamlanmasını gözləmək lazımdır. EOC (End of Conversion) flaqını
+ * yoxlayırıq və konversiya tamamlanana qədər gözləyirik.
  */
 uint16_t AdvancedPressureControl_ReadADC(void) {
     static uint16_t last_valid_adc = ADC_MIN;
+    static uint32_t error_count = 0;
+    static uint32_t success_count = 0;
 
     /* Əgər hansısa səbəbdən ADC dayanıbsa, onu yenidən işə sal */
-    if ((HAL_ADC_GetState(&hadc3) & HAL_ADC_STATE_REG_BUSY) == 0U) {
+    HAL_ADC_StateTypeDef adc_state = HAL_ADC_GetState(&hadc3);
+    if (adc_state == HAL_ADC_STATE_RESET || adc_state == HAL_ADC_STATE_ERROR) {
+        if (HAL_ADC_Init(&hadc3) != HAL_OK) {
+            error_count++;
+            if (error_count % 100 == 0) {
+                printf("ADC ERROR[%lu]: Failed to reinitialize ADC (state=%d)\r\n", error_count, adc_state);
+            }
+            return last_valid_adc;
+        }
         if (HAL_ADC_Start(&hadc3) != HAL_OK) {
+            error_count++;
+            if (error_count % 100 == 0) {
+                printf("ADC ERROR[%lu]: Failed to start ADC\r\n", error_count);
+            }
             return last_valid_adc;
         }
     }
@@ -125,15 +138,53 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
     /* Overrun baş veribsə flaqı təmizlə ki, növbəti konversiya bloklanmasın */
     if (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_OVR) != RESET) {
         __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_OVR);
+        error_count++;
+        if (error_count % 50 == 0) {
+            printf("ADC WARNING[%lu]: Overrun flag detected and cleared\r\n", error_count);
+        }
     }
 
-    uint16_t adc_value = (uint16_t)HAL_ADC_GetValue(&hadc3);
+    /* KRİTİK DÜZƏLİŞ: Continuous mode-da ADC davamlı konversiya edir */
+    /* EOC flaqını yoxla - konversiya tamamlanıbsa dəyəri oxu */
+    /* Continuous mode-da EOC flaqı hər konversiyadan sonra avtomatik set olur */
+    uint32_t timeout = HAL_GetTick() + 10;  // 10ms timeout
+    while (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC) == RESET) {
+        if (HAL_GetTick() >= timeout) {
+            error_count++;
+            if (error_count % 50 == 0) {
+                printf("ADC ERROR[%lu]: EOC timeout - ADC may be stuck (state=%d)\r\n", 
+                       error_count, HAL_ADC_GetState(&hadc3));
+            }
+            return last_valid_adc;  // Timeout - əvvəlki dəyəri qaytar
+        }
+    }
 
-    /* İlk oxunuşda 0 dəyəri gəlirsə, kalibrlənmiş minimumu saxla */
+    /* EOC flaqı set olub - konversiya tamamlanıb, dəyəri oxu */
+    uint16_t adc_value = (uint16_t)HAL_ADC_GetValue(&hadc3);
+    
+    /* EOC flaqını təmizlə (növbəti konversiya üçün) */
+    /* QEYD: Continuous mode-da EOC avtomatik təmizlənir, amma təhlükəsizlik üçün manual təmizləyirik */
+    __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_EOC);
+
+    /* Dəyər yoxlaması */
     if (adc_value == 0U && last_valid_adc == ADC_MIN) {
+        /* İlk oxunuşda 0 dəyəri gəlirsə, kalibrlənmiş minimumu saxla */
+        error_count++;
+        if (error_count % 100 == 0) {
+            printf("ADC WARNING[%lu]: First read returned 0, using default ADC_MIN=%d\r\n", 
+                   error_count, ADC_MIN);
+        }
         return last_valid_adc;
     }
 
+    /* Etibarlı dəyər - yenilə və qaytar */
+    if (adc_value != last_valid_adc) {
+        success_count++;
+        if (success_count <= 10 || success_count % 1000 == 0) {
+            printf("ADC OK[%lu]: Value=%d (prev=%d)\r\n", success_count, adc_value, last_valid_adc);
+        }
+    }
+    
     last_valid_adc = adc_value;
     return adc_value;
 }
@@ -199,13 +250,19 @@ float AdvancedPressureControl_ClampValue(float value, float min_val, float max_v
 float AdvancedPressureControl_ReadPressure(void) {
     uint16_t adc_raw = AdvancedPressureControl_ReadADC();
     
-    // DEBUG: İlk çağırışda kalibrləmə məlumatlarını göstər
+    // DEBUG: İlk çağırışda kalibrləmə məlumatlarını və ADC dəyərini göstər
     static bool first_call = true;
     if (first_call) {
-        printf("DEBUG: Calibration values - ADC: %.0f-%.0f, Pressure: %.2f-%.2f bar, Slope: %.6f, Offset: %.2f\r\n",
+        printf("=== PRESSURE SENSOR INIT ===\r\n");
+        printf("ADC Raw Value: %d\r\n", adc_raw);
+        printf("Calibration - ADC: %.0f-%.0f, Pressure: %.2f-%.2f bar\r\n",
                g_calibration.adc_min, g_calibration.adc_max, 
-               g_calibration.pressure_min, g_calibration.pressure_max,
+               g_calibration.pressure_min, g_calibration.pressure_max);
+        printf("Slope: %.6f bar/ADC, Offset: %.2f bar\r\n",
                g_calibration.slope, g_calibration.offset);
+        printf("Calculated Pressure: %.2f bar\r\n", 
+               g_calibration.offset + ((float)adc_raw * g_calibration.slope));
+        printf("===========================\r\n");
         first_call = false;
     }
     
@@ -246,9 +303,11 @@ float AdvancedPressureControl_ReadPressure(void) {
     // DEBUG: Hər 100 çağırışda bir dəfə debug məlumatı göstər
     static uint32_t call_count = 0;
     call_count++;
-    if (call_count % 100 == 0) {
-        printf("DEBUG: ADC=%d, Pressure=%.2f bar (Offset=%.2f, Slope=%.6f)\r\n",
-               adc_raw, pressure, g_calibration.offset, g_calibration.slope);
+    if (call_count <= 20 || call_count % 100 == 0) {
+        printf("PRESSURE[%lu]: ADC=%d, Raw=%.2f bar, Filtered=%.2f bar (Offset=%.2f, Slope=%.6f)\r\n",
+               call_count, adc_raw, 
+               g_calibration.offset + ((float)adc_raw * g_calibration.slope),
+               pressure, g_calibration.offset, g_calibration.slope);
     }
     
     // KRİTİK DÜZƏLİŞ: Yalnız aşağı limit clamp edilir
