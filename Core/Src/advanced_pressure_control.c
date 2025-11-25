@@ -68,6 +68,38 @@ static float g_zme_base_pwm = ZME_BASE_PWM_DEFAULT;
 static float g_drv_base_pwm = DRV_BASE_PWM_DEFAULT;
 
 /* =========================================================================
+   HELPER VALIDATION FUNCTIONS
+   ========================================================================= */
+
+static bool AdvancedPressureControl_IsCalibrationRangeValid(uint16_t adc_min_val,
+                                                            uint16_t adc_max_val,
+                                                            float pressure_min_val,
+                                                            float pressure_max_val)
+{
+    if (adc_min_val >= adc_max_val) {
+        return false;
+    }
+
+    if (adc_min_val < 50U || adc_max_val > 4095U) {
+        return false;
+    }
+
+    if ((adc_max_val - adc_min_val) < 200U) {
+        return false;
+    }
+
+    if (!isfinite(pressure_min_val) || !isfinite(pressure_max_val)) {
+        return false;
+    }
+
+    if (pressure_max_val <= pressure_min_val) {
+        return false;
+    }
+
+    return true;
+}
+
+/* =========================================================================
    VI. KÖMƏKÇİ FUNKSİYALAR (Hardware Abstraction Layer - HAL)
    ========================================================================= */
 
@@ -1205,15 +1237,13 @@ void AdvancedPressureControl_LoadCalibration(void) {
                cal_data->checksum, calculated_checksum);
         
         if (calculated_checksum == cal_data->checksum) {
-            // DÜZƏLİŞ: Kalibrləmə dəyərlərinin etibarlılığını yoxla
-            // Əgər ADC dəyərləri məntiqi diapazondan kənardırsa, default dəyərləri istifadə et
-            if (cal_data->adc_min < 400 || cal_data->adc_min > 600 || 
-                cal_data->adc_max < 3000 || cal_data->adc_max > 4000 ||
-                cal_data->adc_max <= cal_data->adc_min) {
-                printf("WARNING: Invalid calibration values in flash (ADC: %d-%d), using defaults\r\n",
-                       cal_data->adc_min, cal_data->adc_max);
-                // Skip loading invalid data, will use defaults below
-            } else {
+            bool cal_ok = AdvancedPressureControl_IsCalibrationRangeValid(
+                cal_data->adc_min,
+                cal_data->adc_max,
+                cal_data->min_pressure,
+                cal_data->max_pressure);
+
+            if (cal_ok) {
                 // Valid calibration data found - load it
                 g_calibration.adc_min = (float)cal_data->adc_min;
                 g_calibration.adc_max = (float)cal_data->adc_max;
@@ -1234,6 +1264,10 @@ void AdvancedPressureControl_LoadCalibration(void) {
                        g_calibration.pressure_min, g_calibration.pressure_max,
                        g_calibration.slope, g_calibration.offset);
                 return;  // Successfully loaded calibration
+            } else {
+                printf("WARNING: Invalid calibration values in flash (ADC: %u-%u, Pressure: %.2f-%.2f), using defaults\r\n",
+                       cal_data->adc_min, cal_data->adc_max,
+                       cal_data->min_pressure, cal_data->max_pressure);
             }
         } else {
             printf("Checksum mismatch, using defaults\r\n");
