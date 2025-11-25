@@ -417,6 +417,33 @@ uint16_t adc_min = 410;       /* ADC value at minimum pressure (0.5V) */
 uint16_t adc_max = 4096;      /* ADC value at maximum pressure (5.0V) */
 static uint8_t calibration_mode = 0; /* 0=normal, 1=calibrate min, 2=calibrate max */
 
+/* Ensure we never overwrite valid calibration data with defaults */
+static bool ILI9341_IsPressureCalibrationValid(const CalibrationData_t* cal)
+{
+    if (cal == NULL || !cal->calibrated) {
+        return false;
+    }
+
+    if (!isfinite(cal->adc_min) || !isfinite(cal->adc_max) ||
+        !isfinite(cal->pressure_min) || !isfinite(cal->pressure_max)) {
+        return false;
+    }
+
+    if (cal->adc_min < 0.0f || cal->adc_min > (float)ADC_MAX) {
+        return false;
+    }
+
+    if (cal->adc_max <= cal->adc_min || cal->adc_max > (float)ADC_MAX) {
+        return false;
+    }
+
+    if (cal->pressure_max <= cal->pressure_min) {
+        return false;
+    }
+
+    return true;
+}
+
 /* Precise conversion constants */
 // DÜZƏLİŞ: P_PER_COUNT və P_OFFSET silindi - artıq g_calibration strukturundan istifadə edilir
 // Bütün təzyiq konversiyaları Advanced sistemin g_calibration strukturundan istifadə edir
@@ -810,27 +837,22 @@ void ILI9341_ShowPressureCalibrationPage(void)
     extern CalibrationData_t g_calibration;
     
     // Update UI variables from Advanced system calibration (for consistency)
-    // DÜZƏLİŞ: Əgər kalibrləmə dəyərləri default-dan fərqlidirsə, default dəyərləri istifadə et
-    if (g_calibration.adc_min < 400 || g_calibration.adc_min > 450 || 
-        g_calibration.adc_max < 4000 || g_calibration.adc_max > 4096) {
-        // Invalid calibration values - use defaults
-        adc_min = 410;
-        adc_max = 4096;
-        min_pressure = 0.0f;  // DÜZƏLİŞ: 0.0 bar (sıfır təzyiq)
-        max_pressure = 300.0f;
-        
-        // Update g_calibration with default values
-        g_calibration.adc_min = 410.0f;
-        g_calibration.adc_max = 4096.0f;
-        g_calibration.pressure_min = 0.0f;  // DÜZƏLİŞ: 0.0 bar (sıfır təzyiq)
-        g_calibration.pressure_max = 300.0f;
-        g_calibration.slope = (300.0f - 0.0f) / (4096.0f - 410.0f);  // DÜZƏLİŞ: 0.0f istifadə et
-        g_calibration.offset = 0.0f - (g_calibration.slope * 410.0f);  // DÜZƏLİŞ: 0.0f istifadə et
-        
-        printf("DÜZƏLİŞ: Yanlış kalibrləmə dəyərləri aşkar edildi, default dəyərlər tətbiq olundu - ADC: %d-%d\r\n", adc_min, adc_max);
+    bool calibration_valid = ILI9341_IsPressureCalibrationValid(&g_calibration);
+    if (!calibration_valid) {
+        // Invalid or uninitialized calibration data - use safe defaults for UI only
+        adc_min = ADC_MIN;
+        adc_max = ADC_MAX;
+        min_pressure = PRESSURE_MIN;
+        max_pressure = PRESSURE_MAX;
+
+        if (g_calibration.calibrated) {
+            printf("WARNING: UI detected suspicious calibration values (ADC: %.0f-%.0f, Pressure: %.1f-%.1f). Using defaults for display only.\r\n",
+                   g_calibration.adc_min, g_calibration.adc_max,
+                   g_calibration.pressure_min, g_calibration.pressure_max);
+        }
     } else {
-        adc_min = (uint16_t)g_calibration.adc_min;
-        adc_max = (uint16_t)g_calibration.adc_max;
+        adc_min = (uint16_t)(g_calibration.adc_min + 0.5f);
+        adc_max = (uint16_t)(g_calibration.adc_max + 0.5f);
         min_pressure = g_calibration.pressure_min;
         max_pressure = g_calibration.pressure_max;
     }
