@@ -128,6 +128,19 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
     }
 
     uint16_t adc_value = (uint16_t)HAL_ADC_GetValue(&hadc3);
+    
+    /* KRİTİK DÜZƏLİŞ: 12-bit ADC maksimum dəyəri 4095-dir (2^12 - 1)
+     * Bəzən HAL_ADC_GetValue() qeyri-etibarlı dəyərlər qaytara bilər
+     * ADC dəyərini 0-4095 diapazonunda clamp et */
+    if (adc_value > 4095U) {
+        // Debug: Qeyri-etibarlı ADC dəyəri aşkarlandı
+        static uint32_t invalid_adc_count = 0;
+        if (invalid_adc_count < 10) {  // İlk 10 xəta halında log göndər
+            printf("WARNING: Invalid ADC value detected: %u (> 4095), clamping to 4095\r\n", adc_value);
+            invalid_adc_count++;
+        }
+        adc_value = 4095U;  // Maksimum 12-bit ADC dəyəri
+    }
 
     /* İlk oxunuşda 0 dəyəri gəlirsə, kalibrlənmiş minimumu saxla */
     if (adc_value == 0U && last_valid_adc == ADC_MIN) {
