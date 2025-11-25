@@ -24,8 +24,7 @@ System_Config_t g_system_config = {
     .version = CONFIG_VERSION,
     .build_date = CONFIG_BUILD_DATE,
     .debug_enabled = true,
-    .safety_enabled = true,
-    .auto_mode_enabled = false
+    .safety_enabled = true
 };
 
 PID_Tuning_t g_pid_zme_tuning = {
@@ -70,8 +69,7 @@ Safety_Config_t g_safety_config = {
     .max_pressure = CONFIG_SAFETY_MAX_PRESSURE,
     .over_limit_margin = CONFIG_SAFETY_OVER_LIMIT_MARGIN,
     .emergency_threshold = CONFIG_SAFETY_EMERGENCY_THRESHOLD,
-    .safety_enabled = true,
-    .emergency_stop_enabled = true
+    .safety_enabled = true
 };
 
 /* =========================================================================
@@ -386,14 +384,6 @@ void PressureControlConfig_EnableSafety(bool enable) {
     printf("Safety system %s\r\n", enable ? "enabled" : "disabled");
 }
 
-/**
- * @brief Enable/disable emergency stop
- */
-void PressureControlConfig_EnableEmergencyStop(bool enable) {
-    g_safety_config.emergency_stop_enabled = enable;
-    printf("Emergency stop %s\r\n", enable ? "enabled" : "disabled");
-}
-
 /* =========================================================================
    SYSTEM CONFIGURATION FUNCTIONS
    ========================================================================= */
@@ -407,14 +397,6 @@ void PressureControlConfig_SetDebugMode(bool enable) {
 }
 
 /**
- * @brief Set auto mode
- */
-void PressureControlConfig_SetAutoMode(bool enable) {
-    g_system_config.auto_mode_enabled = enable;
-    printf("Auto mode %s\r\n", enable ? "enabled" : "disabled");
-}
-
-/**
  * @brief Print system information
  */
 void PressureControlConfig_PrintSystemInfo(void) {
@@ -424,7 +406,6 @@ void PressureControlConfig_PrintSystemInfo(void) {
     printf("Build Date: %s\r\n", g_system_config.build_date);
     printf("Debug Mode: %s\r\n", g_system_config.debug_enabled ? "Enabled" : "Disabled");
     printf("Safety System: %s\r\n", g_system_config.safety_enabled ? "Enabled" : "Disabled");
-    printf("Auto Mode: %s\r\n", g_system_config.auto_mode_enabled ? "Enabled" : "Disabled");
     printf("==========================\r\n\n");
 }
 

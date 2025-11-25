@@ -223,16 +223,13 @@ float AdvancedPressureControl_ReadPressure(void) {
                adc_raw, pressure, g_calibration.offset, g_calibration.slope);
     }
     
-    // KRİTİK DÜZƏLİŞ: Yalnız son təzyiq nəticəsini clamp etmək lazımdır
+    // KRİTİK DÜZƏLİŞ: Yalnız aşağı limit clamp edilir
     // Minimum təzyiq 0.0 bar ola bilər, mənfi təzyiq olmamalıdır
-    // Maksimum təzyiq kalibrləmə maksimumundan yuxarı ola bilər (sensor 300 bar-dan yuxarı göstərə bilər)
-    // Amma təhlükəsizlik üçün PRESSURE_MAX (300.0 bar) ilə limitləyirik
+    // Maksimum təzyiq clamp edilmir ki, sistem real >300 bar dəyərlərinə reaksiya verə bilsin
     float min_pressure_clamp = (g_calibration.pressure_min < 0.0f) ? 0.0f : g_calibration.pressure_min;
-    pressure = AdvancedPressureControl_ClampValue(
-        pressure, 
-        min_pressure_clamp, 
-        PRESSURE_MAX  // Təhlükəsizlik üçün maksimum təzyiq limiti
-    );
+    if (pressure < min_pressure_clamp) {
+        pressure = min_pressure_clamp;
+    }
     
     return pressure;
 }
@@ -259,12 +256,12 @@ void AdvancedPressureControl_ControlMotorSpeed(void) {
     debug_count++;
     
     // KRİTİK DÜZƏLİŞ: Safety vəziyyətində motor 0% təyin olunmalıdır
-    if (g_system_status.safety_triggered || g_system_status.emergency_stop) {
+    if (g_system_status.safety_triggered) {
         g_system_status.motor_pwm_percent = 0.0f;
         AdvancedPressureControl_SetMotor_PWM(0.0f);
         if (debug_count <= 20 || debug_count % 50 == 0) {
-            printf("MOTOR STOPPED[%lu]: safety_triggered=%d, emergency_stop=%d\r\n",
-                   debug_count, g_system_status.safety_triggered, g_system_status.emergency_stop);
+            printf("MOTOR STOPPED[%lu]: safety_triggered=%d\r\n",
+                   debug_count, g_system_status.safety_triggered);
         }
         return;  // Safety vəziyyətində motor işləməsin
     }
@@ -278,7 +275,6 @@ void AdvancedPressureControl_ControlMotorSpeed(void) {
             printf("  -> target_pressure = %.2f bar\r\n", g_system_status.target_pressure);
             printf("  -> current_pressure = %.2f bar\r\n", g_system_status.current_pressure);
             printf("  -> safety_triggered = %d\r\n", g_system_status.safety_triggered);
-            printf("  -> emergency_stop = %d\r\n", g_system_status.emergency_stop);
             
             // Səbəb təhlili
             if (!g_control_initialized) {
@@ -646,6 +642,8 @@ void AdvancedPressureControl_SetPIDParams(PID_Controller_t* pid, float kp, float
     pid->Kp = kp;
     pid->Ki = ki;
     pid->Kd = kd;
+    pid->integral_sum = 0.0f;
+    pid->previous_error = 0.0f;
 }
 
 /* =========================================================================
@@ -723,25 +721,6 @@ void AdvancedPressureControl_HandleSafetyViolation(void) {
     
     // Təhlükəsizlik rejimini aktivləşdir
     g_system_status.safety_triggered = true;
-    
-    // Klapanları təyin et
-    AdvancedPressureControl_ApplyValveOutputs();
-    AdvancedPressureControl_SetMotor_PWM(0.0f);
-}
-
-/**
- * @brief Təcili dayandırma
- */
-void AdvancedPressureControl_EmergencyStop(void) {
-    printf("TƏCİLİ DAYANDIRMA: Bütün sistem dayandırıldı!\r\n");
-    
-    // Bütün aktuatorları təhlükəsiz vəziyyətə gətir
-    g_system_status.motor_pwm_percent = 0.0f;
-    g_system_status.zme_pwm_percent = ZME_PWM_MAX;   // ZME tam bağlı
-    g_system_status.drv_pwm_percent = DRV_PWM_MIN;   // DRV tam açıq
-    g_system_status.control_enabled = false;
-    g_system_status.auto_mode = false;
-    g_system_status.emergency_stop = true;
     
     // Klapanları təyin et
     AdvancedPressureControl_ApplyValveOutputs();
@@ -1004,9 +983,7 @@ void AdvancedPressureControl_Init(void) {
     // İlkin dəyərlər
     g_system_status.target_pressure = 70.0f; // İlkin hədəf təzyiq
     g_system_status.control_enabled = false;  // İlkin olaraq false, sonra true ediləcək
-    g_system_status.auto_mode = false;
     g_system_status.safety_triggered = false;
-    g_system_status.emergency_stop = false;
     
     // KRİTİK: target_pressure 0.0 və ya çox kiçik olarsa, default dəyər təyin et
     if (g_system_status.target_pressure < 0.1f) {
@@ -1073,7 +1050,6 @@ void AdvancedPressureControl_Reset(void) {
     
     // Status sıfırla
     g_system_status.safety_triggered = false;
-    g_system_status.emergency_stop = false;
     
     // Klapanları təhlükəsiz vəziyyətə gətir
     g_system_status.zme_pwm_percent = ZME_PWM_MAX; // ZME bağlı
@@ -1141,9 +1117,7 @@ void AdvancedPressureControl_PrintDebugInfo(void) {
            g_pid_zme.Kp, g_pid_zme.Ki, g_pid_zme.Kd);
     printf("Dead Band: ±%.2f bar\r\n", DEAD_BAND_BAR);
     printf("Control Enabled: %s\r\n", g_system_status.control_enabled ? "Yes" : "No");
-    printf("Auto Mode: %s\r\n", g_system_status.auto_mode ? "Yes" : "No");
     printf("Safety Triggered: %s\r\n", g_system_status.safety_triggered ? "Yes" : "No");
-    printf("Emergency Stop: %s\r\n", g_system_status.emergency_stop ? "Yes" : "No");
     printf("==========================================\r\n\n");
 }
 

@@ -45,9 +45,9 @@ extern "C" {
 #define DRV_PWM_MIN 0.0f     // Təzyiq Minimum (Açıq)
 #define DRV_PWM_MAX 40.0f    // Təzyiq Maksimum (Bağlı)
 
-// PID İdarəetmə Limitləri
-#define PID_OUTPUT_MIN -100.0f
-#define PID_OUTPUT_MAX 100.0f
+// PID İdarəetmə Limitləri (klapan trim limitləri ilə eyni saxlanılır)
+#define PID_OUTPUT_MIN (-PWM_TRIM_LIMIT)
+#define PID_OUTPUT_MAX (PWM_TRIM_LIMIT)
 
 // Motor İdarəetmə Limitləri (0-100% PWM)
 #define MOTOR_MAX_PWM 100.0f
@@ -137,9 +137,7 @@ typedef struct {
     float pid_output;           // PID controller output
     float error;                // Current error (setpoint - current)
     bool control_enabled;       // Control system enabled
-    bool auto_mode;             // Auto mode enabled
     bool safety_triggered;      // Safety system triggered
-    bool emergency_stop;        // Emergency stop active
 } SystemStatus_t;
 
 // Calibration Data Structure
@@ -193,7 +191,6 @@ void AdvancedPressureControl_SetMotor_PWM(float percent);
 void AdvancedPressureControl_Init(void);
 void AdvancedPressureControl_Step(void);
 void AdvancedPressureControl_Reset(void);
-void AdvancedPressureControl_EmergencyStop(void);
 
 /* PID Control Functions */
 void AdvancedPressureControl_InitPID(PID_Controller_t* pid, float kp, float ki, float kd);
