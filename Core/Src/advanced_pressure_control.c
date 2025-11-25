@@ -107,14 +107,15 @@ static bool AdvancedPressureControl_IsCalibrationRangeValid(uint16_t adc_min_val
  * @brief ADC-dən xam dəyəri oxu
  * @retval Raw ADC value (0-4095)
  *
- * Nəzərdə tutulduğu kimi ADC3 davamlı rejimdə işləyir, amma EOC flaqı oxunmadan
- * qalanda konversiyalar "donmuş" kimi görünə bilər. Burada həm EOC-ni yoxlayırıq,
- * həm də hansısa səbəbdən ADC dayanarsa yenidən işə salırıq.
+ * Continuous mode-da ADC davamlı işləyir, ona görə də dəyəri ən son tamamlanmış
+ * konversiyadan birbaşa oxumaq kifayətdir. EOC flaqına güvənmək əvəzinə dəyəri
+ * həmişə oxuyuruq və yalnız konversiya baş verməyibsə əvvəlki etibarlı dəyəri
+ * qaytarırıq.
  */
 uint16_t AdvancedPressureControl_ReadADC(void) {
     static uint16_t last_valid_adc = ADC_MIN;
 
-    /* Əgər hansısa səbəbdən ADC dayanıbsa (BUSY set deyil) onu yenidən başlat */
+    /* Əgər hansısa səbəbdən ADC dayanıbsa, onu yenidən işə sal */
     if ((HAL_ADC_GetState(&hadc3) & HAL_ADC_STATE_REG_BUSY) == 0U) {
         if (HAL_ADC_Start(&hadc3) != HAL_OK) {
             return last_valid_adc;
@@ -126,12 +127,13 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
         __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_OVR);
     }
 
-    /* Yeni nəticə hazır deyilsə son etibarlı dəyəri qaytar */
-    if (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC) == RESET) {
+    uint16_t adc_value = (uint16_t)HAL_ADC_GetValue(&hadc3);
+
+    /* İlk oxunuşda 0 dəyəri gəlirsə, kalibrlənmiş minimumu saxla */
+    if (adc_value == 0U && last_valid_adc == ADC_MIN) {
         return last_valid_adc;
     }
 
-    uint16_t adc_value = (uint16_t)HAL_ADC_GetValue(&hadc3);
     last_valid_adc = adc_value;
     return adc_value;
 }
