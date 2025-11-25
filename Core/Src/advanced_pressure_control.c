@@ -106,39 +106,33 @@ static bool AdvancedPressureControl_IsCalibrationRangeValid(uint16_t adc_min_val
 /**
  * @brief ADC-dən xam dəyəri oxu
  * @retval Raw ADC value (0-4095)
- * 
- * KRİTİK DÜZƏLİŞ: ADC Continuous Mode-da işləyir
- * main.c-də ADC ContinuousConvMode = ENABLE olaraq təyin edilib
- * Bu, ADC-nin davamlı konversiya etməsinə imkan verir
- * Start/Stop lazım deyil - yalnız GetValue() çağırılır
+ *
+ * Nəzərdə tutulduğu kimi ADC3 davamlı rejimdə işləyir, amma EOC flaqı oxunmadan
+ * qalanda konversiyalar "donmuş" kimi görünə bilər. Burada həm EOC-ni yoxlayırıq,
+ * həm də hansısa səbəbdən ADC dayanarsa yenidən işə salırıq.
  */
 uint16_t AdvancedPressureControl_ReadADC(void) {
-    static uint16_t last_valid_adc = 0;  // KRİTİK: Son düzgün ADC dəyəri
-    uint16_t adc_value = 0;
-    
-    // KRİTİK DÜZƏLİŞ: ADC Continuous Mode-da işləyir
-    // Start/Stop lazım deyil - yalnız dəyəri oxuyuruq
-    // ADC davamlı konversiya edir, ona görə də yalnız GetValue() çağırırıq
-    // DÜZƏLİŞ: EOC flag yoxlaması lazımsızdır - Continuous mode-da ADC həmişə hazırdır
-    adc_value = HAL_ADC_GetValue(&hadc3);
-    
-    // KRİTİK DÜZƏLİŞ: 0 və 4095 dəyərləri fiziki olaraq mümkündür
-    // 0 dəyəri: Sensor 0.5V-dən aşağı çıxış verə bilər (0 bar-dan aşağı təzyiq)
-    // 4095 dəyəri: Sensor 5.0V-dən yüksək çıxış verə bilər (300 bar-dan yüksək təzyiq)
-    // Bu dəyərləri avtomatik keçmək yanlışdır - onlar real fiziki dəyərlər ola bilər
-    // PID-nin bu dəyərləri qəbul etməsi və uyğun reaksiya verməsi lazımdır
-    // DÜZƏLİŞ: ADC Continuous Mode-da işlədiyi üçün HAL_ADC_GetValue() hər zaman son tam dəyəri qaytarır
-    // last_valid_adc dəyişəninə ehtiyac yoxdur - ADC oxunuşu səs-küydən asılı olaraq real 0 ola bilər
-    // Xam oxunuşun 0 olmasına icazə vermək və filtirləməyə etibar etmək daha düzgündür
-    // Yalnız ilk başlanğıcda (last_valid_adc == 0) və oxunan dəyər də 0 olduqda default dəyər istifadə et
-    if (adc_value == 0 && last_valid_adc == 0) {
-        // İlk çağırış və oxunan dəyər 0 - default dəyər istifadə et (yalnız başlanğıc üçün)
-        adc_value = ADC_MIN;  // Minimum ADC dəyəri (410)
-        last_valid_adc = adc_value;
+    static uint16_t last_valid_adc = ADC_MIN;
+
+    /* Əgər hansısa səbəbdən ADC dayanıbsa (BUSY set deyil) onu yenidən başlat */
+    if ((HAL_ADC_GetState(&hadc3) & HAL_ADC_STATE_REG_BUSY) == 0U) {
+        if (HAL_ADC_Start(&hadc3) != HAL_OK) {
+            return last_valid_adc;
+        }
     }
-    // QEYD: last_valid_adc yalnız ilk çağırışda istifadə olunur, sonra lazım deyil
-    // Amma uyğunluq üçün saxlanılır
-    
+
+    /* Overrun baş veribsə flaqı təmizlə ki, növbəti konversiya bloklanmasın */
+    if (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_OVR) != RESET) {
+        __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_OVR);
+    }
+
+    /* Yeni nəticə hazır deyilsə son etibarlı dəyəri qaytar */
+    if (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC) == RESET) {
+        return last_valid_adc;
+    }
+
+    uint16_t adc_value = (uint16_t)HAL_ADC_GetValue(&hadc3);
+    last_valid_adc = adc_value;
     return adc_value;
 }
 
