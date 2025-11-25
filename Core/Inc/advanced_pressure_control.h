@@ -29,12 +29,15 @@ extern "C" {
 
 // Təzyiq Sensoru (ADC)
 // KRİTİK: 0.5V (0 bar) -> 410, 5.0V (300 bar) -> 4096 (5.0V Vref fərziyyəsi ilə)
-#define ADC_MIN 410
-#define ADC_MAX 4096
+// Kalibrasiya: 0.5V = 0.00 bar, 5.0V = 300 bar
+#define ADC_MIN 410      // 0.5V ADC dəyəri (0 bar)
+#define ADC_MAX 4096     // 5.0V ADC dəyəri (300 bar)
 #define PRESSURE_MIN 0.0f
 #define PRESSURE_MAX 300.0f
 #define PRESSURE_SLOPE ((PRESSURE_MAX - PRESSURE_MIN) / (float)(ADC_MAX - ADC_MIN))
-// PRESSURE_SLOPE təxminən 0.08139f olacaq
+// PRESSURE_SLOPE = 300 / (4096 - 410) = 300 / 3686 ≈ 0.08139 bar/ADC
+// Offset = PRESSURE_MIN - (PRESSURE_SLOPE * ADC_MIN) = 0 - (0.08139 * 410) ≈ -33.37 bar
+// Formula: pressure = offset + slope * adc = -33.37 + 0.08139 * adc
 
 // ZME Klapanı (Normally Open - Tərs Məntiq)
 #define ZME_PWM_MIN 0.0f     // Təzyiq Maksimum (Açıq)

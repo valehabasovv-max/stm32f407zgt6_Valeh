@@ -253,16 +253,28 @@ float AdvancedPressureControl_ReadPressure(void) {
     // DEBUG: İlk çağırışda kalibrləmə məlumatlarını və ADC dəyərini göstər
     static bool first_call = true;
     if (first_call) {
-        printf("=== PRESSURE SENSOR INIT ===\r\n");
-        printf("ADC Raw Value: %d\r\n", adc_raw);
-        printf("Calibration - ADC: %.0f-%.0f, Pressure: %.2f-%.2f bar\r\n",
-               g_calibration.adc_min, g_calibration.adc_max, 
+        printf("\r\n=== PRESSURE SENSOR CALIBRATION ===\r\n");
+        printf("Sensor Spec: 0.5V = 0.00 bar, 5.0V = 300 bar\r\n");
+        printf("ADC Range: %.0f (0.5V) - %.0f (5.0V)\r\n",
+               g_calibration.adc_min, g_calibration.adc_max);
+        printf("Pressure Range: %.2f bar - %.2f bar\r\n",
                g_calibration.pressure_min, g_calibration.pressure_max);
-        printf("Slope: %.6f bar/ADC, Offset: %.2f bar\r\n",
-               g_calibration.slope, g_calibration.offset);
-        printf("Calculated Pressure: %.2f bar\r\n", 
-               g_calibration.offset + ((float)adc_raw * g_calibration.slope));
-        printf("===========================\r\n");
+        printf("Slope: %.6f bar/ADC\r\n", g_calibration.slope);
+        printf("Offset: %.2f bar\r\n", g_calibration.offset);
+        printf("Formula: Pressure = %.2f + %.6f * ADC\r\n",
+               g_calibration.offset, g_calibration.slope);
+        printf("----------------------------------------\r\n");
+        printf("Current Reading:\r\n");
+        printf("  ADC Raw: %d\r\n", adc_raw);
+        float calculated_pressure = g_calibration.offset + ((float)adc_raw * g_calibration.slope);
+        printf("  Calculated: %.2f bar\r\n", calculated_pressure);
+        printf("  Expected at 0.5V (ADC=%.0f): %.2f bar\r\n", 
+               g_calibration.adc_min, 
+               g_calibration.offset + (g_calibration.slope * g_calibration.adc_min));
+        printf("  Expected at 5.0V (ADC=%.0f): %.2f bar\r\n", 
+               g_calibration.adc_max, 
+               g_calibration.offset + (g_calibration.slope * g_calibration.adc_max));
+        printf("========================================\r\n\r\n");
         first_call = false;
     }
     
@@ -303,11 +315,21 @@ float AdvancedPressureControl_ReadPressure(void) {
     // DEBUG: Hər 100 çağırışda bir dəfə debug məlumatı göstər
     static uint32_t call_count = 0;
     call_count++;
+    float raw_pressure = g_calibration.offset + ((float)adc_raw * g_calibration.slope);
     if (call_count <= 20 || call_count % 100 == 0) {
-        printf("PRESSURE[%lu]: ADC=%d, Raw=%.2f bar, Filtered=%.2f bar (Offset=%.2f, Slope=%.6f)\r\n",
+        printf("PRESSURE[%lu]: ADC=%d (%.2fV), Raw=%.2f bar, Filtered=%.2f bar\r\n",
                call_count, adc_raw, 
-               g_calibration.offset + ((float)adc_raw * g_calibration.slope),
-               pressure, g_calibration.offset, g_calibration.slope);
+               ((float)adc_raw / 4096.0f) * 5.0f,  // ADC-dən voltaja çevir (5V Vref)
+               raw_pressure, pressure);
+        // Kalibrasiya yoxlaması
+        if (adc_raw == (uint16_t)g_calibration.adc_min) {
+            printf("  -> ADC=%.0f (0.5V) -> Expected: 0.00 bar, Got: %.2f bar\r\n",
+                   g_calibration.adc_min, raw_pressure);
+        }
+        if (adc_raw == (uint16_t)g_calibration.adc_max) {
+            printf("  -> ADC=%.0f (5.0V) -> Expected: 300.00 bar, Got: %.2f bar\r\n",
+                   g_calibration.adc_max, raw_pressure);
+        }
     }
     
     // KRİTİK DÜZƏLİŞ: Yalnız aşağı limit clamp edilir
