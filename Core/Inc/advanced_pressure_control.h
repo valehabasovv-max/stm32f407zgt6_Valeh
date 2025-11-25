@@ -28,9 +28,10 @@ extern "C" {
    ========================================================================= */
 
 // Təzyiq Sensoru (ADC)
-// KRİTİK: 0.5V (0 bar) -> 410, 5.0V (300 bar) -> 4096 (5.0V Vref fərziyyəsi ilə)
+// KRİTİK DÜZƏLİŞ: 12-bit ADC maksimum dəyəri 4095-dir (2^12 - 1), 4096 deyil!
+// 0.5V (0 bar) -> 410, 5.0V (300 bar) -> 4095 (5.0V Vref fərziyyəsi ilə)
 #define ADC_MIN 410
-#define ADC_MAX 4096
+#define ADC_MAX 4095
 #define PRESSURE_MIN 0.0f
 #define PRESSURE_MAX 300.0f
 #define PRESSURE_SLOPE ((PRESSURE_MAX - PRESSURE_MIN) / (float)(ADC_MAX - ADC_MIN))

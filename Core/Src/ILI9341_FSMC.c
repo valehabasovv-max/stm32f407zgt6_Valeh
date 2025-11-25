@@ -414,7 +414,7 @@ float max_voltage = 5.24;     /* Maximum voltage (5.24V) */
 float min_pressure = 0.0;     /* DÜZƏLİŞ: Minimum pressure (0.0 bar - sıfır təzyiq) */
 float max_pressure = 300.0;   /* Maximum pressure (300.0 bar) */
 uint16_t adc_min = 410;       /* ADC value at minimum pressure (0.5V) */
-uint16_t adc_max = 4096;      /* ADC value at maximum pressure (5.0V) */
+uint16_t adc_max = 4095;      /* KRİTİK DÜZƏLİŞ: 12-bit ADC max = 4095 (2^12 - 1), NOT 4096 */
 static uint8_t calibration_mode = 0; /* 0=normal, 1=calibrate min, 2=calibrate max */
 
 /* Ensure we never overwrite valid calibration data with defaults */

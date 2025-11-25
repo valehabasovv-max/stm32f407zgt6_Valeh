@@ -68,10 +68,11 @@ extern "C" {
 #define CONFIG_MOTOR_PWM_MAX 100.0f
 
 // Pressure Sensor Configuration
-// KRİTİK: 0.5V (0 bar) -> 410, 5.0V (300 bar) -> 4096 (5.0V Vref fərziyyəsi ilə)
-// PRESSURE_SLOPE = (300.0 - 0.0) / (4096 - 410) ≈ 0.08139 bar/ADC count
+// KRİTİK DÜZƏLİŞ: 12-bit ADC maksimum dəyəri 4095-dir (2^12 - 1), 4096 deyil!
+// 0.5V (0 bar) -> 410, 5.0V (300 bar) -> 4095 (5.0V Vref fərziyyəsi ilə)
+// PRESSURE_SLOPE = (300.0 - 0.0) / (4095 - 410) ≈ 0.08137 bar/ADC count
 #define CONFIG_PRESSURE_SENSOR_ADC_MIN 410
-#define CONFIG_PRESSURE_SENSOR_ADC_MAX 4096
+#define CONFIG_PRESSURE_SENSOR_ADC_MAX 4095
 #define CONFIG_PRESSURE_SENSOR_PRESSURE_MIN 0.0f
 #define CONFIG_PRESSURE_SENSOR_PRESSURE_MAX 300.0f
 
