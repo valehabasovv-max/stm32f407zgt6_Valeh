@@ -128,16 +128,16 @@ typedef struct {
 
 // System Status Structure
 typedef struct {
-    float target_pressure;      // Setpoint pressure (bar)
-    float current_pressure;     // Current pressure (bar)
-    uint16_t raw_adc_value;     // KRİTİK: Xam ADC dəyəri (0-4095) - UI üçün lazımdır
-    float motor_pwm_percent;    // Motor PWM duty cycle (%)
-    float zme_pwm_percent;      // ZME PWM duty cycle (%)
-    float drv_pwm_percent;      // DRV PWM duty cycle (%)
-    float pid_output;           // PID controller output
-    float error;                // Current error (setpoint - current)
-    bool control_enabled;       // Control system enabled
-    bool safety_triggered;      // Safety system triggered
+    volatile float target_pressure;      // Setpoint pressure (bar)
+    volatile float current_pressure;     // Current pressure (bar)
+    volatile uint16_t raw_adc_value;     // KRİTİK: Xam ADC dəyəri (0-4095) - UI üçün lazımdır
+    volatile float motor_pwm_percent;    // Motor PWM duty cycle (%)
+    volatile float zme_pwm_percent;      // ZME PWM duty cycle (%)
+    volatile float drv_pwm_percent;      // DRV PWM duty cycle (%)
+    volatile float pid_output;           // PID controller output
+    volatile float error;                // Current error (setpoint - current)
+    volatile bool control_enabled;       // Control system enabled
+    volatile bool safety_triggered;      // Safety system triggered
 } SystemStatus_t;
 
 // Calibration Data Structure
