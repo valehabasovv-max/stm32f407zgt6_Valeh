@@ -1644,8 +1644,8 @@ void PressureSensor_DebugStatus(void)
     SystemStatus_t* status = AdvancedPressureControl_GetStatus();
     uint16_t raw_adc = status->raw_adc_value;  // Xam ADC dəyəri Status-dan
     
-    /* Calculate voltage: V = (ADC / 4095) * 3.3V */
-    float voltage = (float)raw_adc * 3.3f / 4095.0f;
+    /* Calculate voltage: V = (ADC / 4096) * 5.0V - Sensor reference voltage is 5.0V */
+    float voltage = (float)raw_adc * 5.0f / 4096.0f;
     
     /* PID sistemindən təzyiq dəyərini götür */
     float pressure = status->current_pressure;

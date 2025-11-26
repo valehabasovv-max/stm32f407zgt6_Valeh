@@ -1286,7 +1286,7 @@ void AdvancedPressureControl_LoadCalibration(void) {
     typedef struct {
         uint32_t magic;           // Magic number: 0x12345678
         float min_voltage;        // 0.5V
-        float max_voltage;        // 5.24V
+        float max_voltage;        // 5.0V (not used in Advanced system, but kept for compatibility)
         float min_pressure;       // 0.0 bar
         float max_pressure;       // 300.0 bar
         uint16_t adc_min;         // 410
@@ -1381,7 +1381,7 @@ void AdvancedPressureControl_SaveCalibration(void) {
     typedef struct {
         uint32_t magic;           // Magic number: 0x12345678
         float min_voltage;        // 0.5V (not used in Advanced system, but kept for compatibility)
-        float max_voltage;        // 5.24V (not used in Advanced system, but kept for compatibility)
+        float max_voltage;        // 5.0V (not used in Advanced system, but kept for compatibility)
         float min_pressure;       // 0.0 bar
         float max_pressure;       // 300.0 bar
         uint16_t adc_min;         // 410
@@ -1392,7 +1392,7 @@ void AdvancedPressureControl_SaveCalibration(void) {
     calibration_data_t cal_data;
     cal_data.magic = 0x12345678;
     cal_data.min_voltage = 0.5f;   // Default (not used in Advanced system)
-    cal_data.max_voltage = 5.24f;  // Default (not used in Advanced system)
+    cal_data.max_voltage = 5.0f;   // Default (not used in Advanced system) - Sensor reference voltage is 5.0V
     cal_data.min_pressure = g_calibration.pressure_min;
     cal_data.max_pressure = g_calibration.pressure_max;
     // DÜZƏLİŞ: Float dəyərləri uint16_t-ə çevirərkən düzgün yuvarlaqlaşdırma
