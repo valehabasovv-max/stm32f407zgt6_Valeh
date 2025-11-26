@@ -742,14 +742,35 @@ void PressureControlConfig_SaveCalibrationData(void) {
         uint32_t checksum;         /* Data integrity check */
     } calibration_data_t;
     
+    extern CalibrationData_t g_calibration;
+    float adc_min_value = g_calibration_data.adc_min;
+    float adc_max_value = g_calibration_data.adc_max;
+    float min_pressure_value = g_calibration_data.pressure_min;
+    float max_pressure_value = g_calibration_data.pressure_max;
+    bool source_from_advanced = false;
+
+    if (g_calibration.calibrated) {
+        adc_min_value = g_calibration.adc_min;
+        adc_max_value = g_calibration.adc_max;
+        min_pressure_value = g_calibration.pressure_min;
+        max_pressure_value = g_calibration.pressure_max;
+        source_from_advanced = true;
+    } else if (!g_calibration_data.calibrated) {
+        // Fallback to hard-coded defaults if no calibration exists anywhere
+        adc_min_value = CONFIG_PRESSURE_SENSOR_ADC_MIN;
+        adc_max_value = CONFIG_PRESSURE_SENSOR_ADC_MAX;
+        min_pressure_value = CONFIG_PRESSURE_SENSOR_PRESSURE_MIN;
+        max_pressure_value = CONFIG_PRESSURE_SENSOR_PRESSURE_MAX;
+    }
+
     calibration_data_t cal_data;
     cal_data.magic = 0x12345678;
-    cal_data.min_voltage = 0.5f;  // Default values, should be updated from g_calibration_data
+    cal_data.min_voltage = 0.5f;  // Default values, kept for compatibility
     cal_data.max_voltage = 5.24f;
-    cal_data.min_pressure = g_calibration_data.pressure_min;
-    cal_data.max_pressure = g_calibration_data.pressure_max;
-    cal_data.adc_min = (uint16_t)g_calibration_data.adc_min;
-    cal_data.adc_max = (uint16_t)g_calibration_data.adc_max;
+    cal_data.min_pressure = min_pressure_value;
+    cal_data.max_pressure = max_pressure_value;
+    cal_data.adc_min = (uint16_t)(adc_min_value + 0.5f);  // Round to nearest integer
+    cal_data.adc_max = (uint16_t)(adc_max_value + 0.5f);
     
     // Calculate checksum
     uint32_t *min_v_ptr = (uint32_t*)&cal_data.min_voltage;
@@ -771,8 +792,23 @@ void PressureControlConfig_SaveCalibrationData(void) {
         // Verify data was written correctly by reading it back
         calibration_data_t *verify_data = (calibration_data_t*)(0x080E0000 + 0x100);
         if (verify_data->magic == 0x12345678 && verify_data->checksum == cal_data.checksum) {
-            printf("Calibration data saved and verified: ADC %d-%d, Pressure %.2f-%.2f bar\r\n",
+            printf("Calibration data saved and verified (%s source): ADC %d-%d, Pressure %.2f-%.2f bar\r\n",
+                   source_from_advanced ? "Advanced" : "Config",
                    cal_data.adc_min, cal_data.adc_max, cal_data.min_pressure, cal_data.max_pressure);
+
+            // Keep config-side cache in sync with the authoritative calibration
+            g_calibration_data.adc_min = (float)cal_data.adc_min;
+            g_calibration_data.adc_max = (float)cal_data.adc_max;
+            g_calibration_data.pressure_min = cal_data.min_pressure;
+            g_calibration_data.pressure_max = cal_data.max_pressure;
+            float adc_range = g_calibration_data.adc_max - g_calibration_data.adc_min;
+            if (adc_range <= 0.0f) {
+                adc_range = 1.0f;  // Prevent divide-by-zero
+            }
+            g_calibration_data.slope = (g_calibration_data.pressure_max - g_calibration_data.pressure_min) / adc_range;
+            g_calibration_data.offset = g_calibration_data.pressure_min -
+                                       (g_calibration_data.slope * g_calibration_data.adc_min);
+            g_calibration_data.calibrated = true;
         } else {
             printf("ERROR: Calibration write verification failed!\r\n");
         }
