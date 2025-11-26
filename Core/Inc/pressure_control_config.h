@@ -169,6 +169,7 @@ void PressureControlConfig_CompleteCalibration(void);
 void PressureControlConfig_ResetCalibration(void);
 bool PressureControlConfig_IsCalibrated(void);
 void PressureControlConfig_PrintCalibrationData(void);
+void PressureControlConfig_UpdateCalibrationCache(const CalibrationData_t* source);
 
 /* Valve Configuration */
 void PressureControlConfig_SetValveLimits(Valve_Config_t* config);

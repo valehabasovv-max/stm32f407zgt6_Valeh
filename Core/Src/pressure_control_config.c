@@ -725,6 +725,11 @@ void PressureControlConfig_LoadPIDParams(void) {
 void PressureControlConfig_SaveCalibrationData(void) {
     printf("Saving calibration data to flash...\r\n");
     
+    // Ensure cache mirrors the latest Advanced calibration snapshot before persisting
+    if (g_calibration.calibrated) {
+        PressureControlConfig_UpdateCalibrationCache(&g_calibration);
+    }
+    
     // Prepare calibration data structure
     typedef struct {
         uint32_t magic;           /* Magic number: 0x12345678 */
@@ -793,13 +798,7 @@ void PressureControlConfig_LoadCalibrationData(void) {
     extern CalibrationData_t g_calibration;  // advanced_pressure_control.c-dən (CalibrationData_t tipi)
     
     if (g_calibration.calibrated) {
-        g_calibration_data.adc_min = g_calibration.adc_min;
-        g_calibration_data.adc_max = g_calibration.adc_max;
-        g_calibration_data.pressure_min = g_calibration.pressure_min;
-        g_calibration_data.pressure_max = g_calibration.pressure_max;
-        g_calibration_data.slope = g_calibration.slope;
-        g_calibration_data.offset = g_calibration.offset;
-        g_calibration_data.calibrated = true;
+        PressureControlConfig_UpdateCalibrationCache(&g_calibration);
         
         printf("PressureControlConfig: Calibration loaded from Advanced system - ADC: %.0f-%.0f, Pressure: %.2f-%.2f bar\r\n",
                g_calibration_data.adc_min, g_calibration_data.adc_max, 
@@ -809,6 +808,21 @@ void PressureControlConfig_LoadCalibrationData(void) {
     }
     
     // Köhnə kod silindi - artıq Advanced sistemin vahid strukturundan istifadə edirik
+}
+
+void PressureControlConfig_UpdateCalibrationCache(const CalibrationData_t* source) {
+    if (source == NULL) {
+        return;
+    }
+
+    g_calibration_data.adc_min = source->adc_min;
+    g_calibration_data.adc_max = source->adc_max;
+    g_calibration_data.pressure_min = source->pressure_min;
+    g_calibration_data.pressure_max = source->pressure_max;
+    g_calibration_data.slope = source->slope;
+    g_calibration_data.offset = source->offset;
+    g_calibration_data.calibrated = source->calibrated;
+    g_calibration_data.calibration_date = source->calibration_date;
 }
 
 /* =========================================================================
