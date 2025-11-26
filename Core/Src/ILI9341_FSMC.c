@@ -410,7 +410,7 @@ static float motor_frequency = 1000.0;
 /* Pressure sensor calibration variables */
 /* Note: These are NOT static so AdvancedPressureControl can access them */
 float min_voltage = 0.5;      /* Minimum voltage (0.5V) */
-float max_voltage = 5.24;     /* Maximum voltage (5.24V) */
+float max_voltage = 5.0;      /* Maximum voltage (5.0V) - Sensor reference voltage */
 float min_pressure = 0.0;     /* DÜZƏLİŞ: Minimum pressure (0.0 bar - sıfır təzyiq) */
 float max_pressure = 300.0;   /* Maximum pressure (300.0 bar) */
 uint16_t adc_min = 410;       /* ADC value at minimum pressure (0.5V) */
