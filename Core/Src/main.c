@@ -360,6 +360,9 @@ static void MX_ADC3_Init(void)
   sConfig.Channel = ADC_CHANNEL_3;
   sConfig.Rank = 1;
   /* Pressure sensor front-end is high impedance -> need long acquisition time */
+  /* QEYD: .ioc faylında ADC_SAMPLETIME_3CYCLES göstərilir, amma kodda 480 cycles istifadə olunur.
+   * Bu, sensorun yüksək impedansına görə lazımdır. STM32CubeMX-dən kod yenidən generate edilsə,
+   * bu dəyər 3 cycles olacaq və manual olaraq 480 cycles-a dəyişdirilməlidir. */
   sConfig.SamplingTime = ADC_SAMPLETIME_480CYCLES;
   if (HAL_ADC_ConfigChannel(&hadc3, &sConfig) != HAL_OK)
   {

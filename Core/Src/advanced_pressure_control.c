@@ -116,6 +116,7 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
     static uint16_t last_valid_adc = ADC_MIN;
 
     /* Əgər hansısa səbəbdən ADC dayanıbsa, onu yenidən işə sal */
+    /* QEYD: Continuous mode-da ADC davamlı işləyir, amma bəzən səhv vəziyyətə düşə bilər */
     if ((HAL_ADC_GetState(&hadc3) & HAL_ADC_STATE_REG_BUSY) == 0U) {
         if (HAL_ADC_Start(&hadc3) != HAL_OK) {
             return last_valid_adc;
@@ -123,10 +124,13 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
     }
 
     /* Overrun baş veribsə flaqı təmizlə ki, növbəti konversiya bloklanmasın */
+    /* Continuous mode-da overrun baş verə bilər, əgər oxuma sürəti konversiya sürətindən yüksəkdirsə */
     if (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_OVR) != RESET) {
         __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_OVR);
     }
 
+    /* Continuous mode-da konversiya tamamlanıb-yoxlanması lazım deyil,
+     * çünki HAL_ADC_GetValue() ən son tamamlanmış dəyəri qaytarır */
     uint16_t adc_value = (uint16_t)HAL_ADC_GetValue(&hadc3);
     
     /* KRİTİK DÜZƏLİŞ: 12-bit ADC maksimum dəyəri 4095-dir (2^12 - 1)
@@ -143,10 +147,12 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
     }
 
     /* İlk oxunuşda 0 dəyəri gəlirsə, kalibrlənmiş minimumu saxla */
+    /* Bu, sistemin ilk işə salınmasında etibarsız oxunuşun qarşısını alır */
     if (adc_value == 0U && last_valid_adc == ADC_MIN) {
         return last_valid_adc;
     }
 
+    /* Etibarlı dəyəri yadda saxla və qaytar */
     last_valid_adc = adc_value;
     return adc_value;
 }
@@ -207,7 +213,7 @@ float AdvancedPressureControl_ClampValue(float value, float min_val, float max_v
  * 
  * KRİTİK DÜZƏLİŞ: ADC dəyəri clamp edilir ki, mənfi təzyiq dəyərləri yaranmasın.
  * Əgər ADC < ADC_MIN (410) olarsa, təzyiq PRESSURE_MIN (0.0 bar) olacaq.
- * Əgər ADC > ADC_MAX (4096) olarsa, təzyiq PRESSURE_MAX (300.0 bar) olacaq.
+ * Əgər ADC > ADC_MAX (4095) olarsa, təzyiq PRESSURE_MAX (300.0 bar) olacaq.
  */
 float AdvancedPressureControl_ReadPressure(void) {
     uint16_t adc_raw = AdvancedPressureControl_ReadADC();
@@ -224,7 +230,7 @@ float AdvancedPressureControl_ReadPressure(void) {
     
     // KRİTİK DÜZƏLİŞ: Xam ADC dəyəri ilə birbaşa işləmək lazımdır
     // ADC dəyərini clamp etmək yanlışdır, çünki sensor kalibrləmə diapazonundan kənarda dəyər göstərə bilər
-    // Məsələn, əgər adc_raw > adc_max (4096) olarsa, sensor 300 bar-dan yuxarı təzyiq göstərə bilər
+    // Məsələn, əgər adc_raw > adc_max (4095) olarsa, sensor 300 bar-dan yuxarı təzyiq göstərə bilər
     // Nəzarət sistemi üçün xam dəyərin özü ilə işləmək, yalnız son təzyiq nəticəsini clamp etmək daha düzgündür
     
     // DÜZƏLİŞ: Lineyar çevirmə düsturu - offset istifadə edilir
@@ -1222,7 +1228,7 @@ void AdvancedPressureControl_LoadCalibration(void) {
         float min_pressure;       // 0.0 bar
         float max_pressure;       // 300.0 bar
         uint16_t adc_min;         // 410
-        uint16_t adc_max;         // 4096
+        uint16_t adc_max;         // 4095 (12-bit ADC max value)
         uint32_t checksum;        // Data integrity check
     } calibration_data_t;
     
@@ -1317,7 +1323,7 @@ void AdvancedPressureControl_SaveCalibration(void) {
         float min_pressure;       // 0.0 bar
         float max_pressure;       // 300.0 bar
         uint16_t adc_min;         // 410
-        uint16_t adc_max;         // 4096
+        uint16_t adc_max;         // 4095 (12-bit ADC max value)
         uint32_t checksum;        // Data integrity check
     } calibration_data_t;
     
