@@ -19,7 +19,7 @@ extern "C" {
 #include <stdbool.h>
 
 /* Include advanced_pressure_control.h for CalibrationData_t type */
-/* This is needed because pressure_control_config.c uses CalibrationData_t */
+/* This is safe because advanced_pressure_control.h does not include pressure_control_config.h */
 #include "advanced_pressure_control.h"
 
 /* =========================================================================
