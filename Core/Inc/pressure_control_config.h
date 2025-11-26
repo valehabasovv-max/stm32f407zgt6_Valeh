@@ -18,8 +18,26 @@ extern "C" {
 #include <stdint.h>
 #include <stdbool.h>
 
-/* Forward declarations to resolve dependencies */
-/* QEYD: CalibrationData_t tipi advanced_pressure_control.h-da da təyin olunub */
+/* =========================================================================
+   SHARED TYPE DEFINITIONS (with advanced_pressure_control.h)
+   ========================================================================= */
+/* KRİTİK: CalibrationData_t tipi burada VƏ advanced_pressure_control.h-da eyni şəkildə təyin olunur
+ * Header guard (CALIBRATION_DATA_T_DEFINED) ikiqat təyinin qarşısını alır
+ * Bu tip CONFIGURATION_PARAMETERS bölməsindən ƏVVƏL təyin olunmalıdır
+ */
+#ifndef CALIBRATION_DATA_T_DEFINED
+#define CALIBRATION_DATA_T_DEFINED
+typedef struct CalibrationData_s {
+    float adc_min;
+    float adc_max;
+    float pressure_min;
+    float pressure_max;
+    float slope;
+    float offset;
+    bool calibrated;
+    uint32_t calibration_date;
+} CalibrationData_t;
+#endif
 
 /* =========================================================================
    CONFIGURATION PARAMETERS
@@ -106,22 +124,7 @@ typedef struct {
     bool safety_enabled;
 } System_Config_t;
 
-// Calibration Data
-// KRİTİK: Bu tip advanced_pressure_control.h-da tam təyin olunub
-// Burada yalnız istifadə üçün forward declaration lazımdır
-#ifndef CALIBRATION_DATA_T_DEFINED
-#define CALIBRATION_DATA_T_DEFINED
-typedef struct CalibrationData_s {
-    float adc_min;
-    float adc_max;
-    float pressure_min;
-    float pressure_max;
-    float slope;
-    float offset;
-    bool calibrated;
-    uint32_t calibration_date;
-} CalibrationData_t;
-#endif
+// Calibration Data - artıq faylın əvvəlində təyin olunub (sətir 24-36)
 
 // Valve Configuration
 typedef struct {
@@ -150,7 +153,7 @@ typedef struct {
 extern System_Config_t g_system_config;
 extern PID_Tuning_t g_pid_zme_tuning;
 extern PID_Tuning_t g_pid_drv_tuning;
-extern CalibrationData_t g_calibration_data;
+extern CalibrationData_t g_calibration_data;  // Tip sətir 28-40-da təyin olunub
 extern Valve_Config_t g_valve_config;
 extern Safety_Config_t g_safety_config;
 
