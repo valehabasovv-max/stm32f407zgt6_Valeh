@@ -857,12 +857,18 @@ void ILI9341_ShowPressureCalibrationPage(void)
         max_pressure = g_calibration.pressure_max;
     }
     
+    // KRİTİK DÜZƏLİŞ: Gərginlik dəyərlərini ADC-dən hesabla (5.0V reference voltage)
+    // Sensor reference voltage: 5.0V
+    // Formula: Voltage = (ADC / 4096) * 5.0V
+    float calculated_min_voltage = ((float)adc_min / 4096.0f) * 5.0f;
+    float calculated_max_voltage = ((float)adc_max / 4096.0f) * 5.0f;
+    
     // Current calibration values display
     char min_volt_str[30], max_volt_str[30];
     char min_press_str[30], max_press_str[30];
     char adc_min_str[30], adc_max_str[30];
-    sprintf(min_volt_str, "Min Volt: %.1fV", min_voltage);
-    sprintf(max_volt_str, "Max Volt: %.1fV", max_voltage);
+    sprintf(min_volt_str, "Min Volt: %.1fV", calculated_min_voltage);
+    sprintf(max_volt_str, "Max Volt: %.1fV", calculated_max_voltage);
     sprintf(min_press_str, "Min Press: %.1f bar", min_pressure);
     sprintf(max_press_str, "Max Press: %.1f bar", max_pressure);
     sprintf(adc_min_str, "ADC Min: %d", adc_min);
