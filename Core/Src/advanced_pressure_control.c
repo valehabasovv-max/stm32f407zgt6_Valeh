@@ -24,7 +24,7 @@ extern TIM_HandleTypeDef htim3;
 extern System_Config_t g_system_config;
 extern PID_Tuning_t g_pid_zme_tuning;
 extern PID_Tuning_t g_pid_drv_tuning;
-extern Calibration_Data_t g_calibration_data;
+extern CalibrationData_t g_calibration_data;
 extern Valve_Config_t g_valve_config;
 extern Safety_Config_t g_safety_config;
 

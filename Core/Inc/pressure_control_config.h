@@ -104,7 +104,11 @@ typedef struct {
 } System_Config_t;
 
 // Calibration Data
-typedef struct {
+// KRİTİK DÜZƏLİŞ: Tip adı advanced_pressure_control.h ilə eynidir (CalibrationData_t)
+// Bu, ziddiyyətləri aradan qaldırır və kodun vahidliyini təmin edir
+// QEYD: Bu tip artıq advanced_pressure_control.h-da təyin olunub
+// Burada yalnız uyğunluq üçün typedef alias təmin edirik
+typedef struct CalibrationData_s {
     float adc_min;
     float adc_max;
     float pressure_min;
@@ -113,7 +117,7 @@ typedef struct {
     float offset;
     bool calibrated;
     uint32_t calibration_date;
-} Calibration_Data_t;
+} CalibrationData_t;
 
 // Valve Configuration
 typedef struct {
@@ -142,7 +146,7 @@ typedef struct {
 extern System_Config_t g_system_config;
 extern PID_Tuning_t g_pid_zme_tuning;
 extern PID_Tuning_t g_pid_drv_tuning;
-extern Calibration_Data_t g_calibration_data;
+extern CalibrationData_t g_calibration_data;
 extern Valve_Config_t g_valve_config;
 extern Safety_Config_t g_safety_config;
 

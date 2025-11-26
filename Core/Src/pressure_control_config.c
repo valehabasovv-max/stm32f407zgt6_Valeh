@@ -43,7 +43,7 @@ PID_Tuning_t g_pid_drv_tuning = {
     .tuning_aggressiveness = 1.0f
 };
 
-Calibration_Data_t g_calibration_data = {
+CalibrationData_t g_calibration_data = {
     .adc_min = CONFIG_PRESSURE_SENSOR_ADC_MIN,
     .adc_max = CONFIG_PRESSURE_SENSOR_ADC_MAX,
     .pressure_min = CONFIG_PRESSURE_SENSOR_PRESSURE_MIN,
