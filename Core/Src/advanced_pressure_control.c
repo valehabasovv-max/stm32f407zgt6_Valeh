@@ -847,11 +847,26 @@ void AdvancedPressureControl_Step(void) {
     g_system_status.raw_adc_value = raw_adc;
     g_system_status.current_pressure = AdvancedPressureControl_ReadPressure();
     
-    // DÜZƏLİŞ: Təzyiq oxunuşunu yoxla (maksimum 300.0 bar)
-    if (g_system_status.current_pressure < 0.0f || g_system_status.current_pressure > 300.0f) {
+    // Validate pressure reading without hiding genuine over-pressure conditions
+    if (!isfinite(g_system_status.current_pressure) || g_system_status.current_pressure < 0.0f) {
         printf("PID ERROR: Invalid pressure reading: %.2f bar\r\n", g_system_status.current_pressure);
-        // Default dəyər istifadə et
         g_system_status.current_pressure = 0.0f;
+    } else {
+        if (g_system_status.current_pressure > g_safety_limits.max_pressure) {
+            static uint32_t over_limit_log_count = 0;
+            if (over_limit_log_count < 10U || (over_limit_log_count % 50U) == 0U) {
+                printf("PID WARNING: Pressure %.2f bar exceeds configured max %.1f bar\r\n",
+                       g_system_status.current_pressure, g_safety_limits.max_pressure);
+            }
+            over_limit_log_count++;
+        }
+        float sensor_fault_limit = g_safety_limits.emergency_threshold + 50.0f;
+        if (g_system_status.current_pressure > sensor_fault_limit) {
+            float fault_value = g_system_status.current_pressure;
+            g_system_status.current_pressure = sensor_fault_limit;
+            printf("PID WARNING: Pressure reading %.2f bar exceeds sensor range, clamping to %.1f bar\r\n",
+                   fault_value, sensor_fault_limit);
+        }
     }
     
     // 1. TƏHLÜKƏSİZLİK MÜDAXİLƏSİ (Motor təyin olunmadan ƏVVƏL)
@@ -1267,6 +1282,7 @@ void AdvancedPressureControl_LoadCalibration(void) {
                                       (g_calibration.slope * (float)cal_data->adc_min);
                 
                 g_calibration.calibrated = true;
+                PressureControlConfig_UpdateCalibrationCache(&g_calibration);
                 
                 printf("AdvancedPressureControl: Calibration loaded - ADC: %.0f-%.0f, Pressure: %.2f-%.2f bar, Slope: %.6f, Offset: %.2f\r\n",
                        g_calibration.adc_min, g_calibration.adc_max, 
@@ -1294,6 +1310,7 @@ void AdvancedPressureControl_LoadCalibration(void) {
     // DÜZƏLİŞ: Offset hesabla: offset = pressure_min - (slope * adc_min)
     g_calibration.offset = PRESSURE_MIN - (PRESSURE_SLOPE * (float)ADC_MIN);
     g_calibration.calibrated = true;
+    PressureControlConfig_UpdateCalibrationCache(&g_calibration);
     
     printf("AdvancedPressureControl: Using default calibration - ADC: %.0f-%.0f, Pressure: %.2f-%.2f bar, Slope: %.6f, Offset: %.2f\r\n",
            g_calibration.adc_min, g_calibration.adc_max, 
@@ -1333,6 +1350,7 @@ void AdvancedPressureControl_SaveCalibration(void) {
     
     printf("DEBUG: Saving calibration - ADC: %d-%d, Pressure: %.2f-%.2f bar\r\n",
            cal_data.adc_min, cal_data.adc_max, cal_data.min_pressure, cal_data.max_pressure);
+    PressureControlConfig_UpdateCalibrationCache(&g_calibration);
     
     // Calculate checksum
     uint32_t *min_v_ptr = (uint32_t*)&cal_data.min_voltage;

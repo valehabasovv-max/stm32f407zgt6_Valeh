@@ -1114,6 +1114,7 @@ void ILI9341_HandlePressureControlTouch(void)
                                 printf("MIN Calibration updated - ADC: %d, Pressure: %.2f bar, Slope: %.6f, Offset: %.2f\r\n",
                                        adc_min, min_pressure, g_calibration.slope, g_calibration.offset);
                             }
+                        PressureControlConfig_UpdateCalibrationCache(&g_calibration);
                         /* KRİTİK DÜZƏLİŞ: HAL_ADC_Stop() silindi - artıq manual ADC oxunması yoxdur */
                         ILI9341_ShowPressureCalibrationPage(); /* Refresh page */
                     }
@@ -1142,6 +1143,7 @@ void ILI9341_HandlePressureControlTouch(void)
                                 printf("MAX Calibration updated - ADC: %d, Pressure: %.2f bar, Slope: %.6f, Offset: %.2f\r\n",
                                        adc_max, max_pressure, g_calibration.slope, g_calibration.offset);
                             }
+                        PressureControlConfig_UpdateCalibrationCache(&g_calibration);
                         /* KRİTİK DÜZƏLİŞ: HAL_ADC_Stop() silindi - artıq manual ADC oxunması yoxdur */
                         /* ADC dəyəri Status-dan götürülür, ona görə də Stop() lazım deyil */
                         ILI9341_ShowPressureCalibrationPage(); /* Refresh page */
@@ -1173,6 +1175,7 @@ void ILI9341_HandlePressureControlTouch(void)
                         g_calibration.slope = (max_pressure - min_pressure) / (float)(adc_max - adc_min);
                         g_calibration.offset = min_pressure - (g_calibration.slope * (float)adc_min);  // DÜZƏLİŞ: min_pressure = 0.0f
                         g_calibration.calibrated = true;
+                        PressureControlConfig_UpdateCalibrationCache(&g_calibration);
                         
                         printf("Calibration updated from UI - ADC: %.0f-%.0f, Pressure: %.2f-%.2f bar, Slope: %.6f, Offset: %.2f\r\n",
                                g_calibration.adc_min, g_calibration.adc_max, 
