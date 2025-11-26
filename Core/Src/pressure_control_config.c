@@ -733,7 +733,7 @@ void PressureControlConfig_SaveCalibrationData(void) {
         float min_pressure;       /* 0.0 bar */
         float max_pressure;       /* 300.0 bar */
         uint16_t adc_min;         /* 410 */
-        uint16_t adc_max;         /* 4096 */
+        uint16_t adc_max;         /* 4095 */
         uint32_t checksum;         /* Data integrity check */
     } calibration_data_t;
     
@@ -786,7 +786,7 @@ void PressureControlConfig_LoadCalibrationData(void) {
     printf("Loading calibration data from flash...\r\n");
     
     // KRİTİK DÜZƏLİŞ: Advanced sistemin vahid strukturundan istifadə et
-    // Bu, köhnə strukturlar (ADC 500-3500) ilə yeni strukturlar (ADC 410-4096) arasında ziddiyyəti aradan qaldırır
+    // Bu, köhnə strukturlar (ADC 500-3500) ilə yeni strukturlar (ADC 410-4095) arasında ziddiyyəti aradan qaldırır
     AdvancedPressureControl_LoadCalibration();
     
     // Advanced sistemdən yüklənən kalibrasiya məlumatlarını g_calibration_data strukturuna köçür

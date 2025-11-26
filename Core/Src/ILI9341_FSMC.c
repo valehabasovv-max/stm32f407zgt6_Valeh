@@ -408,14 +408,18 @@ static float motor_duty_cycle = 50.0;
 static float motor_frequency = 1000.0;
 
 /* Pressure sensor calibration variables */
-/* Note: These are NOT static so AdvancedPressureControl can access them */
-float min_voltage = 0.5;      /* Minimum voltage (0.5V) */
-float max_voltage = 5.24;     /* Maximum voltage (5.24V) */
-float min_pressure = 0.0;     /* DÜZƏLİŞ: Minimum pressure (0.0 bar - sıfır təzyiq) */
-float max_pressure = 300.0;   /* Maximum pressure (300.0 bar) */
-uint16_t adc_min = 410;       /* ADC value at minimum pressure (0.5V) */
-uint16_t adc_max = 4095;      /* KRİTİK DÜZƏLİŞ: 12-bit ADC max = 4095 (2^12 - 1), NOT 4096 */
-static uint8_t calibration_mode = 0; /* 0=normal, 1=calibrate min, 2=calibrate max */
+/* KRİTİK DÜZƏLİŞ: Bu köhnə dəyişənlər artıq istifadə olunmur
+ * Bütün kalibrasiya məlumatları AdvancedPressureControl sisteminin
+ * g_calibration strukturunda saxlanılır və idarə olunur.
+ * Bu dəyişənlər yalnız uyğunluq üçün saxlanılır.
+ */
+static float min_voltage = 0.5f;      /* Deprecated - use g_calibration */
+static float max_voltage = 5.24f;     /* Deprecated - use g_calibration */
+static float min_pressure = 0.0f;     /* Deprecated - use g_calibration */
+static float max_pressure = 300.0f;   /* Deprecated - use g_calibration */
+static uint16_t adc_min = 410;        /* Deprecated - use g_calibration */
+static uint16_t adc_max = 4095;       /* Deprecated - use g_calibration */
+static uint8_t calibration_mode = 0;  /* 0=normal, 1=calibrate min, 2=calibrate max */
 
 /* Ensure we never overwrite valid calibration data with defaults */
 static bool ILI9341_IsPressureCalibrationValid(const CalibrationData_t* cal)

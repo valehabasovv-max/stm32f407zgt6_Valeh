@@ -28,7 +28,7 @@ extern "C" {
    ========================================================================= */
 
 // Təzyiq Sensoru (ADC)
-// KRİTİK DÜZƏLİŞ: 12-bit ADC maksimum dəyəri 4095-dir (2^12 - 1), 4096 deyil!
+// KRİTİK DÜZƏLİŞ: 12-bit ADC maksimum dəyəri 4095-dir (2^12 - 1)
 // 0.5V (0 bar) -> 410, 5.0V (300 bar) -> 4095 (5.0V Vref fərziyyəsi ilə)
 #define ADC_MIN 410
 #define ADC_MAX 4095

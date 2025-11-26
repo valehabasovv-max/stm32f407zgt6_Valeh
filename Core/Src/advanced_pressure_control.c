@@ -40,14 +40,22 @@ PID_Controller_t g_pid_zme = {0};
 PID_Controller_t g_pid_drv = {0};
 
 // Calibration data
-// DÜZƏLİŞ: Offset düzgün hesablanmalıdır
+// KRİTİK DÜZƏLİŞ: Offset və slope düzgün hesablanır
+// Formula: pressure = offset + (slope * adc)
+// Slope = (pressure_max - pressure_min) / (adc_max - adc_min)
+// Offset = pressure_min - (slope * adc_min)
+// 
+// Nümunə hesablama:
+// ADC_MIN = 410, ADC_MAX = 4095, PRESSURE_MIN = 0.0, PRESSURE_MAX = 300.0
+// Slope = (300.0 - 0.0) / (4095 - 410) = 300.0 / 3685 ≈ 0.08139 bar/count
+// Offset = 0.0 - (0.08139 * 410) ≈ -33.37 bar
 CalibrationData_t g_calibration = {
     .adc_min = (float)ADC_MIN,
     .adc_max = (float)ADC_MAX,
     .pressure_min = PRESSURE_MIN,
     .pressure_max = PRESSURE_MAX,
     .slope = PRESSURE_SLOPE,
-    .offset = PRESSURE_MIN - (PRESSURE_SLOPE * (float)ADC_MIN),  // DÜZƏLİŞ: Offset hesablanır
+    .offset = PRESSURE_MIN - (PRESSURE_SLOPE * (float)ADC_MIN),
     .calibrated = true,
     .calibration_date = 0
 };
@@ -107,19 +115,26 @@ static bool AdvancedPressureControl_IsCalibrationRangeValid(uint16_t adc_min_val
  * @brief ADC-dən xam dəyəri oxu
  * @retval Raw ADC value (0-4095)
  *
- * Continuous mode-da ADC davamlı işləyir, ona görə də dəyəri ən son tamamlanmış
- * konversiyadan birbaşa oxumaq kifayətdir. EOC flaqına güvənmək əvəzinə dəyəri
- * həmişə oxuyuruq və yalnız konversiya baş verməyibsə əvvəlki etibarlı dəyəri
- * qaytarırıq.
+ * KRİTİK: ADC Continuous Mode-da işləyir (ContinuousConvMode = ENABLE)
+ * Continuous mode-da ADC davamlı konversiya edir və yenidən başlatmaq lazım deyil.
+ * Dəyəri birbaşa HAL_ADC_GetValue() ilə oxuyuruq.
+ * 
+ * Təhlükəsizlik yoxlaması: Əgər ADC dayanıbsa, yenidən başladırıq.
  */
 uint16_t AdvancedPressureControl_ReadADC(void) {
     static uint16_t last_valid_adc = ADC_MIN;
 
-    /* Əgər hansısa səbəbdən ADC dayanıbsa, onu yenidən işə sal */
+    /* KRİTİK DÜZƏLİŞ: Əgər hansısa səbəbdən ADC dayanıbsa, onu yenidən işə sal */
+    // HAL_ADC_STATE_REG_BUSY = 0 olduqda, ADC konversiya etmir (problem)
+    // Continuous Mode-da ADC həmişə konversiya etməlidir
     if ((HAL_ADC_GetState(&hadc3) & HAL_ADC_STATE_REG_BUSY) == 0U) {
+        // ADC dayanıb, yenidən başlat
         if (HAL_ADC_Start(&hadc3) != HAL_OK) {
+            // Başlatma uğursuz oldu, əvvəlki etibarlı dəyəri qaytar
             return last_valid_adc;
         }
+        // Kiçik gecikmə - ADC-nin ilk konversiyasını tamamlamasına imkan ver
+        HAL_Delay(1);
     }
 
     /* Overrun baş veribsə flaqı təmizlə ki, növbəti konversiya bloklanmasın */
@@ -142,12 +157,17 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
         adc_value = 4095U;  // Maksimum 12-bit ADC dəyəri
     }
 
-    /* İlk oxunuşda 0 dəyəri gəlirsə, kalibrlənmiş minimumu saxla */
-    if (adc_value == 0U && last_valid_adc == ADC_MIN) {
+    /* KRİTİK DÜZƏLİŞ: İlk oxunuşda 0 dəyəri və ya çox kiçik dəyər gəlirsə, əvvəlki etibarlı dəyəri saxla */
+    // Bu, ADC-nin ilk konversiyasının tamamlanmasına qədər yanlış dəyərlərin qaytarılmasının qarşısını alır
+    if (adc_value < 50U && last_valid_adc >= ADC_MIN) {
+        // Çox kiçik dəyər (səhv oxunuş), əvvəlki etibarlı dəyəri qaytar
         return last_valid_adc;
     }
 
-    last_valid_adc = adc_value;
+    // Etibarlı dəyər oxundu, saxla
+    if (adc_value >= 50U) {
+        last_valid_adc = adc_value;
+    }
     return adc_value;
 }
 
@@ -207,7 +227,7 @@ float AdvancedPressureControl_ClampValue(float value, float min_val, float max_v
  * 
  * KRİTİK DÜZƏLİŞ: ADC dəyəri clamp edilir ki, mənfi təzyiq dəyərləri yaranmasın.
  * Əgər ADC < ADC_MIN (410) olarsa, təzyiq PRESSURE_MIN (0.0 bar) olacaq.
- * Əgər ADC > ADC_MAX (4096) olarsa, təzyiq PRESSURE_MAX (300.0 bar) olacaq.
+ * Əgər ADC > ADC_MAX (4095) olarsa, təzyiq PRESSURE_MAX (300.0 bar) olacaq.
  */
 float AdvancedPressureControl_ReadPressure(void) {
     uint16_t adc_raw = AdvancedPressureControl_ReadADC();
@@ -224,7 +244,7 @@ float AdvancedPressureControl_ReadPressure(void) {
     
     // KRİTİK DÜZƏLİŞ: Xam ADC dəyəri ilə birbaşa işləmək lazımdır
     // ADC dəyərini clamp etmək yanlışdır, çünki sensor kalibrləmə diapazonundan kənarda dəyər göstərə bilər
-    // Məsələn, əgər adc_raw > adc_max (4096) olarsa, sensor 300 bar-dan yuxarı təzyiq göstərə bilər
+    // Məsələn, əgər adc_raw > adc_max (4095) olarsa, sensor 300 bar-dan yuxarı təzyiq göstərə bilər
     // Nəzarət sistemi üçün xam dəyərin özü ilə işləmək, yalnız son təzyiq nəticəsini clamp etmək daha düzgündür
     
     // DÜZƏLİŞ: Lineyar çevirmə düsturu - offset istifadə edilir
@@ -232,7 +252,7 @@ float AdvancedPressureControl_ReadPressure(void) {
     // Xam ADC dəyəri ilə birbaşa çevirmə aparılır
     float pressure = g_calibration.offset + ((float)adc_raw * g_calibration.slope);
     
-    // KRİTİK DÜZƏLİŞ: ADC filtrləmə - Moving Average Filter
+    // KRİTİK DÜZƏLİŞ: ADC filtrləmə - Moving Average Filter (8 nümunə)
     // Bu, səs-küyü azaldır və PID-nin (xüsusən Kd termi) daha stabil işləməsinə kömək edir
     static float pressure_history[8] = {0.0f};  // 8 nümunə üçün tarixçə
     static uint8_t history_index = 0;
@@ -247,7 +267,7 @@ float AdvancedPressureControl_ReadPressure(void) {
     
     // Moving Average hesabla
     float filtered_pressure = 0.0f;
-    uint8_t count = history_filled ? 8 : history_index;
+    uint8_t count = history_filled ? 8 : (history_index > 0 ? history_index : 1);  // Minimum 1 nümunə
     for (uint8_t i = 0; i < count; i++) {
         filtered_pressure += pressure_history[i];
     }
@@ -1222,7 +1242,7 @@ void AdvancedPressureControl_LoadCalibration(void) {
         float min_pressure;       // 0.0 bar
         float max_pressure;       // 300.0 bar
         uint16_t adc_min;         // 410
-        uint16_t adc_max;         // 4096
+        uint16_t adc_max;         // 4095
         uint32_t checksum;        // Data integrity check
     } calibration_data_t;
     
@@ -1317,7 +1337,7 @@ void AdvancedPressureControl_SaveCalibration(void) {
         float min_pressure;       // 0.0 bar
         float max_pressure;       // 300.0 bar
         uint16_t adc_min;         // 410
-        uint16_t adc_max;         // 4096
+        uint16_t adc_max;         // 4095
         uint32_t checksum;        // Data integrity check
     } calibration_data_t;
     

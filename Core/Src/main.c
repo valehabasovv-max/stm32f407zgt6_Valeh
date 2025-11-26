@@ -126,16 +126,12 @@ int main(void)
   /* === ADVANCED PRESSURE CONTROL SYSTEM INIT === */
   
   /* Initialize the configuration system first */
-  /* DÜZƏLİŞ: PressureControlConfig_Init() daxilində PressureControlConfig_LoadCalibrationData() çağırılır
-   * və o, artıq g_calibration strukturuna yazır, ona görə də AdvancedPressureControl_LoadCalibration()
-   * çağırmağa ehtiyac yoxdur. Amma təhlükəsizlik üçün hər ikisini çağıra bilərik.
+  /* KRİTİK DÜZƏLİŞ: PressureControlConfig_Init() daxilində PressureControlConfig_LoadCalibrationData() çağırılır
+   * və o, AdvancedPressureControl_LoadCalibration() çağırır. Təkrar çağırış lazım deyil.
+   * Bu, kalibrasiya məlumatlarının ikiqat yüklənməsini və ziddiyyətləri aradan qaldırır.
    */
   PressureControlConfig_Init();
   HAL_Delay(50);
-  
-  /* DÜZƏLİŞ: Advanced sistem kalibrləmə funksiyasını istifadə et */
-  /* Load calibration data from flash memory (if not already loaded by PressureControlConfig_Init) */
-  AdvancedPressureControl_LoadCalibration();
   
   /* Initialize the advanced PID-based pressure control system */
   AdvancedPressureControl_Init();
