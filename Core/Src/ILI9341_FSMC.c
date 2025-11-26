@@ -1678,27 +1678,38 @@ void ILI9341_HandleCalibrationTouch(void)
         if (current_time - last_adc_update > 200) { /* Update every 200ms for better responsiveness */
             last_adc_update = current_time;
             
-            /* KRİTİK DÜZƏLİŞ: ADC oxunması PID sistemindən götürülür - ADC bloklanması yoxdur */
+            /* KRİTİK DÜZƏLİŞ: Kalibrasiya səhifəsində birbaşa ADC oxumaq lazımdır */
+            /* Çünki PID Step() funksiyası yalnız 10ms-də bir çağırılır və raw_adc_value yenilənməyə bilər */
+            /* Kalibrasiya zamanı real-time ADC dəyərini görmək lazımdır */
+            uint16_t adc_value = AdvancedPressureControl_ReadADC();  // Birbaşa ADC oxu
+            
+            /* Status strukturunu da yenilə (PID sistemi üçün) */
             SystemStatus_t* status = AdvancedPressureControl_GetStatus();
-            uint16_t adc_value = status->raw_adc_value;  // Xam ADC dəyəri Status-dan
+            status->raw_adc_value = adc_value;  // Status-u yenilə
+            
+            /* Təzyiq hesabla (kalibrasiya üçün) */
+            float current_pressure = AdvancedPressureControl_ReadPressure();
+            status->current_pressure = current_pressure;  // Status-u yenilə
             
             /* Update display with current ADC value */
-            char adc_str[30];
-            sprintf(adc_str, "ADC: %d", adc_value);
+            /* KRİTİK DÜZƏLİŞ: Ekranda mətn yenilənərkən əvvəlki mətnin düzgün silinməsi */
+            /* Düzbucaqlı sahəni qara rənglə doldur (mətn sahəsi) */
+            ILI9341_DrawRectangle(20, 170, 300, 12, ILI9341_COLOR_BLACK);  // ADC mətn sahəsi
+            char adc_str[40];
+            sprintf(adc_str, "ADC: %d (%.2fV)", adc_value, ((float)adc_value / 4096.0f) * 5.0f);
             ILI9341_DrawString(20, 170, adc_str, ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
             
-            /* PID sistemindən təzyiq dəyərini götür */
-            float current_pressure = status->current_pressure;
-            char pressure_str[30];
-            sprintf(pressure_str, "Pressure: %.1f bar", current_pressure);
-            ILI9341_DrawString(20, 180, pressure_str, ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 1);
+            /* Təzyiq dəyərini göstər */
+            ILI9341_DrawRectangle(20, 190, 300, 12, ILI9341_COLOR_BLACK);  // Pressure mətn sahəsi
+            char pressure_str[40];
+            sprintf(pressure_str, "Pressure: %.2f bar", current_pressure);
+            ILI9341_DrawString(20, 190, pressure_str, ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 1);
             
             /* Show calibration values */
-            char debug_cal_str[50];
-            sprintf(debug_cal_str, "Cal: %d-%d -> %.1f-%.1f", adc_min, adc_max, min_pressure, max_pressure);
-            ILI9341_DrawString(20, 190, debug_cal_str, ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 1);
-            /* KRİTİK DÜZƏLİŞ: HAL_ADC_Stop() silindi - artıq manual ADC oxunması yoxdur */
-            /* ADC dəyəri Status-dan götürülür, ona görə də Stop() lazım deyil */
+            ILI9341_DrawRectangle(20, 210, 300, 12, ILI9341_COLOR_BLACK);  // Calibration mətn sahəsi
+            char debug_cal_str[60];
+            sprintf(debug_cal_str, "Cal: %d-%d -> %.1f-%.1f bar", adc_min, adc_max, min_pressure, max_pressure);
+            ILI9341_DrawString(20, 210, debug_cal_str, ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 1);
         }
     }
 }
