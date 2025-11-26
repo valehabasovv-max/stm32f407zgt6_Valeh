@@ -197,6 +197,69 @@ float AdvancedPressureControl_ClampValue(float value, float min_val, float max_v
     return value;
 }
 
+/**
+ * @brief Xam ADC dəyərini kalibrlənmiş təzyiqə çevir
+ *
+ * @param adc_raw Xam ADC dəyəri (0-4095)
+ * @retval Filtrlənmiş təzyiq (bar)
+ */
+static float AdvancedPressureControl_ConvertAdcToPressure(uint16_t adc_raw) {
+    // DEBUG: İlk çağırışda kalibrləmə məlumatlarını göstər
+    static bool first_call = true;
+    if (first_call) {
+        printf("DEBUG: Calibration values - ADC: %.0f-%.0f, Pressure: %.2f-%.2f bar, Slope: %.6f, Offset: %.2f\r\n",
+               g_calibration.adc_min, g_calibration.adc_max,
+               g_calibration.pressure_min, g_calibration.pressure_max,
+               g_calibration.slope, g_calibration.offset);
+        first_call = false;
+    }
+
+    // DÜZƏLİŞ: Lineyar çevirmə düsturu - offset istifadə edilir
+    float pressure = g_calibration.offset + ((float)adc_raw * g_calibration.slope);
+
+    // KRİTİK DÜZƏLİŞ: ADC filtrləmə - Moving Average Filter
+    static float pressure_history[8] = {0.0f};  // 8 nümunə üçün tarixçə
+    static uint8_t history_index = 0;
+    static bool history_filled = false;
+
+    // Tarixçəni yenilə
+    pressure_history[history_index] = pressure;
+    history_index = (history_index + 1U) % 8U;
+    if (history_index == 0U) {
+        history_filled = true;
+    }
+
+    // Moving Average hesabla
+    float filtered_pressure = 0.0f;
+    uint8_t count = history_filled ? 8U : history_index;
+    if (count == 0U) {
+        count = 1U;
+    }
+    for (uint8_t i = 0U; i < count; i++) {
+        filtered_pressure += pressure_history[i];
+    }
+    filtered_pressure /= (float)count;
+
+    // Filtrlənmiş dəyəri istifadə et
+    pressure = filtered_pressure;
+
+    // DEBUG: Hər 100 çağırışda bir dəfə debug məlumatı göstər
+    static uint32_t call_count = 0;
+    call_count++;
+    if (call_count % 100U == 0U) {
+        printf("DEBUG: ADC=%u, Pressure=%.2f bar (Offset=%.2f, Slope=%.6f)\r\n",
+               adc_raw, pressure, g_calibration.offset, g_calibration.slope);
+    }
+
+    // KRİTİK DÜZƏLİŞ: Yalnız aşağı limit clamp edilir
+    float min_pressure_clamp = (g_calibration.pressure_min < 0.0f) ? 0.0f : g_calibration.pressure_min;
+    if (pressure < min_pressure_clamp) {
+        pressure = min_pressure_clamp;
+    }
+
+    return pressure;
+}
+
 /* =========================================================================
    VII. ƏSAS İDARƏETMƏ VƏ ÖLÇMƏ FUNKSİYALARI
    ========================================================================= */
@@ -211,68 +274,7 @@ float AdvancedPressureControl_ClampValue(float value, float min_val, float max_v
  */
 float AdvancedPressureControl_ReadPressure(void) {
     uint16_t adc_raw = AdvancedPressureControl_ReadADC();
-    
-    // DEBUG: İlk çağırışda kalibrləmə məlumatlarını göstər
-    static bool first_call = true;
-    if (first_call) {
-        printf("DEBUG: Calibration values - ADC: %.0f-%.0f, Pressure: %.2f-%.2f bar, Slope: %.6f, Offset: %.2f\r\n",
-               g_calibration.adc_min, g_calibration.adc_max, 
-               g_calibration.pressure_min, g_calibration.pressure_max,
-               g_calibration.slope, g_calibration.offset);
-        first_call = false;
-    }
-    
-    // KRİTİK DÜZƏLİŞ: Xam ADC dəyəri ilə birbaşa işləmək lazımdır
-    // ADC dəyərini clamp etmək yanlışdır, çünki sensor kalibrləmə diapazonundan kənarda dəyər göstərə bilər
-    // Məsələn, əgər adc_raw > adc_max (4096) olarsa, sensor 300 bar-dan yuxarı təzyiq göstərə bilər
-    // Nəzarət sistemi üçün xam dəyərin özü ilə işləmək, yalnız son təzyiq nəticəsini clamp etmək daha düzgündür
-    
-    // DÜZƏLİŞ: Lineyar çevirmə düsturu - offset istifadə edilir
-    // Formula: pressure = offset + slope * adc_raw
-    // Xam ADC dəyəri ilə birbaşa çevirmə aparılır
-    float pressure = g_calibration.offset + ((float)adc_raw * g_calibration.slope);
-    
-    // KRİTİK DÜZƏLİŞ: ADC filtrləmə - Moving Average Filter
-    // Bu, səs-küyü azaldır və PID-nin (xüsusən Kd termi) daha stabil işləməsinə kömək edir
-    static float pressure_history[8] = {0.0f};  // 8 nümunə üçün tarixçə
-    static uint8_t history_index = 0;
-    static bool history_filled = false;
-    
-    // Tarixçəni yenilə
-    pressure_history[history_index] = pressure;
-    history_index = (history_index + 1) % 8;
-    if (history_index == 0) {
-        history_filled = true;
-    }
-    
-    // Moving Average hesabla
-    float filtered_pressure = 0.0f;
-    uint8_t count = history_filled ? 8 : history_index;
-    for (uint8_t i = 0; i < count; i++) {
-        filtered_pressure += pressure_history[i];
-    }
-    filtered_pressure /= (float)count;
-    
-    // Filtrlənmiş dəyəri istifadə et
-    pressure = filtered_pressure;
-    
-    // DEBUG: Hər 100 çağırışda bir dəfə debug məlumatı göstər
-    static uint32_t call_count = 0;
-    call_count++;
-    if (call_count % 100 == 0) {
-        printf("DEBUG: ADC=%d, Pressure=%.2f bar (Offset=%.2f, Slope=%.6f)\r\n",
-               adc_raw, pressure, g_calibration.offset, g_calibration.slope);
-    }
-    
-    // KRİTİK DÜZƏLİŞ: Yalnız aşağı limit clamp edilir
-    // Minimum təzyiq 0.0 bar ola bilər, mənfi təzyiq olmamalıdır
-    // Maksimum təzyiq clamp edilmir ki, sistem real >300 bar dəyərlərinə reaksiya verə bilsin
-    float min_pressure_clamp = (g_calibration.pressure_min < 0.0f) ? 0.0f : g_calibration.pressure_min;
-    if (pressure < min_pressure_clamp) {
-        pressure = min_pressure_clamp;
-    }
-    
-    return pressure;
+    return AdvancedPressureControl_ConvertAdcToPressure(adc_raw);
 }
 
 /**
@@ -845,7 +847,7 @@ void AdvancedPressureControl_Step(void) {
     // KRİTİK DÜZƏLİŞ: Xam ADC dəyərini də Status strukturuna yaz (UI üçün)
     uint16_t raw_adc = AdvancedPressureControl_ReadADC();
     g_system_status.raw_adc_value = raw_adc;
-    g_system_status.current_pressure = AdvancedPressureControl_ReadPressure();
+    g_system_status.current_pressure = AdvancedPressureControl_ConvertAdcToPressure(raw_adc);
     
     // DÜZƏLİŞ: Təzyiq oxunuşunu yoxla (maksimum 300.0 bar)
     if (g_system_status.current_pressure < 0.0f || g_system_status.current_pressure > 300.0f) {
