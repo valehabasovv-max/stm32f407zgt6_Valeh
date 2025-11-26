@@ -23,6 +23,8 @@ extern "C" {
 #include <stdbool.h>
 #include <math.h>
 
+/* Forward declarations and shared types */
+
 /* =========================================================================
    I. KALİBRƏLƏMƏ SABİTLƏRİ (Öz Dəyərlərinizlə Doldurun)
    ========================================================================= */
@@ -142,7 +144,11 @@ typedef struct {
 } SystemStatus_t;
 
 // Calibration Data Structure
-typedef struct {
+// KRİTİK: Bu struktur pressure_control_config.h ilə paylaşılır
+// Header guard ilə ikiqat təyin qarşısı alınır
+#ifndef CALIBRATION_DATA_T_DEFINED
+#define CALIBRATION_DATA_T_DEFINED
+typedef struct CalibrationData_s {
     float adc_min;
     float adc_max;
     float pressure_min;
@@ -152,6 +158,7 @@ typedef struct {
     bool calibrated;
     uint32_t calibration_date;
 } CalibrationData_t;
+#endif
 
 // Safety Limits Structure
 typedef struct {

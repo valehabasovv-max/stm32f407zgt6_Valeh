@@ -18,6 +18,9 @@ extern "C" {
 #include <stdint.h>
 #include <stdbool.h>
 
+/* Forward declarations to resolve dependencies */
+/* QEYD: CalibrationData_t tipi advanced_pressure_control.h-da da təyin olunub */
+
 /* =========================================================================
    CONFIGURATION PARAMETERS
    ========================================================================= */
@@ -104,10 +107,10 @@ typedef struct {
 } System_Config_t;
 
 // Calibration Data
-// KRİTİK DÜZƏLİŞ: Tip adı advanced_pressure_control.h ilə eynidir (CalibrationData_t)
-// Bu, ziddiyyətləri aradan qaldırır və kodun vahidliyini təmin edir
-// QEYD: Bu tip artıq advanced_pressure_control.h-da təyin olunub
-// Burada yalnız uyğunluq üçün typedef alias təmin edirik
+// KRİTİK: Bu tip advanced_pressure_control.h-da tam təyin olunub
+// Burada yalnız istifadə üçün forward declaration lazımdır
+#ifndef CALIBRATION_DATA_T_DEFINED
+#define CALIBRATION_DATA_T_DEFINED
 typedef struct CalibrationData_s {
     float adc_min;
     float adc_max;
@@ -118,6 +121,7 @@ typedef struct CalibrationData_s {
     bool calibrated;
     uint32_t calibration_date;
 } CalibrationData_t;
+#endif
 
 // Valve Configuration
 typedef struct {
