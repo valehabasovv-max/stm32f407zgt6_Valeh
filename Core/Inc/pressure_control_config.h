@@ -15,6 +15,7 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "advanced_pressure_control.h"
 #include <stdint.h>
 #include <stdbool.h>
 
