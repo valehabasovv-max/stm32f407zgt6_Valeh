@@ -98,7 +98,6 @@ float MotorPercentToPressure(float motor_percent);
 float PressureToDRVPercent(float pressure);
 float PressureToZMEPercent(float pressure);
 
-/* Auto Mode Control Functions - REMOVED (AutoMode deleted) */
 
 /* Global variables */
 extern float pressure_limit;  /* Pressure limit (SP) value - can be modified externally */

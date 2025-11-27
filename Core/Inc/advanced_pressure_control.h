@@ -5,7 +5,7 @@
  * Features:
  * - Precise PID control for ZME and DRV valves
  * - Motor speed control based on pressure limits
- * - Safety systems with emergency stop
+ * - Safety systems
  * - Calibration and parameter tuning
  * - Real-time monitoring and control
  */
@@ -161,7 +161,6 @@ typedef struct {
 typedef struct {
     float max_pressure;         // Maximum safe pressure
     float over_limit_margin;    // Over-limit margin
-    float emergency_threshold;  // Emergency stop threshold
     bool safety_enabled;        // Safety system enabled
 } SafetyLimits_t;
 
