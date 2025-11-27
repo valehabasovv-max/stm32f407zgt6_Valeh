@@ -555,8 +555,9 @@ void ILI9341_ShowPressureControlMain(void)
     // Clear screen
     ILI9341_FillScreen(ILI9341_COLOR_BLACK);
     
-    // Title at top - "HIGH PRESSURE CONTROL"
-    ILI9341_DrawString(40, 15, "HIGH PRESSURE CONTROL", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
+    // Title at top - keep text fully visible
+    ILI9341_DrawString(50, 5, "HIGH PRESSURE", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
+    ILI9341_DrawString(90, 30, "CONTROL", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
     
     // Pressure gauge in center - slightly below title
     ILI9341_DrawPressureGauge(160, 80, 35, current_pressure, 300.0);
@@ -594,11 +595,6 @@ void ILI9341_ShowPressureControlMain(void)
     // Stop button - REMOVED (Stop button deleted)
     
     /* Auto mode status display - REMOVED (AutoMode deleted) */
-    
-    /* Show target pressure (from Advanced system) - eyni status dəyişənini istifadə edirik */
-    char target_info[30];
-    sprintf(target_info, "SP: %.1f bar", status->target_pressure);
-    ILI9341_DrawString(20, 210, target_info, ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
     
     /* Show valve status (for NO valves: 0% = open, 100% = closed) */
     char valve_status[50];
