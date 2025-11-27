@@ -181,15 +181,19 @@ void ILI9341_Init(void)
     
     /* Sleep Out */
     lcd_write_command(0x11);
-    HAL_Delay(120);  /* CRITICAL: Wait for sleep out to complete */
+    HAL_Delay(150);  /* CRITICAL: Wait for sleep out to complete - artırıldı */
     
     /* Display ON */
     lcd_write_command(0x29);
-    HAL_Delay(100);  /* DÜZƏLİŞ: 20ms-dən 100ms-ə artırıldı - display stabilləşməsi üçün */
+    HAL_Delay(150);  /* DÜZƏLİŞ: Display stabilləşməsi üçün daha uzun gecikmə */
     
     /* Normal Display Mode ON */
     lcd_write_command(0x13);
-    HAL_Delay(50);   /* DÜZƏLİŞ: 10ms-dən 50ms-ə artırıldı */
+    HAL_Delay(100);   /* DÜZƏLİŞ: Ekranın tam hazır olması üçün daha uzun gecikmə */
+    
+    /* KRİTİK DÜZƏLİŞ: Ekranın işlədiyini təsdiq et - Display ON-u yenidən göndər */
+    lcd_write_command(0x29);
+    HAL_Delay(50);
 }
 
 /* ------------------ Ekranı rənglə doldur ------------------ */
@@ -207,10 +211,17 @@ void ILI9341_FillScreen(uint16_t color)
     lcd_write_data(0x00); lcd_write_data(0xEF); /* 239 */
 
     lcd_write_command(0x2C);  /* RAMWR */
+    __DSB();  /* KRİTİK DÜZƏLİŞ: RAMWR-dan sonra sinxronizasiya */
 
+    /* KRİTİK DÜZƏLİŞ: Optimizasiya - hər yazmadan sonra sinxronizasiya */
     while (px--) {
         LCD_RAM = color;
+        /* Hər 1000 pikseldən bir sinxronizasiya - performans və stabillik balansı */
+        if ((px % 1000) == 0) {
+            __DSB();
+        }
     }
+    __DSB();  /* Son sinxronizasiya - bütün yazmaların tamamlanmasını təmin et */
 }
 
 /* ------------------ Pixel çək ------------------ */
@@ -229,6 +240,7 @@ void ILI9341_DrawPixel(uint16_t x, uint16_t y, uint16_t color)
 
     lcd_write_command(0x2C);
     LCD_RAM = color;
+    __DSB();  /* KRİTİK DÜZƏLİŞ: Pixel yazmasından sonra sinxronizasiya */
 }
 
 /* ------------------ Düzbucaqlı çək ------------------ */
@@ -689,8 +701,9 @@ void ILI9341_ShowPressureControlMain(void)
 {
     pressure_control_page = 0;
     
-    // Clear screen
+    // Clear screen - KRİTİK DÜZƏLİŞ: Qara rənglə doldur
     ILI9341_FillScreen(ILI9341_COLOR_BLACK);
+    HAL_Delay(50);  // Ekranın təmizlənməsi üçün gecikmə
     
     // Title at top - keep text fully visible
     ILI9341_DrawString(50, 5, "HIGH PRESSURE", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);

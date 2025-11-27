@@ -122,15 +122,15 @@ int main(void)
   
   /* ILI9341 LCD Test - Bank4 konfiqurasiyası */
   ILI9341_Init();
-  HAL_Delay(200);  /* DÜZƏLİŞ: Daha uzun gecikmə - ekranın tam hazır olması üçün */
+  HAL_Delay(300);  /* DÜZƏLİŞ: Daha uzun gecikmə - ekranın tam hazır olması üçün */
   
-  /* Test: Ekranın işlədiyini yoxla - qırmızı rənglə doldur */
-  ILI9341_FillScreen(ILI9341_COLOR_RED);
-  HAL_Delay(500);
+  /* KRİTİK DÜZƏLİŞ: Ekranın işlədiyini yoxla - yaşıl rənglə doldur (qara ekran problemi üçün) */
+  ILI9341_FillScreen(ILI9341_COLOR_GREEN);
+  HAL_Delay(500);  /* Ekranın işlədiyini görmək üçün */
   
   /* İndi qara rənglə doldur */
   ILI9341_FillScreen(ILI9341_COLOR_BLACK);
-  HAL_Delay(100);
+  HAL_Delay(200);
   
   /* === ADVANCED PRESSURE CONTROL SYSTEM INIT === */
   
@@ -222,10 +222,11 @@ int main(void)
   
   /* Qara ekran - interaktif menu */
   ILI9341_FillScreen(ILI9341_COLOR_BLACK);
-  HAL_Delay(500);
+  HAL_Delay(100);
   
   /* Pressure control system - ana səhifə */
   ILI9341_ShowPressureControlMain();
+  HAL_Delay(100);  /* Ekranın çəkilməsi üçün gecikmə */
   
   /* USER CODE END 2 */
 
