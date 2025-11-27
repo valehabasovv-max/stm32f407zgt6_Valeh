@@ -613,9 +613,6 @@ static float zme_min_pressure = 3.5f;   /* minimum system pressure for ZME (bar)
 static float zme_max_pressure = 200.0f;  /* maximum system pressure for ZME (bar) */
 static float zme_frequency = 1000.0f;  /* ZME PWM frequency in Hz */
 
-// Button states
-static uint8_t avto_active = 0;  // REMOVED but kept for compatibility
-// stop_active - REMOVED (Stop button deleted)
 
 
 /* Helper function to draw a button with text - no borders, white background */
@@ -740,8 +737,6 @@ void ILI9341_ShowPressureControlMain(void)
     
     // Control buttons (Menu) - below pressure display
     ILI9341_DrawControlButton(15, 150, 70, 35, ILI9341_COLOR_WHITE, "Menu", 1);
-    // Manual button - REMOVED (Manual mode deleted)
-    // Stop button - REMOVED (Stop button deleted)
     
     
     /* Show valve status (for NO valves: 0% = open, 100% = closed) */
@@ -1182,8 +1177,6 @@ void ILI9341_HandlePressureControlTouch(void)
                     if (screen_x >= 15 && screen_x <= 85 && screen_y >= 150 && screen_y <= 185) {
                         ILI9341_ShowMenuPage();
                     }
-                    /* Manual button - REMOVED (Manual mode deleted) */
-                    /* Stop button - REMOVED (Stop button deleted) */
                     break;
                     
                 case 1: // Menu page
