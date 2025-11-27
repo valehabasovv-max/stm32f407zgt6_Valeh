@@ -575,7 +575,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(Lcd_RST_GPIO_Port, Lcd_RST_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(Lcd_LIG_GPIO_Port, Lcd_LIG_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(Lcd_LIG_GPIO_Port, Lcd_LIG_Pin, GPIO_PIN_SET);  /* DÜZƏLİŞ: Backlight ON */
 
   /*Configure GPIO pin : Lcd_RST_Pin */
   GPIO_InitStruct.Pin = Lcd_RST_Pin;
