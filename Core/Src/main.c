@@ -194,9 +194,9 @@ int main(void)
   __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 0);  /* ZME: 0% */
   __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, 0);  /* Extra: 0% */
   
-  /* Set PWM frequency to 1 kHz for voltage converter module */
-  /* Timer clock: 84MHz, Period = 84000000/1000 - 1 = 83999 */
-  __HAL_TIM_SET_AUTORELOAD(&htim3, 83999);
+  /* TIM3 is configured for 1 kHz PWM inside MX_TIM3_Init().
+   * Do not attempt to write 83999 to ARR again here because TIM3 is 16-bit
+   * and values above 0xFFFF would wrap and produce an incorrect frequency. */
   
   /* === TIMER 6 INITIALIZATION FOR CONTROL LOOP === */
   
@@ -437,9 +437,9 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 1 */
   htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 0;
+  htim3.Init.Prescaler = 83;  // 84MHz / (83 + 1) = 1MHz timer clock
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 65535;
+  htim3.Init.Period = 999;    // 1MHz / (999 + 1) = 1kHz PWM frequency
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)

@@ -1590,21 +1590,25 @@ void PWM_SetZMEDutyCycle(float duty_percent)
 
 void PWM_SetMotorFrequency(float frequency_hz)
 {
-    if (frequency_hz < 100.0) frequency_hz = 100.0;
-    if (frequency_hz > 10000.0) frequency_hz = 10000.0;
+    if (frequency_hz < 100.0f) frequency_hz = 100.0f;
+    if (frequency_hz > 10000.0f) frequency_hz = 10000.0f;
     
-    /* Calculate period for desired frequency */
-    /* Timer clock: 84MHz (APB1 * 2) */
-    uint32_t timer_clock = 84000000; /* 84MHz */
-    uint32_t period = (timer_clock / frequency_hz) - 1;
+    /* TIM3 runs from a 1 MHz base clock (Prescaler = 83). Keep ARR within 16-bit. */
+    const uint32_t timer_clock_hz = 1000000U;
+    uint32_t desired_period = (uint32_t)(timer_clock_hz / frequency_hz);
+    if (desired_period == 0U) {
+        desired_period = 1U;
+    }
+    uint32_t arr = desired_period - 1U;
+    if (arr > 0xFFFFU) {
+        arr = 0xFFFFU;
+    }
     
-    /* Update timer period */
-    __HAL_TIM_SET_AUTORELOAD(&htim3, period);
+    __HAL_TIM_SET_AUTORELOAD(&htim3, arr);
     
-    /* Update global variable */
     motor_frequency = frequency_hz;
     
-    /* Recalculate duty cycle with new period */
+    /* Recalculate duty cycle with new period so PWM keeps the same percentage */
     PWM_SetMotorDutyCycle(motor_duty_cycle);
 }
 
