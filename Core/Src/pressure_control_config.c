@@ -68,7 +68,6 @@ Valve_Config_t g_valve_config = {
 Safety_Config_t g_safety_config = {
     .max_pressure = CONFIG_SAFETY_MAX_PRESSURE,
     .over_limit_margin = CONFIG_SAFETY_OVER_LIMIT_MARGIN,
-    .emergency_threshold = CONFIG_SAFETY_EMERGENCY_THRESHOLD,
     .safety_enabled = true
 };
 
@@ -139,7 +138,6 @@ void PressureControlConfig_LoadDefaults(void) {
     
     g_safety_config.max_pressure = CONFIG_SAFETY_MAX_PRESSURE;
     g_safety_config.over_limit_margin = CONFIG_SAFETY_OVER_LIMIT_MARGIN;
-    g_safety_config.emergency_threshold = CONFIG_SAFETY_EMERGENCY_THRESHOLD;
     
     g_valve_config.zme_pwm_min = CONFIG_ZME_PWM_MIN;
     g_valve_config.zme_pwm_max = CONFIG_ZME_PWM_MAX;
@@ -368,12 +366,11 @@ void PressureControlConfig_SetMotorLimits(float pwm_min, float pwm_max) {
 /**
  * @brief Set safety limits
  */
-void PressureControlConfig_SetSafetyLimits(float max_pressure, float over_limit_margin, float emergency_threshold) {
+void PressureControlConfig_SetSafetyLimits(float max_pressure, float over_limit_margin) {
     g_safety_config.max_pressure = max_pressure;
     g_safety_config.over_limit_margin = over_limit_margin;
-    g_safety_config.emergency_threshold = emergency_threshold;
-    printf("Safety limits: Max=%.1f bar, Over-limit=%.1f bar, Emergency=%.1f bar\r\n", 
-           max_pressure, over_limit_margin, emergency_threshold);
+    printf("Safety limits: Max=%.1f bar, Over-limit=%.1f bar\r\n", 
+           max_pressure, over_limit_margin);
 }
 
 /**

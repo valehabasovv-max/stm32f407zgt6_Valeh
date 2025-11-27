@@ -56,7 +56,6 @@ CalibrationData_t g_calibration = {
 SafetyLimits_t g_safety_limits = {
     .max_pressure = 300.0f,
     .over_limit_margin = PRESSURE_OVER_LIMIT_MARGIN,
-    .emergency_threshold = 350.0f,
     .safety_enabled = true
 };
 
@@ -755,11 +754,6 @@ bool AdvancedPressureControl_SafetyCheck(void) {
         safety_ok = false;
     }
     
-    // Təcili dayandırma limiti
-    if (g_system_status.current_pressure > g_safety_limits.emergency_threshold) {
-        failure_reason = "Emergency threshold exceeded";
-        safety_ok = false;
-    }
     
     // DEBUG: Təhlükəsizlik yoxlaması uğursuz olduqda
     if (!safety_ok && (safety_debug_count <= 20 || safety_debug_count % 100 == 0)) {
@@ -875,7 +869,6 @@ void AdvancedPressureControl_Step(void) {
                g_system_status.error, g_system_status.control_enabled);
     }
     
-    // AutoMode yoxlaması - REMOVED (AutoMode deleted)
     
     // 0. Təzyiqi Oxu (Safety yoxlaması üçün lazımdır)
     // KRİTİK DÜZƏLİŞ: Xam ADC dəyərini də Status strukturuna yaz (UI üçün)
@@ -896,7 +889,7 @@ void AdvancedPressureControl_Step(void) {
             }
             over_limit_log_count++;
         }
-        float sensor_fault_limit = g_safety_limits.emergency_threshold + 50.0f;
+        float sensor_fault_limit = g_safety_limits.max_pressure + 50.0f;
         if (g_system_status.current_pressure > sensor_fault_limit) {
             float fault_value = g_system_status.current_pressure;
             g_system_status.current_pressure = sensor_fault_limit;

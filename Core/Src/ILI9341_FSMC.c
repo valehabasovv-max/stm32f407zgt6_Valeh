@@ -605,7 +605,6 @@ static float zme_frequency = 1000.0f;  /* ZME PWM frequency in Hz */
 static uint8_t avto_active = 0;  // REMOVED but kept for compatibility
 // stop_active - REMOVED (Stop button deleted)
 
-// Auto mode control variables - REMOVED (AutoMode deleted)
 
 /* Helper function to draw a button with text - no borders, white background */
 void ILI9341_DrawControlButton(uint16_t x, uint16_t y, uint16_t width, uint16_t height, 
@@ -728,11 +727,9 @@ void ILI9341_ShowPressureControlMain(void)
     
     // Control buttons (Menu) - below pressure display
     ILI9341_DrawControlButton(15, 150, 70, 35, ILI9341_COLOR_WHITE, "Menu", 1);
-    // Auto button - REMOVED (AutoMode deleted)
     // Manual button - REMOVED (Manual mode deleted)
     // Stop button - REMOVED (Stop button deleted)
     
-    /* Auto mode status display - REMOVED (AutoMode deleted) */
     
     /* Show valve status (for NO valves: 0% = open, 100% = closed) */
     char valve_status[50];
@@ -811,7 +808,6 @@ void ILI9341_ShowPressureLimitPage(void)
     // Range display
     ILI9341_DrawString(100, 120, "0 - 300 BAR", ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 2);
     
-    // Auto mode status on pressure limit page - REMOVED (AutoMode deleted)
     
     // Control buttons
     ILI9341_DrawControlButton(50, 160, 50, 40, ILI9341_COLOR_WHITE, "-10", 2);
@@ -1173,7 +1169,6 @@ void ILI9341_HandlePressureControlTouch(void)
                     if (screen_x >= 15 && screen_x <= 85 && screen_y >= 150 && screen_y <= 185) {
                         ILI9341_ShowMenuPage();
                     }
-                    /* Auto button - REMOVED (AutoMode deleted) */
                     /* Manual button - REMOVED (Manual mode deleted) */
                     /* Stop button - REMOVED (Stop button deleted) */
                     break;
@@ -1842,6 +1837,3 @@ void ILI9341_HandleCalibrationTouch(void)
     }
 }
 
-/* ==================== AUTO MODE CONTROL FUNCTIONS ==================== */
-
-/* AutoMode functions - REMOVED (AutoMode deleted) */

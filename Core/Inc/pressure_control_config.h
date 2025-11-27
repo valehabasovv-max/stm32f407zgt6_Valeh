@@ -54,7 +54,6 @@ extern "C" {
 // Safety Configuration
 #define CONFIG_SAFETY_MAX_PRESSURE 300.0f
 #define CONFIG_SAFETY_OVER_LIMIT_MARGIN 10.0f
-#define CONFIG_SAFETY_EMERGENCY_THRESHOLD 350.0f
 
 // Valve Configuration
 #define CONFIG_ZME_PWM_MIN 0.0f
@@ -136,7 +135,6 @@ typedef struct {
 typedef struct {
     float max_pressure;
     float over_limit_margin;
-    float emergency_threshold;
     bool safety_enabled;
 } Safety_Config_t;
 
@@ -183,7 +181,7 @@ void PressureControlConfig_SetDRVLimits(float pwm_min, float pwm_max);
 void PressureControlConfig_SetMotorLimits(float pwm_min, float pwm_max);
 
 /* Safety Configuration */
-void PressureControlConfig_SetSafetyLimits(float max_pressure, float over_limit_margin, float emergency_threshold);
+void PressureControlConfig_SetSafetyLimits(float max_pressure, float over_limit_margin);
 void PressureControlConfig_EnableSafety(bool enable);
 
 /* System Configuration */

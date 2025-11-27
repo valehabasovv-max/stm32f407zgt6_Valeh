@@ -203,7 +203,6 @@ int main(void)
   /* Start Timer 6 for 10ms control loop */
   HAL_TIM_Base_Start_IT(&htim6);
   
-  /* Auto mode initialization - REMOVED (AutoMode deleted) */
   
   /* Enable SPI1 clock for XPT2046 */
   __HAL_RCC_SPI1_CLK_ENABLE();
@@ -244,7 +243,6 @@ int main(void)
   /* Pressure sensor calibration handling */
   ILI9341_HandleCalibrationTouch();
   
-  /* Auto mode processing - REMOVED (AutoMode deleted) */
   
   /* Pressure control logic - maintains pressure at set limit */
   ILI9341_PressureControlLogic();
