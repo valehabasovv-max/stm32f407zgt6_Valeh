@@ -21,6 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdio.h>
 #include "ILI9341_FSMC.h"
 #include "advanced_pressure_control.h"
 #include "pressure_control_config.h"
@@ -696,7 +697,7 @@ static void MX_FSMC_Init(void)
 
   if (HAL_SRAM_Init(&hsram1, &Timing, NULL) != HAL_OK)
   {
-    Error_Handler( );
+    Error_Handler();
   }
 
   /* USER CODE BEGIN FSMC_Init 2 */

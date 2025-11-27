@@ -1361,8 +1361,6 @@ void ILI9341_PressureControlLogic(void)
         if (pressure_control_page == 9) { // PID Tuning page
             /* DÜZƏLİŞ: AdvancedPressureControl sistemindən təzyiq oxu (kalibrləmə sinxronizasiyası üçün) */
             /* DEPRECATED: PressureSensor_ConvertToPressure artıq istifadə olunmur */
-            extern uint16_t adc_value;  // Will read fresh
-            uint16_t adc_val = 0;
             
             // KRİTİK DÜZƏLİŞ: Manual ADC oxunması silindi - yalnız PID sistemindən təzyiq götürülür
             // PID sistemi hər 10ms-də bir ADC oxuyur və g_system_status.current_pressure-ı yeniləyir
