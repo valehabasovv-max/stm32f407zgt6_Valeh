@@ -59,10 +59,14 @@ uint16_t adc_value = (uint16_t)HAL_ADC_GetValue(&hadc3);
 - Resolution: 12-bit
 
 ### 3. Kalibrləmə Dəyərləri
-- ADC_MIN = 410 (0.5V)
-- ADC_MAX = 4095 (5.0V)
-- PRESSURE_MIN = 0.0 bar
-- PRESSURE_MAX = 300.0 bar
+- **STM32F4 ADC referans gərginliyi**: 3.3V
+- **Sensor çıxışı**: 0.5V (0 bar) → 5.0V (300 bar)
+- **ADC hesablaması**: ADC = (Voltage / 3.3V) × 4095
+- **ADC_MIN = 620** (0.5V üçün: (0.5/3.3)×4095 ≈ 620) - **DÜZƏLİŞ: əvvəl 410 idi**
+- **ADC_MAX = 4095** (5.0V üçün: (5.0/3.3)×4095 ≈ 6204, saturasiya)
+- **PRESSURE_MIN = 0.0 bar**
+- **PRESSURE_MAX = 300.0 bar**
+- **PRESSURE_SLOPE ≈ 0.0864 bar/ADC count** (300.0 / (4095-620))
 
 Kalibrləmə dəyərlərinin düzgün olduğunu yoxlayın:
 ```c
@@ -71,8 +75,8 @@ AdvancedPressureControl_PrintDebugInfo();  // Debug məlumatı göstər
 
 ### 4. Sensor Testi
 Multimetr ilə sensor çıxışını yoxlayın:
-- 0 bar → ~0.5V (ADC ~410)
-- 300 bar → ~5.0V (ADC ~4095)
+- 0 bar → ~0.5V (ADC ~620)
+- 300 bar → ~5.0V (ADC ~4095, saturasiya)
 
 ## 📊 Debug Məlumatı
 

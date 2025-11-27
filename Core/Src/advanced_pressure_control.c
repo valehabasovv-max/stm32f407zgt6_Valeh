@@ -303,8 +303,8 @@ static float AdvancedPressureControl_ConvertAdcToPressure(uint16_t adc_raw) {
  * @retval Pressure in bar
  * 
  * KRİTİK DÜZƏLİŞ: ADC dəyəri clamp edilir ki, mənfi təzyiq dəyərləri yaranmasın.
- * Əgər ADC < ADC_MIN (410) olarsa, təzyiq PRESSURE_MIN (0.0 bar) olacaq.
- * Əgər ADC > ADC_MAX (4096) olarsa, təzyiq PRESSURE_MAX (300.0 bar) olacaq.
+ * Əgər ADC < ADC_MIN (620) olarsa, təzyiq PRESSURE_MIN (0.0 bar) olacaq.
+ * Əgər ADC > ADC_MAX (4095) olarsa, təzyiq PRESSURE_MAX (300.0 bar) olacaq.
  */
 float AdvancedPressureControl_ReadPressure(void) {
     uint16_t adc_raw = AdvancedPressureControl_ReadADC();
