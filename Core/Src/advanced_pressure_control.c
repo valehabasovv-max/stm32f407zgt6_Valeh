@@ -114,10 +114,15 @@ static bool AdvancedPressureControl_IsCalibrationRangeValid(uint16_t adc_min_val
  */
 uint16_t AdvancedPressureControl_ReadADC(void) {
     static uint16_t last_valid_adc = ADC_MIN;
+    static uint32_t error_count = 0;
 
     /* Əgər hansısa səbəbdən ADC dayanıbsa, onu yenidən işə sal */
     if ((HAL_ADC_GetState(&hadc3) & HAL_ADC_STATE_REG_BUSY) == 0U) {
         if (HAL_ADC_Start(&hadc3) != HAL_OK) {
+            error_count++;
+            if (error_count < 5) {
+                printf("ERROR: ADC Start failed, using last valid value: %u\r\n", last_valid_adc);
+            }
             return last_valid_adc;
         }
     }
@@ -125,8 +130,29 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
     /* Overrun baş veribsə flaqı təmizlə ki, növbəti konversiya bloklanmasın */
     if (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_OVR) != RESET) {
         __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_OVR);
+        error_count++;
+        if (error_count < 5) {
+            printf("WARNING: ADC Overrun detected and cleared\r\n");
+        }
     }
 
+    /* KRİTİK DÜZƏLİŞ: Konversiyanın bitməsini yoxla */
+    /* Continuous mode-da ADC davamlı konversiya edir, EOC flag-ini yoxlamaq lazımdır */
+    /* Əgər konversiya hazır deyilsə, qısa müddət gözlə və yenidən yoxla */
+    uint32_t start_time = HAL_GetTick();
+    uint32_t timeout_ms = 10;  // 10ms timeout
+    while (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC) == RESET) {
+        if ((HAL_GetTick() - start_time) >= timeout_ms) {
+            error_count++;
+            if (error_count < 5) {
+                printf("ERROR: ADC conversion timeout, using last valid value: %u\r\n", last_valid_adc);
+            }
+            return last_valid_adc;
+        }
+    }
+
+    /* EOC flag təmizlə və dəyəri oxu */
+    __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_EOC);
     uint16_t adc_value = (uint16_t)HAL_ADC_GetValue(&hadc3);
     
     /* KRİTİK DÜZƏLİŞ: 12-bit ADC maksimum dəyəri 4095-dir (2^12 - 1)
@@ -134,17 +160,25 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
      * ADC dəyərini 0-4095 diapazonunda clamp et */
     if (adc_value > 4095U) {
         // Debug: Qeyri-etibarlı ADC dəyəri aşkarlandı
-        static uint32_t invalid_adc_count = 0;
-        if (invalid_adc_count < 10) {  // İlk 10 xəta halında log göndər
+        error_count++;
+        if (error_count < 10) {  // İlk 10 xəta halında log göndər
             printf("WARNING: Invalid ADC value detected: %u (> 4095), clamping to 4095\r\n", adc_value);
-            invalid_adc_count++;
         }
         adc_value = 4095U;  // Maksimum 12-bit ADC dəyəri
     }
 
     /* İlk oxunuşda 0 dəyəri gəlirsə, kalibrlənmiş minimumu saxla */
     if (adc_value == 0U && last_valid_adc == ADC_MIN) {
+        error_count++;
+        if (error_count < 5) {
+            printf("WARNING: ADC reading is 0, using last valid value: %u\r\n", last_valid_adc);
+        }
         return last_valid_adc;
+    }
+
+    /* Uğurlu oxunuş - error_count-u sıfırla */
+    if (adc_value > 0U && adc_value <= 4095U) {
+        error_count = 0;
     }
 
     last_valid_adc = adc_value;
