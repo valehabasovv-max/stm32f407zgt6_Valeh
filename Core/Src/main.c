@@ -21,7 +21,6 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <stdio.h>
 #include "ILI9341_FSMC.h"
 #include "advanced_pressure_control.h"
 #include "pressure_control_config.h"
@@ -122,15 +121,7 @@ int main(void)
   
   /* ILI9341 LCD Test - Bank4 konfiqurasiyası */
   ILI9341_Init();
-  HAL_Delay(300);  /* DÜZƏLİŞ: Daha uzun gecikmə - ekranın tam hazır olması üçün */
-  
-  /* KRİTİK DÜZƏLİŞ: Ekranın işlədiyini yoxla - yaşıl rənglə doldur (qara ekran problemi üçün) */
-  ILI9341_FillScreen(ILI9341_COLOR_GREEN);
-  HAL_Delay(500);  /* Ekranın işlədiyini görmək üçün */
-  
-  /* İndi qara rənglə doldur */
-  ILI9341_FillScreen(ILI9341_COLOR_BLACK);
-  HAL_Delay(200);
+  HAL_Delay(100);
   
   /* === ADVANCED PRESSURE CONTROL SYSTEM INIT === */
   
@@ -159,6 +150,7 @@ int main(void)
   /* AdvancedPressureControl_Init() artıq g_control_initialized və control_enabled-ı true edir */
   SystemStatus_t* pid_status = AdvancedPressureControl_GetStatus();
   pid_status->control_enabled = true;  // Təsdiq et (Init-də artıq true-dur)
+  pid_status->auto_mode = true;  // Auto rejim aktivləşdir
   
   // KRİTİK DÜZƏLİŞ: Sistemin aktiv olduğunu təsdiq et
   if (!pid_status->control_enabled) {
@@ -168,8 +160,8 @@ int main(void)
   
   // KRİTİK DÜZƏLİŞ: g_control_initialized-ın true olduğunu təsdiq et
   // (Bu dəyişən static-dir, amma Init() funksiyası onu true edir)
-  printf("Sistem Status: control_enabled=%d\r\n", 
-         pid_status->control_enabled);
+  printf("Sistem Status: control_enabled=%d, auto_mode=%d\r\n", 
+         pid_status->control_enabled, pid_status->auto_mode);
   
   // KRİTİK DÜZƏLİŞ: target_pressure 0.0 və ya çox kiçik olarsa, default dəyər istifadə et
   if (pid_status->target_pressure < 0.1f) {
@@ -194,15 +186,16 @@ int main(void)
   __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 0);  /* ZME: 0% */
   __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, 0);  /* Extra: 0% */
   
-  /* TIM3 is configured for 1 kHz PWM inside MX_TIM3_Init().
-   * Do not attempt to write 83999 to ARR again here because TIM3 is 16-bit
-   * and values above 0xFFFF would wrap and produce an incorrect frequency. */
+  /* Set PWM frequency to 1 kHz for voltage converter module */
+  /* Timer clock: 84MHz, Period = 84000000/1000 - 1 = 83999 */
+  __HAL_TIM_SET_AUTORELOAD(&htim3, 83999);
   
   /* === TIMER 6 INITIALIZATION FOR CONTROL LOOP === */
   
   /* Start Timer 6 for 10ms control loop */
   HAL_TIM_Base_Start_IT(&htim6);
   
+  /* Auto mode initialization - REMOVED (AutoMode deleted) */
   
   /* Enable SPI1 clock for XPT2046 */
   __HAL_RCC_SPI1_CLK_ENABLE();
@@ -222,11 +215,10 @@ int main(void)
   
   /* Qara ekran - interaktif menu */
   ILI9341_FillScreen(ILI9341_COLOR_BLACK);
-  HAL_Delay(100);
+  HAL_Delay(500);
   
   /* Pressure control system - ana səhifə */
   ILI9341_ShowPressureControlMain();
-  HAL_Delay(100);  /* Ekranın çəkilməsi üçün gecikmə */
   
   /* USER CODE END 2 */
 
@@ -244,6 +236,7 @@ int main(void)
   /* Pressure sensor calibration handling */
   ILI9341_HandleCalibrationTouch();
   
+  /* Auto mode processing - REMOVED (AutoMode deleted) */
   
   /* Pressure control logic - maintains pressure at set limit */
   ILI9341_PressureControlLogic();
@@ -367,8 +360,7 @@ static void MX_ADC3_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_3;
   sConfig.Rank = 1;
-  /* Pressure sensor front-end is high impedance -> need long acquisition time */
-  sConfig.SamplingTime = ADC_SAMPLETIME_480CYCLES;
+  sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
   if (HAL_ADC_ConfigChannel(&hadc3, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -436,9 +428,9 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 1 */
   htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 83;  // 84MHz / (83 + 1) = 1MHz timer clock
+  htim3.Init.Prescaler = 0;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 999;    // 1MHz / (999 + 1) = 1kHz PWM frequency
+  htim3.Init.Period = 65535;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)
@@ -511,9 +503,7 @@ static void MX_TIM6_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN TIM6_Init 2 */
-  /* Enable TIM6 interrupt so the 10ms control loop can run */
-  HAL_NVIC_SetPriority(TIM6_DAC_IRQn, 1, 0);
-  HAL_NVIC_EnableIRQ(TIM6_DAC_IRQn);
+
   /* USER CODE END TIM6_Init 2 */
 
 }
@@ -574,7 +564,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(Lcd_RST_GPIO_Port, Lcd_RST_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(Lcd_LIG_GPIO_Port, Lcd_LIG_Pin, GPIO_PIN_SET);  /* DÜZƏLİŞ: Backlight ON */
+  HAL_GPIO_WritePin(Lcd_LIG_GPIO_Port, Lcd_LIG_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : Lcd_RST_Pin */
   GPIO_InitStruct.Pin = Lcd_RST_Pin;
@@ -692,13 +682,11 @@ static void MX_FSMC_Init(void)
   hsram1.Init.AsynchronousWait = FSMC_ASYNCHRONOUS_WAIT_DISABLE;
   hsram1.Init.WriteBurst = FSMC_WRITE_BURST_DISABLE;
   hsram1.Init.PageSize = FSMC_PAGE_SIZE_NONE;
-  /* Timing - DÜZƏLİŞ: ILI9341 üçün daha yavaş parametrlər */
-  /* ILI9341 minimum yazma dövrü: 66ns */
-  /* FSMC clock: 84MHz (11.9ns per cycle) */
-  Timing.AddressSetupTime = 10;  /* 10 * 11.9ns = 119ns */
-  Timing.AddressHoldTime = 10;   /* 10 * 11.9ns = 119ns */
-  Timing.DataSetupTime = 20;     /* 20 * 11.9ns = 238ns (66ns minimum) */
-  Timing.BusTurnAroundDuration = 5;  /* 5 * 11.9ns = 59.5ns */
+  /* Timing */
+  Timing.AddressSetupTime = 15;
+  Timing.AddressHoldTime = 15;
+  Timing.DataSetupTime = 5;
+  Timing.BusTurnAroundDuration = 1;
   Timing.CLKDivision = 16;
   Timing.DataLatency = 17;
   Timing.AccessMode = FSMC_ACCESS_MODE_A;
@@ -706,7 +694,7 @@ static void MX_FSMC_Init(void)
 
   if (HAL_SRAM_Init(&hsram1, &Timing, NULL) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler( );
   }
 
   /* USER CODE BEGIN FSMC_Init 2 */

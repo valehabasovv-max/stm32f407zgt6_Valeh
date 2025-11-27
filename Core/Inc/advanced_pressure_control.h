@@ -5,7 +5,7 @@
  * Features:
  * - Precise PID control for ZME and DRV valves
  * - Motor speed control based on pressure limits
- * - Safety systems
+ * - Safety systems with emergency stop
  * - Calibration and parameter tuning
  * - Real-time monitoring and control
  */
@@ -28,14 +28,9 @@ extern "C" {
    ========================================================================= */
 
 // Təzyiq Sensoru (ADC)
-// KRİTİK DÜZƏLİŞ: 12-bit ADC maksimum dəyəri 4095-dir (2^12 - 1), 4096 deyil!
-// STM32F4 ADC referans gərginliyi: 3.3V
-// Sensor çıxışı: 0.5V (0 bar) -> 5.0V (300 bar)
-// ADC hesablaması: ADC = (Voltage / 3.3V) * 4095
-// 0.5V -> ADC = (0.5 / 3.3) * 4095 ≈ 620
-// 5.0V -> ADC = (5.0 / 3.3) * 4095 ≈ 6204 (saturasiya, 4095-də məhdudlaşır)
-#define ADC_MIN 620   // DÜZƏLİŞ: 0.5V üçün düzgün ADC dəyəri (əvvəl 410 idi)
-#define ADC_MAX 4095  // 5.0V üçün ADC saturasiyası (maksimum 4095)
+// KRİTİK: 0.5V (0 bar) -> 410, 5.0V (300 bar) -> 4096 (5.0V Vref fərziyyəsi ilə)
+#define ADC_MIN 410
+#define ADC_MAX 4096
 #define PRESSURE_MIN 0.0f
 #define PRESSURE_MAX 300.0f
 #define PRESSURE_SLOPE ((PRESSURE_MAX - PRESSURE_MIN) / (float)(ADC_MAX - ADC_MIN))
@@ -50,9 +45,9 @@ extern "C" {
 #define DRV_PWM_MIN 0.0f     // Təzyiq Minimum (Açıq)
 #define DRV_PWM_MAX 40.0f    // Təzyiq Maksimum (Bağlı)
 
-// PID İdarəetmə Limitləri (klapan trim limitləri ilə eyni saxlanılır)
-#define PID_OUTPUT_MIN (-PWM_TRIM_LIMIT)
-#define PID_OUTPUT_MAX (PWM_TRIM_LIMIT)
+// PID İdarəetmə Limitləri
+#define PID_OUTPUT_MIN -100.0f
+#define PID_OUTPUT_MAX 100.0f
 
 // Motor İdarəetmə Limitləri (0-100% PWM)
 #define MOTOR_MAX_PWM 100.0f
@@ -133,16 +128,18 @@ typedef struct {
 
 // System Status Structure
 typedef struct {
-    volatile float target_pressure;      // Setpoint pressure (bar)
-    volatile float current_pressure;     // Current pressure (bar)
-    volatile uint16_t raw_adc_value;     // KRİTİK: Xam ADC dəyəri (0-4095) - UI üçün lazımdır
-    volatile float motor_pwm_percent;    // Motor PWM duty cycle (%)
-    volatile float zme_pwm_percent;      // ZME PWM duty cycle (%)
-    volatile float drv_pwm_percent;      // DRV PWM duty cycle (%)
-    volatile float pid_output;           // PID controller output
-    volatile float error;                // Current error (setpoint - current)
-    volatile bool control_enabled;       // Control system enabled
-    volatile bool safety_triggered;      // Safety system triggered
+    float target_pressure;      // Setpoint pressure (bar)
+    float current_pressure;     // Current pressure (bar)
+    uint16_t raw_adc_value;     // KRİTİK: Xam ADC dəyəri (0-4095) - UI üçün lazımdır
+    float motor_pwm_percent;    // Motor PWM duty cycle (%)
+    float zme_pwm_percent;      // ZME PWM duty cycle (%)
+    float drv_pwm_percent;      // DRV PWM duty cycle (%)
+    float pid_output;           // PID controller output
+    float error;                // Current error (setpoint - current)
+    bool control_enabled;       // Control system enabled
+    bool auto_mode;             // Auto mode enabled
+    bool safety_triggered;      // Safety system triggered
+    bool emergency_stop;        // Emergency stop active
 } SystemStatus_t;
 
 // Calibration Data Structure
@@ -161,6 +158,7 @@ typedef struct {
 typedef struct {
     float max_pressure;         // Maximum safe pressure
     float over_limit_margin;    // Over-limit margin
+    float emergency_threshold;  // Emergency stop threshold
     bool safety_enabled;        // Safety system enabled
 } SafetyLimits_t;
 
@@ -195,6 +193,7 @@ void AdvancedPressureControl_SetMotor_PWM(float percent);
 void AdvancedPressureControl_Init(void);
 void AdvancedPressureControl_Step(void);
 void AdvancedPressureControl_Reset(void);
+void AdvancedPressureControl_EmergencyStop(void);
 
 /* PID Control Functions */
 void AdvancedPressureControl_InitPID(PID_Controller_t* pid, float kp, float ki, float kd);

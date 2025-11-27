@@ -15,7 +15,6 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "advanced_pressure_control.h"
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -54,6 +53,7 @@ extern "C" {
 // Safety Configuration
 #define CONFIG_SAFETY_MAX_PRESSURE 300.0f
 #define CONFIG_SAFETY_OVER_LIMIT_MARGIN 10.0f
+#define CONFIG_SAFETY_EMERGENCY_THRESHOLD 350.0f
 
 // Valve Configuration
 #define CONFIG_ZME_PWM_MIN 0.0f
@@ -68,15 +68,10 @@ extern "C" {
 #define CONFIG_MOTOR_PWM_MAX 100.0f
 
 // Pressure Sensor Configuration
-// KRİTİK DÜZƏLİŞ: 12-bit ADC maksimum dəyəri 4095-dir (2^12 - 1), 4096 deyil!
-// STM32F4 ADC referans gərginliyi: 3.3V
-// Sensor çıxışı: 0.5V (0 bar) -> 5.0V (300 bar)
-// ADC hesablaması: ADC = (Voltage / 3.3V) * 4095
-// 0.5V -> ADC = (0.5 / 3.3) * 4095 ≈ 620
-// 5.0V -> ADC = (5.0 / 3.3) * 4095 ≈ 6204 (saturasiya, 4095-də məhdudlaşır)
-// PRESSURE_SLOPE = (300.0 - 0.0) / (4095 - 620) ≈ 0.0864 bar/ADC count
-#define CONFIG_PRESSURE_SENSOR_ADC_MIN 620   // DÜZƏLİŞ: 0.5V üçün düzgün ADC dəyəri (əvvəl 410 idi)
-#define CONFIG_PRESSURE_SENSOR_ADC_MAX 4095  // 5.0V üçün ADC saturasiyası (maksimum 4095)
+// KRİTİK: 0.5V (0 bar) -> 410, 5.0V (300 bar) -> 4096 (5.0V Vref fərziyyəsi ilə)
+// PRESSURE_SLOPE = (300.0 - 0.0) / (4096 - 410) ≈ 0.08139 bar/ADC count
+#define CONFIG_PRESSURE_SENSOR_ADC_MIN 410
+#define CONFIG_PRESSURE_SENSOR_ADC_MAX 4096
 #define CONFIG_PRESSURE_SENSOR_PRESSURE_MIN 0.0f
 #define CONFIG_PRESSURE_SENSOR_PRESSURE_MAX 300.0f
 
@@ -105,6 +100,7 @@ typedef struct {
     char build_date[32];
     bool debug_enabled;
     bool safety_enabled;
+    bool auto_mode_enabled;
 } System_Config_t;
 
 // Calibration Data
@@ -135,7 +131,9 @@ typedef struct {
 typedef struct {
     float max_pressure;
     float over_limit_margin;
+    float emergency_threshold;
     bool safety_enabled;
+    bool emergency_stop_enabled;
 } Safety_Config_t;
 
 /* =========================================================================
@@ -172,7 +170,6 @@ void PressureControlConfig_CompleteCalibration(void);
 void PressureControlConfig_ResetCalibration(void);
 bool PressureControlConfig_IsCalibrated(void);
 void PressureControlConfig_PrintCalibrationData(void);
-void PressureControlConfig_UpdateCalibrationCache(const CalibrationData_t* source);
 
 /* Valve Configuration */
 void PressureControlConfig_SetValveLimits(Valve_Config_t* config);
@@ -181,11 +178,13 @@ void PressureControlConfig_SetDRVLimits(float pwm_min, float pwm_max);
 void PressureControlConfig_SetMotorLimits(float pwm_min, float pwm_max);
 
 /* Safety Configuration */
-void PressureControlConfig_SetSafetyLimits(float max_pressure, float over_limit_margin);
+void PressureControlConfig_SetSafetyLimits(float max_pressure, float over_limit_margin, float emergency_threshold);
 void PressureControlConfig_EnableSafety(bool enable);
+void PressureControlConfig_EnableEmergencyStop(bool enable);
 
 /* System Configuration */
 void PressureControlConfig_SetDebugMode(bool enable);
+void PressureControlConfig_SetAutoMode(bool enable);
 void PressureControlConfig_PrintSystemInfo(void);
 
 /* Parameter Validation */

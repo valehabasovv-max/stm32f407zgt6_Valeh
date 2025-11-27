@@ -57,7 +57,7 @@
 /* External variables --------------------------------------------------------*/
 
 /* USER CODE BEGIN EV */
-extern TIM_HandleTypeDef htim6;
+
 /* USER CODE END EV */
 
 /******************************************************************************/
@@ -200,13 +200,5 @@ void SysTick_Handler(void)
 /******************************************************************************/
 
 /* USER CODE BEGIN 1 */
-
-/**
-  * @brief This function handles TIM6 global and DAC underrun interrupts.
-  */
-void TIM6_DAC_IRQHandler(void)
-{
-  HAL_TIM_IRQHandler(&htim6);
-}
 
 /* USER CODE END 1 */
