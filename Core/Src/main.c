@@ -122,6 +122,14 @@ int main(void)
   
   /* ILI9341 LCD Test - Bank4 konfiqurasiyası */
   ILI9341_Init();
+  HAL_Delay(200);  /* DÜZƏLİŞ: Daha uzun gecikmə - ekranın tam hazır olması üçün */
+  
+  /* Test: Ekranın işlədiyini yoxla - qırmızı rənglə doldur */
+  ILI9341_FillScreen(ILI9341_COLOR_RED);
+  HAL_Delay(500);
+  
+  /* İndi qara rənglə doldur */
+  ILI9341_FillScreen(ILI9341_COLOR_BLACK);
   HAL_Delay(100);
   
   /* === ADVANCED PRESSURE CONTROL SYSTEM INIT === */
