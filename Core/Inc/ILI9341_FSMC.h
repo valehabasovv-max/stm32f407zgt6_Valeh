@@ -100,6 +100,6 @@ float PressureToZMEPercent(float pressure);
 
 
 /* Global variables */
-extern float pressure_limit;  /* Pressure limit (SP) value - can be modified externally */
+/* REMOVED: extern float pressure_limit; - Artıq g_system_status.target_pressure istifadə edilir */
 
 #endif /* ILI9341_FSMC_H */
