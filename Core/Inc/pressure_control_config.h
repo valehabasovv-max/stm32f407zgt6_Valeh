@@ -70,10 +70,14 @@ extern "C" {
 
 // Pressure Sensor Configuration
 // KRİTİK DÜZƏLİŞ: 12-bit ADC maksimum dəyəri 4095-dir (2^12 - 1), 4096 deyil!
-// 0.5V (0 bar) -> 410, 5.0V (300 bar) -> 4095 (5.0V Vref fərziyyəsi ilə)
-// PRESSURE_SLOPE = (300.0 - 0.0) / (4095 - 410) ≈ 0.08137 bar/ADC count
-#define CONFIG_PRESSURE_SENSOR_ADC_MIN 410
-#define CONFIG_PRESSURE_SENSOR_ADC_MAX 4095
+// STM32F4 ADC referans gərginliyi: 3.3V
+// Sensor çıxışı: 0.5V (0 bar) -> 5.0V (300 bar)
+// ADC hesablaması: ADC = (Voltage / 3.3V) * 4095
+// 0.5V -> ADC = (0.5 / 3.3) * 4095 ≈ 620
+// 5.0V -> ADC = (5.0 / 3.3) * 4095 ≈ 6204 (saturasiya, 4095-də məhdudlaşır)
+// PRESSURE_SLOPE = (300.0 - 0.0) / (4095 - 620) ≈ 0.0864 bar/ADC count
+#define CONFIG_PRESSURE_SENSOR_ADC_MIN 620   // DÜZƏLİŞ: 0.5V üçün düzgün ADC dəyəri (əvvəl 410 idi)
+#define CONFIG_PRESSURE_SENSOR_ADC_MAX 4095  // 5.0V üçün ADC saturasiyası (maksimum 4095)
 #define CONFIG_PRESSURE_SENSOR_PRESSURE_MIN 0.0f
 #define CONFIG_PRESSURE_SENSOR_PRESSURE_MAX 300.0f
 
