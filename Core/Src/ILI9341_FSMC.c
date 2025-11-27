@@ -185,15 +185,15 @@ void ILI9341_Init(void)
     
     /* Sleep Out */
     lcd_write_command(0x11);
-    HAL_Delay(120);
+    HAL_Delay(120);  /* CRITICAL: Wait for sleep out to complete */
     
     /* Display ON */
     lcd_write_command(0x29);
-    HAL_Delay(20);
+    HAL_Delay(100);  /* DÜZƏLİŞ: 20ms-dən 100ms-ə artırıldı - display stabilləşməsi üçün */
     
     /* Normal Display Mode ON */
     lcd_write_command(0x13);
-    HAL_Delay(10);
+    HAL_Delay(50);   /* DÜZƏLİŞ: 10ms-dən 50ms-ə artırıldı */
 }
 
 /* ------------------ Ekranı rənglə doldur ------------------ */

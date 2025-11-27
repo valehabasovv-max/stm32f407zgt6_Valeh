@@ -575,7 +575,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(Lcd_RST_GPIO_Port, Lcd_RST_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(Lcd_LIG_GPIO_Port, Lcd_LIG_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(Lcd_LIG_GPIO_Port, Lcd_LIG_Pin, GPIO_PIN_SET);  /* DÜZƏLİŞ: Backlight ON */
 
   /*Configure GPIO pin : Lcd_RST_Pin */
   GPIO_InitStruct.Pin = Lcd_RST_Pin;
@@ -693,11 +693,13 @@ static void MX_FSMC_Init(void)
   hsram1.Init.AsynchronousWait = FSMC_ASYNCHRONOUS_WAIT_DISABLE;
   hsram1.Init.WriteBurst = FSMC_WRITE_BURST_DISABLE;
   hsram1.Init.PageSize = FSMC_PAGE_SIZE_NONE;
-  /* Timing */
-  Timing.AddressSetupTime = 15;
-  Timing.AddressHoldTime = 15;
-  Timing.DataSetupTime = 5;
-  Timing.BusTurnAroundDuration = 1;
+  /* Timing - DÜZƏLİŞ: ILI9341 üçün daha yavaş parametrlər */
+  /* ILI9341 minimum yazma dövrü: 66ns */
+  /* FSMC clock: 84MHz (11.9ns per cycle) */
+  Timing.AddressSetupTime = 10;  /* 10 * 11.9ns = 119ns */
+  Timing.AddressHoldTime = 10;   /* 10 * 11.9ns = 119ns */
+  Timing.DataSetupTime = 20;     /* 20 * 11.9ns = 238ns (66ns minimum) */
+  Timing.BusTurnAroundDuration = 5;  /* 5 * 11.9ns = 59.5ns */
   Timing.CLKDivision = 16;
   Timing.DataLatency = 17;
   Timing.AccessMode = FSMC_ACCESS_MODE_A;
