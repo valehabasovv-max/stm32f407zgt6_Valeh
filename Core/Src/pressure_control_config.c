@@ -726,6 +726,7 @@ void PressureControlConfig_SaveCalibrationData(void) {
     printf("Saving calibration data to flash...\r\n");
     
     // Ensure cache mirrors the latest Advanced calibration snapshot before persisting
+    extern CalibrationData_t g_calibration;
     if (g_calibration.calibrated) {
         PressureControlConfig_UpdateCalibrationCache(&g_calibration);
     }
@@ -742,7 +743,6 @@ void PressureControlConfig_SaveCalibrationData(void) {
         uint32_t checksum;         /* Data integrity check */
     } calibration_data_t;
     
-    extern CalibrationData_t g_calibration;
     float adc_min_value = g_calibration_data.adc_min;
     float adc_max_value = g_calibration_data.adc_max;
     float min_pressure_value = g_calibration_data.pressure_min;

@@ -12,10 +12,6 @@
 extern SPI_HandleTypeDef hspi1;
 extern ADC_HandleTypeDef hadc3;
 
-/* XPT2046 Commands */
-#define XPT2046_CMD_READ_X      0x90  /* Read X position */
-#define XPT2046_CMD_READ_Y      0xD0  /* Read Y position */
-
 /* FSMC init funksiyası main.c-də var, burada dublikat yox */
 
 /* Sadə yazma köməkçiləri */
