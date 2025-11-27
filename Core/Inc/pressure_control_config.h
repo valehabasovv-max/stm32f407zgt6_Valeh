@@ -15,9 +15,21 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "advanced_pressure_control.h"
 #include <stdint.h>
 #include <stdbool.h>
+
+/* 
+ * Note: We don't include "advanced_pressure_control.h" here to avoid circular dependency.
+ * Instead, we define our own Calibration_Data_t type which is compatible with
+ * CalibrationData_t from advanced_pressure_control.h (both have identical fields).
+ * 
+ * For the PressureControlConfig_UpdateCalibrationCache function that takes
+ * CalibrationData_t* as parameter, we use a forward declaration below.
+ */
+
+/* Forward declaration for CalibrationData_t (defined in advanced_pressure_control.h) */
+struct CalibrationData_t;
+typedef struct CalibrationData_t CalibrationData_t;
 
 /* =========================================================================
    CONFIGURATION PARAMETERS

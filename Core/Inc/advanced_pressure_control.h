@@ -98,7 +98,7 @@ extern "C" {
 // 3. Təzyiqin 50 bar-ı yaratdığı ZME PWM dəyərini tapın → ZME_BASE_PWM
 // 4. DRV üçün də eyni prosesi təkrarlayın → DRV_BASE_PWM
 #define ZME_BASE_PWM_DEFAULT 26.0f  // ZME-nin 50 barı yaratmaq üçün ideal mövqeyi (0-30%) - DÜZƏLİŞ: 20%-dən 26%-ə artırıldı
-#define DRV_BASE_PWM_DEFAULT 26.0f  // DRV-nin sabit dayanmaq üçün ideal mövqeyi (0-40%)
+#define DRV_BASE_PWM_DEFAULT 15.0f  // DRV-nin sabit dayanmaq üçün ideal mövqeyi (0-40%) - DÜZƏLİŞ: 26%-dən 15%-ə düzəldildi
 
 // =========================================================================
 // KLAPANLARIN QORUNMASI VƏ STABİLLƏŞDİRİLMƏSİ

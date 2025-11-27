@@ -35,6 +35,25 @@
 extern int __io_putchar(int ch) __attribute__((weak));
 extern int __io_getchar(void) __attribute__((weak));
 
+/* 
+ * Simple implementation of __io_putchar for SWV (Serial Wire Viewer) output
+ * This allows printf to work via ITM (Instrumentation Trace Macrocell)
+ * 
+ * To enable ITM in STM32CubeIDE:
+ * 1. Debug Configuration -> Debugger -> Serial Wire Viewer -> Enable
+ * 2. Set ITM Port 0
+ * 
+ * Note: For production, retarget to UART by implementing this function
+ * to use HAL_UART_Transmit() instead.
+ */
+int __io_putchar(int ch)
+{
+    /* ITM (Instrumentation Trace Macrocell) output for debugging */
+    /* This requires SWV (Serial Wire Viewer) to be enabled in debugger */
+    ITM_SendChar(ch);
+    return ch;
+}
+
 
 char *__env[1] = { 0 };
 char **environ = __env;
