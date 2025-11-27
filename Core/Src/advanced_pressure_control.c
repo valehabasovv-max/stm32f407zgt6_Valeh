@@ -1810,16 +1810,15 @@ void AdvancedPressureControl_LoadPIDParamsFromFlash(void) {
         printf("Invalid ZME base PWM in flash (%.1f%%), using default: %.1f%%\r\n", 
                config_data->zme_base_pwm, g_zme_base_pwm);
     }
-    // KRİTİK DÜZƏLİŞ: Flash-dan köhnə dəyər (20%, 26%, 30%, 35% və ya 40%) yüklənəndə, yeni default dəyəri (15%) istifadə et
+    // KRİTİK DÜZƏLİŞ: Flash-dan köhnə dəyər (20%, 30%, 35% və ya 40%) yüklənəndə, yeni default dəyəri (26%) istifadə et
     if (config_data->drv_base_pwm >= 0.0f && config_data->drv_base_pwm <= 40.0f) {
-        // Flash-dan dəyər var, amma köhnə default dəyərdirsə (20%, 26%, 30%, 35% və ya 40%), yeni default dəyəri (15%) istifadə et
+        // Flash-dan dəyər var, amma köhnə default dəyərdirsə (20%, 30%, 35% və ya 40%), yeni default dəyəri (26%) istifadə et
         if (fabsf(config_data->drv_base_pwm - 20.0f) < 0.1f || 
-            fabsf(config_data->drv_base_pwm - 26.0f) < 0.1f || 
             fabsf(config_data->drv_base_pwm - 30.0f) < 0.1f ||
             fabsf(config_data->drv_base_pwm - 35.0f) < 0.1f ||
             fabsf(config_data->drv_base_pwm - 40.0f) < 0.1f) {
-            // Köhnə default dəyərdir (20%, 26%, 30%, 35% və ya 40%), yeni default dəyəri (15%) istifadə et
-            g_drv_base_pwm = DRV_BASE_PWM_DEFAULT;  // 15%
+            // Köhnə default dəyərdir (20%, 30%, 35% və ya 40%), yeni default dəyəri (26%) istifadə et
+            g_drv_base_pwm = DRV_BASE_PWM_DEFAULT;  // 26%
             printf("DRV base PWM updated from old default (%.1f%%) to new default (%.1f%%)\r\n", 
                    config_data->drv_base_pwm, g_drv_base_pwm);
         } else {
@@ -1827,7 +1826,7 @@ void AdvancedPressureControl_LoadPIDParamsFromFlash(void) {
             g_drv_base_pwm = config_data->drv_base_pwm;
         }
     } else {
-        // Flash-dan dəyər etibarsızdırsa, default dəyəri istifadə et (15%)
+        // Flash-dan dəyər etibarsızdırsa, default dəyəri istifadə et (26%)
         g_drv_base_pwm = DRV_BASE_PWM_DEFAULT;
         printf("Invalid DRV base PWM in flash (%.1f%%), using default: %.1f%%\r\n", 
                config_data->drv_base_pwm, g_drv_base_pwm);

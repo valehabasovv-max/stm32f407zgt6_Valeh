@@ -24,6 +24,7 @@
 #include "ILI9341_FSMC.h"
 #include "advanced_pressure_control.h"
 #include "pressure_control_config.h"
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
