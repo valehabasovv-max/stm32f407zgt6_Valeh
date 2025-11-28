@@ -189,19 +189,32 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
     /* KRİTİK DÜZƏLİŞ: Continuous mode-da növbəti konversiyanın başlaması üçün
      * qısa gözlə. Bu, ADC-nin yeni konversiyaya başlamasına imkan verir.
      * Continuous mode avtomatik başlayır, amma qısa gecikmə daha etibarlıdır. */
-    for(volatile uint32_t i = 0; i < 100; i++);  // ~100-200ns delay
+    // DÜZƏLİŞ: 100-dən 1000-ə artırıldı - ADC-nin yeni konversiyaya başlaması üçün daha çox vaxt
+    for(volatile uint32_t i = 0; i < 1000; i++);  // ~1-2μs delay
     
     // KRİTİK DÜZƏLİŞ: Eyni dəyərin ardıcıl oxunmasını yoxla
     // Continuous mode-da düzgün gözləmə ilə bu nadir hallarda baş verməlidir
     // Amma sensor həqiqətən dəyişmirsə (məsələn, təzyiq sabitdirsə), bu normaldır
     if (adc_value == last_read_value && debug_count > 3) {
         same_value_count++;
-        // Yalnız çox uzun müddət eyni dəyər oxunarsa xəbərdarlıq ver
-        if (same_value_count > 100) {  // DÜZƏLİŞ: 5-dən 100-ə artırıldı (sensor sabit ola bilər)
-            if (same_value_count == 101) {  // Yalnız bir dəfə xəbərdarlıq ver
-                printf("WARNING[%lu]: ADC value %u unchanged for %lu reads (sensor may be stable)\r\n", 
-                       debug_count, adc_value, same_value_count);
+        // DÜZƏLİŞ: Həddindən artıq stuck value zamanı ADC-ni restart et
+        if (same_value_count > 500) {  // DÜZƏLİŞ: 100-dən 500-ə artırıldı
+            printf("CRITICAL[%lu]: ADC value %u stuck for %lu reads - RESTARTING ADC!\r\n", 
+                   debug_count, adc_value, same_value_count);
+            // ADC-ni restart et
+            HAL_ADC_Stop(&hadc3);
+            HAL_Delay(10);
+            if (HAL_ADC_Start(&hadc3) == HAL_OK) {
+                printf("INFO[%lu]: ADC restarted successfully\r\n", debug_count);
+            } else {
+                printf("ERROR[%lu]: ADC restart failed!\r\n", debug_count);
             }
+            HAL_Delay(20);  // ADC-nin hazır olması üçün
+            same_value_count = 0;  // Counter sıfırla
+        } else if (same_value_count == 100 || same_value_count == 200 || same_value_count == 300 || same_value_count == 400) {
+            // Hər 100 oxunuşda bir xəbərdarlıq ver
+            printf("WARNING[%lu]: ADC value %u unchanged for %lu reads (checking if stuck...)\r\n", 
+                   debug_count, adc_value, same_value_count);
         }
     } else {
         // Dəyər dəyişdi, counter-i sıfırla
