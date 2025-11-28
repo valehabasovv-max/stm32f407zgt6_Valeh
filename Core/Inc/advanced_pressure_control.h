@@ -39,7 +39,7 @@ extern "C" {
 #define PRESSURE_MIN 0.0f
 #define PRESSURE_MAX 300.0f
 #define PRESSURE_SLOPE ((PRESSURE_MAX - PRESSURE_MIN) / (float)(ADC_MAX - ADC_MIN))
-// PRESSURE_SLOPE təxminən 0.08139f olacaq
+// PRESSURE_SLOPE = (300.0 - 0.0) / (4095 - 620) = 300.0 / 3475 ≈ 0.0864 bar/ADC count
 
 // ZME Klapanı (Normally Open - Tərs Məntiq)
 #define ZME_PWM_MIN 0.0f     // Təzyiq Maksimum (Açıq)
