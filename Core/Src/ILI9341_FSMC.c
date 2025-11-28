@@ -1000,6 +1000,10 @@ void ILI9341_ShowPressureCalibrationPage(void)
         max_pressure = g_calibration.pressure_max;
     }
     
+    // DÜZƏLİŞ: Voltage dəyərlərini göstərməzdən əvvəl yenidən təyin et (həmişə 5.0V olmalıdır)
+    min_voltage = 0.5f;   // Həmişə 0.5V
+    max_voltage = 5.0f;    // Həmişə 5.0V - sensor spesifikasiyasına uyğun
+    
     // Current calibration values display
     char min_volt_str[30], max_volt_str[30];
     char min_press_str[30], max_press_str[30];
