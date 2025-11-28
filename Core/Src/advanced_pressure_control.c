@@ -119,8 +119,9 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
     static uint32_t same_value_count = 0;
     debug_count++;
 
-    /* DÜZƏLİŞ: ADC state yoxlaması - Continuous mode-da ADC davamlı işləməlidir
-     * Əgər ADC dayanıbsa (READY vəziyyətindədirsə), onu yenidən işə sal */
+    /* KRİTİK DÜZƏLİŞ: Continuous mode-da ADC davamlı konversiya edir
+     * EOC flag-ini təmizləmədən əvvəl yoxla və dəyəri oxu
+     * Continuous mode-da ADC həmişə konversiya edir, ona görə də EOC flag-i tez-tez qalxır */
     uint32_t adc_state = HAL_ADC_GetState(&hadc3);
     
     // KRİTİK DÜZƏLİŞ: ADC-nin düzgün işlədiyini yoxla
@@ -133,12 +134,9 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
                        debug_count, adc_state, last_valid_adc);
             }
             return last_valid_adc;
-        } else {
-            // ADC yenidən başladıldı - qısa gecikmə ver ki, konversiya başlasın
-            HAL_Delay(2);
-            // EOC flag-ini təmizlə ki, yeni konversiyanı gözləyək
-            __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_EOC);
         }
+        // ADC yenidən başladıldı - qısa gecikmə ver ki, ilk konversiya başlasın
+        HAL_Delay(5);
     }
 
     /* Overrun baş veribsə flaqı təmizlə ki, növbəti konversiya bloklanmasın */
@@ -152,62 +150,78 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
         HAL_ADC_Stop(&hadc3);
         HAL_Delay(2);
         HAL_ADC_Start(&hadc3);
-        __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_EOC);
+        HAL_Delay(5);
     }
 
-    /* KRİTİK DÜZƏLİŞ: Continuous mode-da yeni konversiyanın bitməsini gözlə */
-    /* Əvvəlcə mövcud EOC flag-ini təmizlə ki, yeni konversiyanı gözləyək */
-    __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_EOC);
-    
-    /* Yeni konversiyanın bitməsini gözlə */
+    /* KRİTİK DÜZƏLİŞ: Continuous mode-da EOC flag-ini gözləmək lazımsızdır
+     * Çünki ADC davamlı konversiya edir və dəyər həmişə yenilənir
+     * Yalnız EOC flag-inin qalxmasını gözləyək (çox qısa müddət) */
     uint32_t start_time = HAL_GetTick();
-    uint32_t timeout_ms = 50;  // DÜZƏLİŞ: Continuous mode üçün daha uzun timeout
-    uint32_t wait_count = 0;
+    uint32_t timeout_ms = 10;  // DÜZƏLİŞ: Continuous mode üçün qısa timeout (10ms)
     
-    // Yeni EOC flag-inin qalxmasını gözlə
+    // EOC flag-inin qalxmasını gözlə (continuous mode-da tez baş verir)
     while (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC) == RESET) {
-        wait_count++;
         if ((HAL_GetTick() - start_time) >= timeout_ms) {
             error_count++;
             if (error_count < 10 || (error_count % 100 == 0)) {
-                printf("ERROR[%lu]: ADC conversion timeout (waited %lu ms), state=0x%08lX, last_valid=%u\r\n", 
-                       debug_count, timeout_ms, HAL_ADC_GetState(&hadc3), last_valid_adc);
+                printf("ERROR[%lu]: ADC EOC timeout (waited %lu ms), state=0x%08lX, restarting ADC\r\n", 
+                       debug_count, timeout_ms, HAL_ADC_GetState(&hadc3));
             }
             // KRİTİK DÜZƏLİŞ: Timeout olduqda ADC-ni tam yenidən başlat
             HAL_ADC_Stop(&hadc3);
             HAL_Delay(5);
             if (HAL_ADC_Start(&hadc3) == HAL_OK) {
-                HAL_Delay(2);
-                __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_EOC);
+                HAL_Delay(5);
             }
             return last_valid_adc;
         }
-        // Qısa gecikmə ver ki, CPU bloklanmasın
+        // Çox qısa gecikmə (CPU bloklanmasın)
         HAL_Delay(1);
     }
 
-    /* EOC flag təmizlə və dəyəri oxu */
-    __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_EOC);
+    /* EOC flag qalxıb - dəyəri oxu və flag-i təmizlə */
     uint16_t adc_value = (uint16_t)HAL_ADC_GetValue(&hadc3);
+    __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_EOC);
     
-    // KRİTİK DÜZƏLİŞ: Eyni dəyərin ardıcıl oxunmasını yoxla
-    if (adc_value == last_read_value && debug_count > 5) {
-        // Əgər eyni dəyər 10 dəfədən çox oxunursa, ADC-ni yenidən başlat
+    // KRİTİK DÜZƏLİŞ: Eyni dəyərin ardıcıl oxunmasını yoxla (daha agresiv)
+    // Əgər eyni dəyər 5 dəfədən çox oxunursa, ADC-ni yenidən başlat
+    if (adc_value == last_read_value && debug_count > 3) {
         same_value_count++;
-        if (same_value_count > 10) {
+        if (same_value_count > 5) {  // DÜZƏLİŞ: 10-dan 5-ə endirildi (daha tez reaksiya)
             printf("WARNING[%lu]: ADC stuck at value %u for %lu reads, restarting ADC\r\n", 
                    debug_count, adc_value, same_value_count);
+            // KRİTİK DÜZƏLİŞ: ADC-ni tam yenidən başlat (Stop + DeInit + Init + Start)
             HAL_ADC_Stop(&hadc3);
-            HAL_Delay(5);
-            HAL_ADC_Start(&hadc3);
-            HAL_Delay(2);
-            __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_EOC);
+            HAL_Delay(10);  // Daha uzun gecikmə - ADC-nin tam dayanması üçün
+            
+            // ADC-ni yenidən başlat
+            if (HAL_ADC_Start(&hadc3) == HAL_OK) {
+                HAL_Delay(10);  // İlk konversiyanın başlaması üçün
+                __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_EOC);
+                // Yeni dəyəri oxu
+                if (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC) != RESET) {
+                    adc_value = (uint16_t)HAL_ADC_GetValue(&hadc3);
+                    __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_EOC);
+                    printf("INFO[%lu]: ADC restarted, new value: %u\r\n", debug_count, adc_value);
+                }
+            } else {
+                printf("ERROR[%lu]: ADC restart failed after stuck detection\r\n", debug_count);
+            }
+            
             same_value_count = 0;
             // last_read_value-i sıfırla ki, yenidən yoxlama aparılsın
             last_read_value = 0;
+        } else if (same_value_count == 3) {
+            // İlk xəbərdarlıq - 3 ardıcıl eyni dəyər
+            printf("WARNING[%lu]: ADC same value %u detected %lu times (will restart if continues)\r\n", 
+                   debug_count, adc_value, same_value_count);
         }
     } else {
         // Dəyər dəyişdi, counter-i sıfırla
+        if (same_value_count > 0) {
+            printf("INFO[%lu]: ADC value changed from %u to %u (was stuck for %lu reads)\r\n", 
+                   debug_count, last_read_value, adc_value, same_value_count);
+        }
         same_value_count = 0;
     }
     last_read_value = adc_value;
@@ -261,10 +275,11 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
         }
     }
 
-    // DEBUG: İlk bir neçə oxunuşda və hər 1000 oxunuşda bir dəfə göstər
-    if (debug_count <= 20 || (debug_count % 1000 == 0)) {
-        printf("DEBUG ADC[%lu]: value=%u, state=0x%08lX, last_valid=%u\r\n", 
-               debug_count, adc_value, HAL_ADC_GetState(&hadc3), last_valid_adc);
+    // DEBUG: İlk bir neçə oxunuşda və hər 100 oxunuşda bir dəfə göstər (daha tez-tez)
+    // Həmçinin stuck value aşkarlandıqda da göstər
+    if (debug_count <= 20 || (debug_count % 100 == 0) || same_value_count > 0) {
+        printf("DEBUG ADC[%lu]: value=%u, state=0x%08lX, last_valid=%u, same_count=%lu\r\n", 
+               debug_count, adc_value, HAL_ADC_GetState(&hadc3), last_valid_adc, same_value_count);
     }
 
     last_valid_adc = adc_value;
