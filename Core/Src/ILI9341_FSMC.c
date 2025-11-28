@@ -974,6 +974,11 @@ void ILI9341_ShowPressureCalibrationPage(void)
     // DÜZƏLİŞ: Kalibrləmə dəyərlərini Advanced sistemdən götür
     extern CalibrationData_t g_calibration;
     
+    // KRİTİK DÜZƏLİŞ: Voltage dəyərləri həmişə hardware spesifikasiyasına uyğun olmalıdır
+    // Sensor: 0.5V (0 bar) -> 5.0V (300 bar) - bu dəyərlər dəyişməzdir
+    min_voltage = 0.5f;   // Həmişə 0.5V
+    max_voltage = 5.0f;    // Həmişə 5.0V (flash-dakı köhnə 5.24V dəyərinə baxmayaraq)
+    
     // Update UI variables from Advanced system calibration (for consistency)
     bool calibration_valid = ILI9341_IsPressureCalibrationValid(&g_calibration);
     if (!calibration_valid) {
@@ -1241,14 +1246,14 @@ void ILI9341_HandlePressureControlTouch(void)
                         extern CalibrationData_t g_calibration;
                         g_calibration.adc_min = (float)adc_min;
                         g_calibration.pressure_min = min_pressure;  // 0.0 bar
-                            
-                            // Recalculate slope and offset immediately if both min and max are set
-                            if (adc_max > adc_min) {
-                                g_calibration.slope = (max_pressure - min_pressure) / (float)(adc_max - adc_min);
-                                g_calibration.offset = min_pressure - (g_calibration.slope * (float)adc_min);
-                                printf("MIN Calibration updated - ADC: %d, Pressure: %.2f bar, Slope: %.6f, Offset: %.2f\r\n",
-                                       adc_min, min_pressure, g_calibration.slope, g_calibration.offset);
-                            }
+                        
+                        // Recalculate slope and offset immediately if both min and max are set
+                        if (adc_max > adc_min) {
+                            g_calibration.slope = (max_pressure - min_pressure) / (float)(adc_max - adc_min);
+                            g_calibration.offset = min_pressure - (g_calibration.slope * (float)adc_min);
+                            printf("MIN Calibration updated - ADC: %d, Pressure: %.2f bar, Slope: %.6f, Offset: %.2f\r\n",
+                                   adc_min, min_pressure, g_calibration.slope, g_calibration.offset);
+                        }
                         PressureControlConfig_UpdateCalibrationCache(&g_calibration);
                         /* KRİTİK DÜZƏLİŞ: HAL_ADC_Stop() silindi - artıq manual ADC oxunması yoxdur */
                         ILI9341_ShowPressureCalibrationPage(); /* Refresh page */
@@ -1268,16 +1273,16 @@ void ILI9341_HandlePressureControlTouch(void)
                         
                         /* DÜZƏLİŞ: Kalibrləmə dəyərlərini dərhal Advanced sistemə ötür */
                         extern CalibrationData_t g_calibration;
-                            g_calibration.adc_max = (float)adc_max;
-                            g_calibration.pressure_max = max_pressure;
-                            
-                            // Recalculate slope and offset immediately
-                            if (adc_max > adc_min) {
-                                g_calibration.slope = (max_pressure - min_pressure) / (float)(adc_max - adc_min);
-                                g_calibration.offset = min_pressure - (g_calibration.slope * (float)adc_min);
-                                printf("MAX Calibration updated - ADC: %d, Pressure: %.2f bar, Slope: %.6f, Offset: %.2f\r\n",
-                                       adc_max, max_pressure, g_calibration.slope, g_calibration.offset);
-                            }
+                        g_calibration.adc_max = (float)adc_max;
+                        g_calibration.pressure_max = max_pressure;
+                        
+                        // Recalculate slope and offset immediately
+                        if (adc_max > adc_min) {
+                            g_calibration.slope = (max_pressure - min_pressure) / (float)(adc_max - adc_min);
+                            g_calibration.offset = min_pressure - (g_calibration.slope * (float)adc_min);
+                            printf("MAX Calibration updated - ADC: %d, Pressure: %.2f bar, Slope: %.6f, Offset: %.2f\r\n",
+                                   adc_max, max_pressure, g_calibration.slope, g_calibration.offset);
+                        }
                         PressureControlConfig_UpdateCalibrationCache(&g_calibration);
                         /* KRİTİK DÜZƏLİŞ: HAL_ADC_Stop() silindi - artıq manual ADC oxunması yoxdur */
                         /* ADC dəyəri Status-dan götürülür, ona görə də Stop() lazım deyil */
@@ -1295,8 +1300,8 @@ void ILI9341_HandlePressureControlTouch(void)
                             ILI9341_DrawString(200, 200, "ERROR: Invalid ADC range!", ILI9341_COLOR_RED, ILI9341_COLOR_BLACK, 1);
                             HAL_Delay(2000);
                             ILI9341_ShowPressureCalibrationPage();
-                            // DÜZƏLİŞ: break yerinə return - if-else blokunun içində break istifadə oluna bilməz
-                            return;
+                            // DÜZƏLİŞ: break istifadə edilir - switch case-dən çıxır
+                            break;
                         }
                         
                         // Update Advanced system calibration structure from UI values
