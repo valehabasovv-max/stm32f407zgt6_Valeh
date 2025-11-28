@@ -24,8 +24,7 @@ System_Config_t g_system_config = {
     .version = CONFIG_VERSION,
     .build_date = CONFIG_BUILD_DATE,
     .debug_enabled = true,
-    .safety_enabled = true,
-    .auto_mode_enabled = false
+    .safety_enabled = true
 };
 
 PID_Tuning_t g_pid_zme_tuning = {
@@ -69,9 +68,7 @@ Valve_Config_t g_valve_config = {
 Safety_Config_t g_safety_config = {
     .max_pressure = CONFIG_SAFETY_MAX_PRESSURE,
     .over_limit_margin = CONFIG_SAFETY_OVER_LIMIT_MARGIN,
-    .emergency_threshold = CONFIG_SAFETY_EMERGENCY_THRESHOLD,
-    .safety_enabled = true,
-    .emergency_stop_enabled = true
+    .safety_enabled = true
 };
 
 /* =========================================================================
@@ -141,7 +138,6 @@ void PressureControlConfig_LoadDefaults(void) {
     
     g_safety_config.max_pressure = CONFIG_SAFETY_MAX_PRESSURE;
     g_safety_config.over_limit_margin = CONFIG_SAFETY_OVER_LIMIT_MARGIN;
-    g_safety_config.emergency_threshold = CONFIG_SAFETY_EMERGENCY_THRESHOLD;
     
     g_valve_config.zme_pwm_min = CONFIG_ZME_PWM_MIN;
     g_valve_config.zme_pwm_max = CONFIG_ZME_PWM_MAX;
@@ -370,12 +366,11 @@ void PressureControlConfig_SetMotorLimits(float pwm_min, float pwm_max) {
 /**
  * @brief Set safety limits
  */
-void PressureControlConfig_SetSafetyLimits(float max_pressure, float over_limit_margin, float emergency_threshold) {
+void PressureControlConfig_SetSafetyLimits(float max_pressure, float over_limit_margin) {
     g_safety_config.max_pressure = max_pressure;
     g_safety_config.over_limit_margin = over_limit_margin;
-    g_safety_config.emergency_threshold = emergency_threshold;
-    printf("Safety limits: Max=%.1f bar, Over-limit=%.1f bar, Emergency=%.1f bar\r\n", 
-           max_pressure, over_limit_margin, emergency_threshold);
+    printf("Safety limits: Max=%.1f bar, Over-limit=%.1f bar\r\n", 
+           max_pressure, over_limit_margin);
 }
 
 /**
@@ -384,14 +379,6 @@ void PressureControlConfig_SetSafetyLimits(float max_pressure, float over_limit_
 void PressureControlConfig_EnableSafety(bool enable) {
     g_safety_config.safety_enabled = enable;
     printf("Safety system %s\r\n", enable ? "enabled" : "disabled");
-}
-
-/**
- * @brief Enable/disable emergency stop
- */
-void PressureControlConfig_EnableEmergencyStop(bool enable) {
-    g_safety_config.emergency_stop_enabled = enable;
-    printf("Emergency stop %s\r\n", enable ? "enabled" : "disabled");
 }
 
 /* =========================================================================
@@ -407,14 +394,6 @@ void PressureControlConfig_SetDebugMode(bool enable) {
 }
 
 /**
- * @brief Set auto mode
- */
-void PressureControlConfig_SetAutoMode(bool enable) {
-    g_system_config.auto_mode_enabled = enable;
-    printf("Auto mode %s\r\n", enable ? "enabled" : "disabled");
-}
-
-/**
  * @brief Print system information
  */
 void PressureControlConfig_PrintSystemInfo(void) {
@@ -424,7 +403,6 @@ void PressureControlConfig_PrintSystemInfo(void) {
     printf("Build Date: %s\r\n", g_system_config.build_date);
     printf("Debug Mode: %s\r\n", g_system_config.debug_enabled ? "Enabled" : "Disabled");
     printf("Safety System: %s\r\n", g_system_config.safety_enabled ? "Enabled" : "Disabled");
-    printf("Auto Mode: %s\r\n", g_system_config.auto_mode_enabled ? "Enabled" : "Disabled");
     printf("==========================\r\n\n");
 }
 
@@ -596,9 +574,9 @@ void PressureControlConfig_SavePIDParams(void) {
     config_data.pid_ki = g_pid_zme_tuning.ki;
     config_data.pid_kd = g_pid_zme_tuning.kd;
     
-    // Get current SP value - DÜZƏLİŞ: pressure_limit-dən götür
-    extern float pressure_limit;  // ILI9341_FSMC.c-dən
-    config_data.setpoint = pressure_limit;  // pressure_limit dəyərini istifadə et
+    // Get current SP value - DÜZƏLİŞ: g_system_status.target_pressure-dən götür
+    SystemStatus_t* status = AdvancedPressureControl_GetStatus();
+    config_data.setpoint = status->target_pressure;  // target_pressure dəyərini istifadə et
     
     // Calculate checksum
     config_data.checksum = CalculateChecksum(
@@ -607,30 +585,28 @@ void PressureControlConfig_SavePIDParams(void) {
     
     // KRİTİK DÜZƏLİŞ: Mərkəzləşdirilmiş Flash Yaddaş Məntiqindən istifadə et
     // block_type = 2 (Config PID)
-    HAL_StatusTypeDef status = AdvancedPressureControl_SaveToFlash_Centralized(
+    // Bütün doğrulama, printf mesajları və xəta yoxlamaları mərkəzləşdirilmiş funksiyanın daxilində həyata keçirilir
+    AdvancedPressureControl_SaveToFlash_Centralized(
         2,  // block_type: Config PID
         &config_data,
         sizeof(Flash_Config_Data_t)
     );
-    
-    if (status == HAL_OK) {
-        // YALNIZ DİLİNLƏNMİŞ YOXLAMA
-        Flash_Config_Data_t *verify_data = (Flash_Config_Data_t*)FLASH_CONFIG_ADDRESS;
-        if (verify_data->magic == FLASH_CONFIG_MAGIC) {
-            printf("PID parameters saved and verified.\r\n");
-        } else {
-            printf("ERROR: Flash write verification failed!\r\n");
-        }
-    } else {
-        printf("ERROR: Failed to save PID parameters to flash!\r\n");
-    }
 }
 
 /**
  * @brief Load PID parameters and SP from flash
+ * 
+ * ⚠️ KRİTİK XƏBƏRDARLIQ: Bu funksiya Config sisteminin daxili strukturlarını (g_pid_zme_tuning, g_pid_drv_tuning) yeniləyir
+ * və Advanced sistemin funksiyalarını çağırır. Lakin Advanced sistem artıq öz funksiyasını 
+ * (AdvancedPressureControl_LoadPIDParamsFromFlash) çağırır və fərqli Flash offset-dən (0x000) oxuyur.
+ * 
+ * Bu, ikiqat Flash əməliyyatı və məlumat ziddiyyəti riskini yaradır.
+ * 
+ * Tövsiyə: Bütün Flash əməliyyatları yalnız Advanced sistemdə mərkəzləşdirilməlidir.
+ * Config sistemi yalnız Advanced sistemin setter funksiyalarını çağırmalıdır.
  */
 void PressureControlConfig_LoadPIDParams(void) {
-    printf("Loading PID parameters from flash...\r\n");
+    printf("Loading PID parameters from flash (Config system, offset 0x200)...\r\n");
     
     // Read data from flash
     Flash_Config_Data_t *config_data = (Flash_Config_Data_t*)FLASH_CONFIG_ADDRESS;
@@ -701,11 +677,16 @@ void PressureControlConfig_LoadPIDParams(void) {
         g_pid_zme_tuning.kp = config_data->pid_kp;
         g_pid_zme_tuning.ki = config_data->pid_ki;
         g_pid_zme_tuning.kd = config_data->pid_kd;
+        // Config sistemində DRV də eyni dəyərləri istifadə edir
+        g_pid_drv_tuning.kp = config_data->pid_kp;
+        g_pid_drv_tuning.ki = config_data->pid_ki;
+        g_pid_drv_tuning.kd = config_data->pid_kd;
     }
     
-    // Apply PID parameters to controller
-    // DÜZƏLİŞ: Advanced sistem funksiyasını istifadə et (legacy PressureControl_SetPIDParams silindi)
-    // g_pid_zme və g_pid_drv artıq advanced_pressure_control.h-də extern olaraq elan edilib
+    // Apply PID parameters to Advanced system controllers
+    // DÜZƏLİŞ: Advanced sistem funksiyasını istifadə et
+    // QEYD: Advanced sistem artıq öz funksiyasını (AdvancedPressureControl_LoadPIDParamsFromFlash) çağırır
+    // Bu, ikiqat Flash əməliyyatı riskini yaradır, amma uyğunluq üçün saxlanılır
     AdvancedPressureControl_SetPIDParams(&g_pid_zme, 
                                          g_pid_zme_tuning.kp, 
                                          g_pid_zme_tuning.ki, 
@@ -718,15 +699,13 @@ void PressureControlConfig_LoadPIDParams(void) {
     // Load and set SetPoint - DÜZƏLİŞ: Advanced sistem istifadə et
     if (config_data->setpoint > 0.1f && config_data->setpoint <= 300.0f) {
         AdvancedPressureControl_SetTargetPressure(config_data->setpoint);
-        
-        // Update UI pressure_limit as well (declared in ILI9341_FSMC.h)
-        extern float pressure_limit;  // ILI9341_FSMC.c-dən
-        pressure_limit = config_data->setpoint;
-        printf("PRESSURE_LIMIT FLASH-DAN YÜKLƏNDİ: %.1f bar\r\n", pressure_limit);
+        // REMOVED: pressure_limit sinxronizasiyası - artıq pressure_limit yoxdur
+        printf("TARGET PRESSURE FLASH-DAN YÜKLƏNDİ: %.1f bar\r\n", config_data->setpoint);
     } else {
         // Flash-da etibarlı dəyər yoxdursa, default dəyəri istifadə et
-        extern float pressure_limit;  // ILI9341_FSMC.c-dən
-        printf("FLASH-DA ETİBARLI PRESSURE_LIMIT YOXDUR, DEFAULT DƏYƏR İSTİFADƏ OLUNUR: %.1f bar\r\n", pressure_limit);
+        SystemStatus_t* status = AdvancedPressureControl_GetStatus();
+        printf("FLASH-DA ETİBARLI TARGET PRESSURE YOXDUR, DEFAULT DƏYƏR İSTİFADƏ OLUNUR: %.1f bar\r\n", 
+               status->target_pressure);
     }
     
     printf("PID parameters loaded: Kp=%.3f, Ki=%.3f, Kd=%.3f, SP=%.1f\r\n",
@@ -743,6 +722,12 @@ void PressureControlConfig_LoadPIDParams(void) {
 void PressureControlConfig_SaveCalibrationData(void) {
     printf("Saving calibration data to flash...\r\n");
     
+    // Ensure cache mirrors the latest Advanced calibration snapshot before persisting
+    extern CalibrationData_t g_calibration;
+    if (g_calibration.calibrated) {
+        PressureControlConfig_UpdateCalibrationCache(&g_calibration);
+    }
+    
     // Prepare calibration data structure
     typedef struct {
         uint32_t magic;           /* Magic number: 0x12345678 */
@@ -755,14 +740,34 @@ void PressureControlConfig_SaveCalibrationData(void) {
         uint32_t checksum;         /* Data integrity check */
     } calibration_data_t;
     
+    float adc_min_value = g_calibration_data.adc_min;
+    float adc_max_value = g_calibration_data.adc_max;
+    float min_pressure_value = g_calibration_data.pressure_min;
+    float max_pressure_value = g_calibration_data.pressure_max;
+    bool source_from_advanced = false;
+
+    if (g_calibration.calibrated) {
+        adc_min_value = g_calibration.adc_min;
+        adc_max_value = g_calibration.adc_max;
+        min_pressure_value = g_calibration.pressure_min;
+        max_pressure_value = g_calibration.pressure_max;
+        source_from_advanced = true;
+    } else if (!g_calibration_data.calibrated) {
+        // Fallback to hard-coded defaults if no calibration exists anywhere
+        adc_min_value = CONFIG_PRESSURE_SENSOR_ADC_MIN;
+        adc_max_value = CONFIG_PRESSURE_SENSOR_ADC_MAX;
+        min_pressure_value = CONFIG_PRESSURE_SENSOR_PRESSURE_MIN;
+        max_pressure_value = CONFIG_PRESSURE_SENSOR_PRESSURE_MAX;
+    }
+
     calibration_data_t cal_data;
     cal_data.magic = 0x12345678;
-    cal_data.min_voltage = 0.5f;  // Default values, should be updated from g_calibration_data
+    cal_data.min_voltage = 0.5f;  // Default values, kept for compatibility
     cal_data.max_voltage = 5.24f;
-    cal_data.min_pressure = g_calibration_data.pressure_min;
-    cal_data.max_pressure = g_calibration_data.pressure_max;
-    cal_data.adc_min = (uint16_t)g_calibration_data.adc_min;
-    cal_data.adc_max = (uint16_t)g_calibration_data.adc_max;
+    cal_data.min_pressure = min_pressure_value;
+    cal_data.max_pressure = max_pressure_value;
+    cal_data.adc_min = (uint16_t)(adc_min_value + 0.5f);  // Round to nearest integer
+    cal_data.adc_max = (uint16_t)(adc_max_value + 0.5f);
     
     // Calculate checksum
     uint32_t *min_v_ptr = (uint32_t*)&cal_data.min_voltage;
@@ -784,8 +789,23 @@ void PressureControlConfig_SaveCalibrationData(void) {
         // Verify data was written correctly by reading it back
         calibration_data_t *verify_data = (calibration_data_t*)(0x080E0000 + 0x100);
         if (verify_data->magic == 0x12345678 && verify_data->checksum == cal_data.checksum) {
-            printf("Calibration data saved and verified: ADC %d-%d, Pressure %.2f-%.2f bar\r\n",
+            printf("Calibration data saved and verified (%s source): ADC %d-%d, Pressure %.2f-%.2f bar\r\n",
+                   source_from_advanced ? "Advanced" : "Config",
                    cal_data.adc_min, cal_data.adc_max, cal_data.min_pressure, cal_data.max_pressure);
+
+            // Keep config-side cache in sync with the authoritative calibration
+            g_calibration_data.adc_min = (float)cal_data.adc_min;
+            g_calibration_data.adc_max = (float)cal_data.adc_max;
+            g_calibration_data.pressure_min = cal_data.min_pressure;
+            g_calibration_data.pressure_max = cal_data.max_pressure;
+            float adc_range = g_calibration_data.adc_max - g_calibration_data.adc_min;
+            if (adc_range <= 0.0f) {
+                adc_range = 1.0f;  // Prevent divide-by-zero
+            }
+            g_calibration_data.slope = (g_calibration_data.pressure_max - g_calibration_data.pressure_min) / adc_range;
+            g_calibration_data.offset = g_calibration_data.pressure_min -
+                                       (g_calibration_data.slope * g_calibration_data.adc_min);
+            g_calibration_data.calibrated = true;
         } else {
             printf("ERROR: Calibration write verification failed!\r\n");
         }
@@ -811,13 +831,7 @@ void PressureControlConfig_LoadCalibrationData(void) {
     extern CalibrationData_t g_calibration;  // advanced_pressure_control.c-dən (CalibrationData_t tipi)
     
     if (g_calibration.calibrated) {
-        g_calibration_data.adc_min = g_calibration.adc_min;
-        g_calibration_data.adc_max = g_calibration.adc_max;
-        g_calibration_data.pressure_min = g_calibration.pressure_min;
-        g_calibration_data.pressure_max = g_calibration.pressure_max;
-        g_calibration_data.slope = g_calibration.slope;
-        g_calibration_data.offset = g_calibration.offset;
-        g_calibration_data.calibrated = true;
+        PressureControlConfig_UpdateCalibrationCache(&g_calibration);
         
         printf("PressureControlConfig: Calibration loaded from Advanced system - ADC: %.0f-%.0f, Pressure: %.2f-%.2f bar\r\n",
                g_calibration_data.adc_min, g_calibration_data.adc_max, 
@@ -827,6 +841,21 @@ void PressureControlConfig_LoadCalibrationData(void) {
     }
     
     // Köhnə kod silindi - artıq Advanced sistemin vahid strukturundan istifadə edirik
+}
+
+void PressureControlConfig_UpdateCalibrationCache(const CalibrationData_t* source) {
+    if (source == NULL) {
+        return;
+    }
+
+    g_calibration_data.adc_min = source->adc_min;
+    g_calibration_data.adc_max = source->adc_max;
+    g_calibration_data.pressure_min = source->pressure_min;
+    g_calibration_data.pressure_max = source->pressure_max;
+    g_calibration_data.slope = source->slope;
+    g_calibration_data.offset = source->offset;
+    g_calibration_data.calibrated = source->calibrated;
+    g_calibration_data.calibration_date = source->calibration_date;
 }
 
 /* =========================================================================
