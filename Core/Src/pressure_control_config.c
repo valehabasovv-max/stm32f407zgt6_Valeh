@@ -68,6 +68,7 @@ Valve_Config_t g_valve_config = {
 Safety_Config_t g_safety_config = {
     .max_pressure = CONFIG_SAFETY_MAX_PRESSURE,
     .over_limit_margin = CONFIG_SAFETY_OVER_LIMIT_MARGIN,
+    .emergency_threshold = CONFIG_SAFETY_EMERGENCY_THRESHOLD,
     .safety_enabled = true
 };
 
@@ -138,6 +139,7 @@ void PressureControlConfig_LoadDefaults(void) {
     
     g_safety_config.max_pressure = CONFIG_SAFETY_MAX_PRESSURE;
     g_safety_config.over_limit_margin = CONFIG_SAFETY_OVER_LIMIT_MARGIN;
+    g_safety_config.emergency_threshold = CONFIG_SAFETY_EMERGENCY_THRESHOLD;
     
     g_valve_config.zme_pwm_min = CONFIG_ZME_PWM_MIN;
     g_valve_config.zme_pwm_max = CONFIG_ZME_PWM_MAX;
@@ -366,11 +368,12 @@ void PressureControlConfig_SetMotorLimits(float pwm_min, float pwm_max) {
 /**
  * @brief Set safety limits
  */
-void PressureControlConfig_SetSafetyLimits(float max_pressure, float over_limit_margin) {
+void PressureControlConfig_SetSafetyLimits(float max_pressure, float over_limit_margin, float emergency_threshold) {
     g_safety_config.max_pressure = max_pressure;
     g_safety_config.over_limit_margin = over_limit_margin;
-    printf("Safety limits: Max=%.1f bar, Over-limit=%.1f bar\r\n", 
-           max_pressure, over_limit_margin);
+    g_safety_config.emergency_threshold = emergency_threshold;
+    printf("Safety limits: Max=%.1f bar, Over-limit=%.1f bar, Emergency=%.1f bar\r\n", 
+           max_pressure, over_limit_margin, emergency_threshold);
 }
 
 /**
@@ -722,12 +725,6 @@ void PressureControlConfig_LoadPIDParams(void) {
 void PressureControlConfig_SaveCalibrationData(void) {
     printf("Saving calibration data to flash...\r\n");
     
-    // Ensure cache mirrors the latest Advanced calibration snapshot before persisting
-    extern CalibrationData_t g_calibration;
-    if (g_calibration.calibrated) {
-        PressureControlConfig_UpdateCalibrationCache(&g_calibration);
-    }
-    
     // Prepare calibration data structure
     typedef struct {
         uint32_t magic;           /* Magic number: 0x12345678 */
@@ -736,38 +733,18 @@ void PressureControlConfig_SaveCalibrationData(void) {
         float min_pressure;       /* 0.0 bar */
         float max_pressure;       /* 300.0 bar */
         uint16_t adc_min;         /* 410 */
-        uint16_t adc_max;         /* 4096 */
+        uint16_t adc_max;         /* 4095 (12-bit ADC max value) */
         uint32_t checksum;         /* Data integrity check */
     } calibration_data_t;
     
-    float adc_min_value = g_calibration_data.adc_min;
-    float adc_max_value = g_calibration_data.adc_max;
-    float min_pressure_value = g_calibration_data.pressure_min;
-    float max_pressure_value = g_calibration_data.pressure_max;
-    bool source_from_advanced = false;
-
-    if (g_calibration.calibrated) {
-        adc_min_value = g_calibration.adc_min;
-        adc_max_value = g_calibration.adc_max;
-        min_pressure_value = g_calibration.pressure_min;
-        max_pressure_value = g_calibration.pressure_max;
-        source_from_advanced = true;
-    } else if (!g_calibration_data.calibrated) {
-        // Fallback to hard-coded defaults if no calibration exists anywhere
-        adc_min_value = CONFIG_PRESSURE_SENSOR_ADC_MIN;
-        adc_max_value = CONFIG_PRESSURE_SENSOR_ADC_MAX;
-        min_pressure_value = CONFIG_PRESSURE_SENSOR_PRESSURE_MIN;
-        max_pressure_value = CONFIG_PRESSURE_SENSOR_PRESSURE_MAX;
-    }
-
     calibration_data_t cal_data;
     cal_data.magic = 0x12345678;
-    cal_data.min_voltage = 0.5f;  // Default values, kept for compatibility
+    cal_data.min_voltage = 0.5f;  // Default values, should be updated from g_calibration_data
     cal_data.max_voltage = 5.24f;
-    cal_data.min_pressure = min_pressure_value;
-    cal_data.max_pressure = max_pressure_value;
-    cal_data.adc_min = (uint16_t)(adc_min_value + 0.5f);  // Round to nearest integer
-    cal_data.adc_max = (uint16_t)(adc_max_value + 0.5f);
+    cal_data.min_pressure = g_calibration_data.pressure_min;
+    cal_data.max_pressure = g_calibration_data.pressure_max;
+    cal_data.adc_min = (uint16_t)g_calibration_data.adc_min;
+    cal_data.adc_max = (uint16_t)g_calibration_data.adc_max;
     
     // Calculate checksum
     uint32_t *min_v_ptr = (uint32_t*)&cal_data.min_voltage;
@@ -789,23 +766,8 @@ void PressureControlConfig_SaveCalibrationData(void) {
         // Verify data was written correctly by reading it back
         calibration_data_t *verify_data = (calibration_data_t*)(0x080E0000 + 0x100);
         if (verify_data->magic == 0x12345678 && verify_data->checksum == cal_data.checksum) {
-            printf("Calibration data saved and verified (%s source): ADC %d-%d, Pressure %.2f-%.2f bar\r\n",
-                   source_from_advanced ? "Advanced" : "Config",
+            printf("Calibration data saved and verified: ADC %d-%d, Pressure %.2f-%.2f bar\r\n",
                    cal_data.adc_min, cal_data.adc_max, cal_data.min_pressure, cal_data.max_pressure);
-
-            // Keep config-side cache in sync with the authoritative calibration
-            g_calibration_data.adc_min = (float)cal_data.adc_min;
-            g_calibration_data.adc_max = (float)cal_data.adc_max;
-            g_calibration_data.pressure_min = cal_data.min_pressure;
-            g_calibration_data.pressure_max = cal_data.max_pressure;
-            float adc_range = g_calibration_data.adc_max - g_calibration_data.adc_min;
-            if (adc_range <= 0.0f) {
-                adc_range = 1.0f;  // Prevent divide-by-zero
-            }
-            g_calibration_data.slope = (g_calibration_data.pressure_max - g_calibration_data.pressure_min) / adc_range;
-            g_calibration_data.offset = g_calibration_data.pressure_min -
-                                       (g_calibration_data.slope * g_calibration_data.adc_min);
-            g_calibration_data.calibrated = true;
         } else {
             printf("ERROR: Calibration write verification failed!\r\n");
         }
@@ -824,14 +786,20 @@ void PressureControlConfig_LoadCalibrationData(void) {
     printf("Loading calibration data from flash...\r\n");
     
     // KRİTİK DÜZƏLİŞ: Advanced sistemin vahid strukturundan istifadə et
-    // Bu, köhnə strukturlar (ADC 500-3500) ilə yeni strukturlar (ADC 410-4096) arasında ziddiyyəti aradan qaldırır
+    // Bu, köhnə strukturlar (ADC 500-3500) ilə yeni strukturlar (ADC 410-4095) arasında ziddiyyəti aradan qaldırır
     AdvancedPressureControl_LoadCalibration();
     
     // Advanced sistemdən yüklənən kalibrasiya məlumatlarını g_calibration_data strukturuna köçür
     extern CalibrationData_t g_calibration;  // advanced_pressure_control.c-dən (CalibrationData_t tipi)
     
     if (g_calibration.calibrated) {
-        PressureControlConfig_UpdateCalibrationCache(&g_calibration);
+        g_calibration_data.adc_min = g_calibration.adc_min;
+        g_calibration_data.adc_max = g_calibration.adc_max;
+        g_calibration_data.pressure_min = g_calibration.pressure_min;
+        g_calibration_data.pressure_max = g_calibration.pressure_max;
+        g_calibration_data.slope = g_calibration.slope;
+        g_calibration_data.offset = g_calibration.offset;
+        g_calibration_data.calibrated = true;
         
         printf("PressureControlConfig: Calibration loaded from Advanced system - ADC: %.0f-%.0f, Pressure: %.2f-%.2f bar\r\n",
                g_calibration_data.adc_min, g_calibration_data.adc_max, 
@@ -841,21 +809,6 @@ void PressureControlConfig_LoadCalibrationData(void) {
     }
     
     // Köhnə kod silindi - artıq Advanced sistemin vahid strukturundan istifadə edirik
-}
-
-void PressureControlConfig_UpdateCalibrationCache(const CalibrationData_t* source) {
-    if (source == NULL) {
-        return;
-    }
-
-    g_calibration_data.adc_min = source->adc_min;
-    g_calibration_data.adc_max = source->adc_max;
-    g_calibration_data.pressure_min = source->pressure_min;
-    g_calibration_data.pressure_max = source->pressure_max;
-    g_calibration_data.slope = source->slope;
-    g_calibration_data.offset = source->offset;
-    g_calibration_data.calibrated = source->calibrated;
-    g_calibration_data.calibration_date = source->calibration_date;
 }
 
 /* =========================================================================

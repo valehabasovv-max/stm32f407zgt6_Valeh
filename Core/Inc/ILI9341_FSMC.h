@@ -98,8 +98,9 @@ float MotorPercentToPressure(float motor_percent);
 float PressureToDRVPercent(float pressure);
 float PressureToZMEPercent(float pressure);
 
+/* Auto Mode Control Functions - REMOVED (AutoMode deleted) */
 
 /* Global variables */
-/* REMOVED: extern float pressure_limit; - Artıq g_system_status.target_pressure istifadə edilir */
+extern float pressure_limit;  /* Pressure limit (SP) value - can be modified externally */
 
 #endif /* ILI9341_FSMC_H */

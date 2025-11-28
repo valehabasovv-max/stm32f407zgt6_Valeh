@@ -56,6 +56,7 @@ CalibrationData_t g_calibration = {
 SafetyLimits_t g_safety_limits = {
     .max_pressure = 300.0f,
     .over_limit_margin = PRESSURE_OVER_LIMIT_MARGIN,
+    .emergency_threshold = 350.0f,
     .safety_enabled = true
 };
 
@@ -113,45 +114,23 @@ static bool AdvancedPressureControl_IsCalibrationRangeValid(uint16_t adc_min_val
  */
 uint16_t AdvancedPressureControl_ReadADC(void) {
     static uint16_t last_valid_adc = ADC_MIN;
-    static uint32_t error_count = 0;
 
     /* Əgər hansısa səbəbdən ADC dayanıbsa, onu yenidən işə sal */
+    /* QEYD: Continuous mode-da ADC davamlı işləyir, amma bəzən səhv vəziyyətə düşə bilər */
     if ((HAL_ADC_GetState(&hadc3) & HAL_ADC_STATE_REG_BUSY) == 0U) {
         if (HAL_ADC_Start(&hadc3) != HAL_OK) {
-            error_count++;
-            if (error_count < 5) {
-                printf("ERROR: ADC Start failed, using last valid value: %u\r\n", last_valid_adc);
-            }
             return last_valid_adc;
         }
     }
 
     /* Overrun baş veribsə flaqı təmizlə ki, növbəti konversiya bloklanmasın */
+    /* Continuous mode-da overrun baş verə bilər, əgər oxuma sürəti konversiya sürətindən yüksəkdirsə */
     if (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_OVR) != RESET) {
         __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_OVR);
-        error_count++;
-        if (error_count < 5) {
-            printf("WARNING: ADC Overrun detected and cleared\r\n");
-        }
     }
 
-    /* KRİTİK DÜZƏLİŞ: Konversiyanın bitməsini yoxla */
-    /* Continuous mode-da ADC davamlı konversiya edir, EOC flag-ini yoxlamaq lazımdır */
-    /* Əgər konversiya hazır deyilsə, qısa müddət gözlə və yenidən yoxla */
-    uint32_t start_time = HAL_GetTick();
-    uint32_t timeout_ms = 10;  // 10ms timeout
-    while (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC) == RESET) {
-        if ((HAL_GetTick() - start_time) >= timeout_ms) {
-            error_count++;
-            if (error_count < 5) {
-                printf("ERROR: ADC conversion timeout, using last valid value: %u\r\n", last_valid_adc);
-            }
-            return last_valid_adc;
-        }
-    }
-
-    /* EOC flag təmizlə və dəyəri oxu */
-    __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_EOC);
+    /* Continuous mode-da konversiya tamamlanıb-yoxlanması lazım deyil,
+     * çünki HAL_ADC_GetValue() ən son tamamlanmış dəyəri qaytarır */
     uint16_t adc_value = (uint16_t)HAL_ADC_GetValue(&hadc3);
     
     /* KRİTİK DÜZƏLİŞ: 12-bit ADC maksimum dəyəri 4095-dir (2^12 - 1)
@@ -159,27 +138,21 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
      * ADC dəyərini 0-4095 diapazonunda clamp et */
     if (adc_value > 4095U) {
         // Debug: Qeyri-etibarlı ADC dəyəri aşkarlandı
-        error_count++;
-        if (error_count < 10) {  // İlk 10 xəta halında log göndər
+        static uint32_t invalid_adc_count = 0;
+        if (invalid_adc_count < 10) {  // İlk 10 xəta halında log göndər
             printf("WARNING: Invalid ADC value detected: %u (> 4095), clamping to 4095\r\n", adc_value);
+            invalid_adc_count++;
         }
         adc_value = 4095U;  // Maksimum 12-bit ADC dəyəri
     }
 
     /* İlk oxunuşda 0 dəyəri gəlirsə, kalibrlənmiş minimumu saxla */
+    /* Bu, sistemin ilk işə salınmasında etibarsız oxunuşun qarşısını alır */
     if (adc_value == 0U && last_valid_adc == ADC_MIN) {
-        error_count++;
-        if (error_count < 5) {
-            printf("WARNING: ADC reading is 0, using last valid value: %u\r\n", last_valid_adc);
-        }
         return last_valid_adc;
     }
 
-    /* Uğurlu oxunuş - error_count-u sıfırla */
-    if (adc_value > 0U && adc_value <= 4095U) {
-        error_count = 0;
-    }
-
+    /* Etibarlı dəyəri yadda saxla və qaytar */
     last_valid_adc = adc_value;
     return adc_value;
 }
@@ -230,69 +203,6 @@ float AdvancedPressureControl_ClampValue(float value, float min_val, float max_v
     return value;
 }
 
-/**
- * @brief Xam ADC dəyərini kalibrlənmiş təzyiqə çevir
- *
- * @param adc_raw Xam ADC dəyəri (0-4095)
- * @retval Filtrlənmiş təzyiq (bar)
- */
-static float AdvancedPressureControl_ConvertAdcToPressure(uint16_t adc_raw) {
-    // DEBUG: İlk çağırışda kalibrləmə məlumatlarını göstər
-    static bool first_call = true;
-    if (first_call) {
-        printf("DEBUG: Calibration values - ADC: %.0f-%.0f, Pressure: %.2f-%.2f bar, Slope: %.6f, Offset: %.2f\r\n",
-               g_calibration.adc_min, g_calibration.adc_max,
-               g_calibration.pressure_min, g_calibration.pressure_max,
-               g_calibration.slope, g_calibration.offset);
-        first_call = false;
-    }
-
-    // DÜZƏLİŞ: Lineyar çevirmə düsturu - offset istifadə edilir
-    float pressure = g_calibration.offset + ((float)adc_raw * g_calibration.slope);
-
-    // KRİTİK DÜZƏLİŞ: ADC filtrləmə - Moving Average Filter
-    static float pressure_history[8] = {0.0f};  // 8 nümunə üçün tarixçə
-    static uint8_t history_index = 0;
-    static bool history_filled = false;
-
-    // Tarixçəni yenilə
-    pressure_history[history_index] = pressure;
-    history_index = (history_index + 1U) % 8U;
-    if (history_index == 0U) {
-        history_filled = true;
-    }
-
-    // Moving Average hesabla
-    float filtered_pressure = 0.0f;
-    uint8_t count = history_filled ? 8U : history_index;
-    if (count == 0U) {
-        count = 1U;
-    }
-    for (uint8_t i = 0U; i < count; i++) {
-        filtered_pressure += pressure_history[i];
-    }
-    filtered_pressure /= (float)count;
-
-    // Filtrlənmiş dəyəri istifadə et
-    pressure = filtered_pressure;
-
-    // DEBUG: Hər 100 çağırışda bir dəfə debug məlumatı göstər
-    static uint32_t call_count = 0;
-    call_count++;
-    if (call_count % 100U == 0U) {
-        printf("DEBUG: ADC=%u, Pressure=%.2f bar (Offset=%.2f, Slope=%.6f)\r\n",
-               adc_raw, pressure, g_calibration.offset, g_calibration.slope);
-    }
-
-    // KRİTİK DÜZƏLİŞ: Yalnız aşağı limit clamp edilir
-    float min_pressure_clamp = (g_calibration.pressure_min < 0.0f) ? 0.0f : g_calibration.pressure_min;
-    if (pressure < min_pressure_clamp) {
-        pressure = min_pressure_clamp;
-    }
-
-    return pressure;
-}
-
 /* =========================================================================
    VII. ƏSAS İDARƏETMƏ VƏ ÖLÇMƏ FUNKSİYALARI
    ========================================================================= */
@@ -302,12 +212,73 @@ static float AdvancedPressureControl_ConvertAdcToPressure(uint16_t adc_raw) {
  * @retval Pressure in bar
  * 
  * KRİTİK DÜZƏLİŞ: ADC dəyəri clamp edilir ki, mənfi təzyiq dəyərləri yaranmasın.
- * Əgər ADC < ADC_MIN (620) olarsa, təzyiq PRESSURE_MIN (0.0 bar) olacaq.
+ * Əgər ADC < ADC_MIN (410) olarsa, təzyiq PRESSURE_MIN (0.0 bar) olacaq.
  * Əgər ADC > ADC_MAX (4095) olarsa, təzyiq PRESSURE_MAX (300.0 bar) olacaq.
  */
 float AdvancedPressureControl_ReadPressure(void) {
     uint16_t adc_raw = AdvancedPressureControl_ReadADC();
-    return AdvancedPressureControl_ConvertAdcToPressure(adc_raw);
+    
+    // DEBUG: İlk çağırışda kalibrləmə məlumatlarını göstər
+    static bool first_call = true;
+    if (first_call) {
+        printf("DEBUG: Calibration values - ADC: %.0f-%.0f, Pressure: %.2f-%.2f bar, Slope: %.6f, Offset: %.2f\r\n",
+               g_calibration.adc_min, g_calibration.adc_max, 
+               g_calibration.pressure_min, g_calibration.pressure_max,
+               g_calibration.slope, g_calibration.offset);
+        first_call = false;
+    }
+    
+    // KRİTİK DÜZƏLİŞ: Xam ADC dəyəri ilə birbaşa işləmək lazımdır
+    // ADC dəyərini clamp etmək yanlışdır, çünki sensor kalibrləmə diapazonundan kənarda dəyər göstərə bilər
+    // Məsələn, əgər adc_raw > adc_max (4095) olarsa, sensor 300 bar-dan yuxarı təzyiq göstərə bilər
+    // Nəzarət sistemi üçün xam dəyərin özü ilə işləmək, yalnız son təzyiq nəticəsini clamp etmək daha düzgündür
+    
+    // DÜZƏLİŞ: Lineyar çevirmə düsturu - offset istifadə edilir
+    // Formula: pressure = offset + slope * adc_raw
+    // Xam ADC dəyəri ilə birbaşa çevirmə aparılır
+    float pressure = g_calibration.offset + ((float)adc_raw * g_calibration.slope);
+    
+    // KRİTİK DÜZƏLİŞ: ADC filtrləmə - Moving Average Filter
+    // Bu, səs-küyü azaldır və PID-nin (xüsusən Kd termi) daha stabil işləməsinə kömək edir
+    static float pressure_history[8] = {0.0f};  // 8 nümunə üçün tarixçə
+    static uint8_t history_index = 0;
+    static bool history_filled = false;
+    
+    // Tarixçəni yenilə
+    pressure_history[history_index] = pressure;
+    history_index = (history_index + 1) % 8;
+    if (history_index == 0) {
+        history_filled = true;
+    }
+    
+    // Moving Average hesabla
+    float filtered_pressure = 0.0f;
+    uint8_t count = history_filled ? 8 : history_index;
+    for (uint8_t i = 0; i < count; i++) {
+        filtered_pressure += pressure_history[i];
+    }
+    filtered_pressure /= (float)count;
+    
+    // Filtrlənmiş dəyəri istifadə et
+    pressure = filtered_pressure;
+    
+    // DEBUG: Hər 100 çağırışda bir dəfə debug məlumatı göstər
+    static uint32_t call_count = 0;
+    call_count++;
+    if (call_count % 100 == 0) {
+        printf("DEBUG: ADC=%d, Pressure=%.2f bar (Offset=%.2f, Slope=%.6f)\r\n",
+               adc_raw, pressure, g_calibration.offset, g_calibration.slope);
+    }
+    
+    // KRİTİK DÜZƏLİŞ: Yalnız aşağı limit clamp edilir
+    // Minimum təzyiq 0.0 bar ola bilər, mənfi təzyiq olmamalıdır
+    // Maksimum təzyiq clamp edilmir ki, sistem real >300 bar dəyərlərinə reaksiya verə bilsin
+    float min_pressure_clamp = (g_calibration.pressure_min < 0.0f) ? 0.0f : g_calibration.pressure_min;
+    if (pressure < min_pressure_clamp) {
+        pressure = min_pressure_clamp;
+    }
+    
+    return pressure;
 }
 
 /**
@@ -754,6 +725,11 @@ bool AdvancedPressureControl_SafetyCheck(void) {
         safety_ok = false;
     }
     
+    // Təcili dayandırma limiti
+    if (g_system_status.current_pressure > g_safety_limits.emergency_threshold) {
+        failure_reason = "Emergency threshold exceeded";
+        safety_ok = false;
+    }
     
     // DEBUG: Təhlükəsizlik yoxlaması uğursuz olduqda
     if (!safety_ok && (safety_debug_count <= 20 || safety_debug_count % 100 == 0)) {
@@ -869,33 +845,19 @@ void AdvancedPressureControl_Step(void) {
                g_system_status.error, g_system_status.control_enabled);
     }
     
+    // AutoMode yoxlaması - REMOVED (AutoMode deleted)
     
     // 0. Təzyiqi Oxu (Safety yoxlaması üçün lazımdır)
     // KRİTİK DÜZƏLİŞ: Xam ADC dəyərini də Status strukturuna yaz (UI üçün)
     uint16_t raw_adc = AdvancedPressureControl_ReadADC();
     g_system_status.raw_adc_value = raw_adc;
-    g_system_status.current_pressure = AdvancedPressureControl_ConvertAdcToPressure(raw_adc);
+    g_system_status.current_pressure = AdvancedPressureControl_ReadPressure();
     
-    // Validate pressure reading without hiding genuine over-pressure conditions
-    if (!isfinite(g_system_status.current_pressure) || g_system_status.current_pressure < 0.0f) {
+    // DÜZƏLİŞ: Təzyiq oxunuşunu yoxla (maksimum 300.0 bar)
+    if (g_system_status.current_pressure < 0.0f || g_system_status.current_pressure > 300.0f) {
         printf("PID ERROR: Invalid pressure reading: %.2f bar\r\n", g_system_status.current_pressure);
+        // Default dəyər istifadə et
         g_system_status.current_pressure = 0.0f;
-    } else {
-        if (g_system_status.current_pressure > g_safety_limits.max_pressure) {
-            static uint32_t over_limit_log_count = 0;
-            if (over_limit_log_count < 10U || (over_limit_log_count % 50U) == 0U) {
-                printf("PID WARNING: Pressure %.2f bar exceeds configured max %.1f bar\r\n",
-                       g_system_status.current_pressure, g_safety_limits.max_pressure);
-            }
-            over_limit_log_count++;
-        }
-        float sensor_fault_limit = g_safety_limits.max_pressure + 50.0f;
-        if (g_system_status.current_pressure > sensor_fault_limit) {
-            float fault_value = g_system_status.current_pressure;
-            g_system_status.current_pressure = sensor_fault_limit;
-            printf("PID WARNING: Pressure reading %.2f bar exceeds sensor range, clamping to %.1f bar\r\n",
-                   fault_value, sensor_fault_limit);
-        }
     }
     
     // 1. TƏHLÜKƏSİZLİK MÜDAXİLƏSİ (Motor təyin olunmadan ƏVVƏL)
@@ -1266,7 +1228,7 @@ void AdvancedPressureControl_LoadCalibration(void) {
         float min_pressure;       // 0.0 bar
         float max_pressure;       // 300.0 bar
         uint16_t adc_min;         // 410
-        uint16_t adc_max;         // 4096
+        uint16_t adc_max;         // 4095 (12-bit ADC max value)
         uint32_t checksum;        // Data integrity check
     } calibration_data_t;
     
@@ -1311,7 +1273,6 @@ void AdvancedPressureControl_LoadCalibration(void) {
                                       (g_calibration.slope * (float)cal_data->adc_min);
                 
                 g_calibration.calibrated = true;
-                PressureControlConfig_UpdateCalibrationCache(&g_calibration);
                 
                 printf("AdvancedPressureControl: Calibration loaded - ADC: %.0f-%.0f, Pressure: %.2f-%.2f bar, Slope: %.6f, Offset: %.2f\r\n",
                        g_calibration.adc_min, g_calibration.adc_max, 
@@ -1339,7 +1300,6 @@ void AdvancedPressureControl_LoadCalibration(void) {
     // DÜZƏLİŞ: Offset hesabla: offset = pressure_min - (slope * adc_min)
     g_calibration.offset = PRESSURE_MIN - (PRESSURE_SLOPE * (float)ADC_MIN);
     g_calibration.calibrated = true;
-    PressureControlConfig_UpdateCalibrationCache(&g_calibration);
     
     printf("AdvancedPressureControl: Using default calibration - ADC: %.0f-%.0f, Pressure: %.2f-%.2f bar, Slope: %.6f, Offset: %.2f\r\n",
            g_calibration.adc_min, g_calibration.adc_max, 
@@ -1363,7 +1323,7 @@ void AdvancedPressureControl_SaveCalibration(void) {
         float min_pressure;       // 0.0 bar
         float max_pressure;       // 300.0 bar
         uint16_t adc_min;         // 410
-        uint16_t adc_max;         // 4096
+        uint16_t adc_max;         // 4095 (12-bit ADC max value)
         uint32_t checksum;        // Data integrity check
     } calibration_data_t;
     
@@ -1379,7 +1339,6 @@ void AdvancedPressureControl_SaveCalibration(void) {
     
     printf("DEBUG: Saving calibration - ADC: %d-%d, Pressure: %.2f-%.2f bar\r\n",
            cal_data.adc_min, cal_data.adc_max, cal_data.min_pressure, cal_data.max_pressure);
-    PressureControlConfig_UpdateCalibrationCache(&g_calibration);
     
     // Calculate checksum
     uint32_t *min_v_ptr = (uint32_t*)&cal_data.min_voltage;

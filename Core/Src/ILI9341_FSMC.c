@@ -12,18 +12,20 @@
 extern SPI_HandleTypeDef hspi1;
 extern ADC_HandleTypeDef hadc3;
 
-/* FSMC init funksiyasД± main.c-dЙ™ var, burada dublikat yox */
+/* XPT2046 Commands */
+#define XPT2046_CMD_READ_X      0x90  /* Read X position */
+#define XPT2046_CMD_READ_Y      0xD0  /* Read Y position */
 
-/* SadЙ™ yazma kГ¶mЙ™kГ§ilЙ™ri */
+/* FSMC init funksiyası main.c-də var, burada dublikat yox */
+
+/* Sadə yazma köməkçiləri */
 static inline void lcd_write_command(uint16_t cmd)
 {
     LCD_REG = cmd;
-    __DSB();  /* Data Synchronization Barrier - yazmanД±n tamamlanmasД±nД± tЙ™min et */
 }
 static inline void lcd_write_data(uint16_t data)
 {
     LCD_RAM = data;
-    __DSB();  /* Data Synchronization Barrier - yazmanД±n tamamlanmasД±nД± tЙ™min et */
 }
 
 /* ------------------ ILI9341 INIT ------------------ */
@@ -31,7 +33,6 @@ void ILI9341_Init(void)
 {
     /* Backlight ON */
     HAL_GPIO_WritePin(LCD_LIG_GPIO_Port, LCD_LIG_Pin, GPIO_PIN_SET);
-    HAL_Delay(10);
 
     /* HW reset pulse */
     HAL_GPIO_WritePin(LCD_RST_GPIO_Port, LCD_RST_Pin, GPIO_PIN_RESET);
@@ -39,164 +40,22 @@ void ILI9341_Init(void)
     HAL_GPIO_WritePin(LCD_RST_GPIO_Port, LCD_RST_Pin, GPIO_PIN_SET);
     HAL_Delay(120);
 
-    /* ILI9341 initialization sequence - tam siyahД± */
-    lcd_write_command(0x01); HAL_Delay(10);    /* Software Reset */
-    
+    /* ILI9341 initialization sequence */
+    lcd_write_command(0x01); HAL_Delay(5);    /* Software Reset */
     lcd_write_command(0x28);                  /* Display OFF */
-    HAL_Delay(10);
-    
-    /* Power Control 1 */
-    lcd_write_command(0xCB);
-    lcd_write_data(0x39);
-    lcd_write_data(0x2C);
-    lcd_write_data(0x00);
-    lcd_write_data(0x34);
-    lcd_write_data(0x02);
-    HAL_Delay(10);
-    
-    /* Power Control 2 */
-    lcd_write_command(0xCF);
-    lcd_write_data(0x00);
-    lcd_write_data(0xC1);
-    lcd_write_data(0x30);
-    HAL_Delay(10);
-    
-    /* Driver Timing Control A */
-    lcd_write_command(0xE8);
-    lcd_write_data(0x85);
-    lcd_write_data(0x00);
-    lcd_write_data(0x78);
-    HAL_Delay(10);
-    
-    /* Driver Timing Control B */
-    lcd_write_command(0xEA);
-    lcd_write_data(0x00);
-    lcd_write_data(0x00);
-    HAL_Delay(10);
-    
-    /* Power on Sequence Control */
-    lcd_write_command(0xED);
-    lcd_write_data(0x64);
-    lcd_write_data(0x03);
-    lcd_write_data(0x12);
-    lcd_write_data(0x81);
-    HAL_Delay(10);
-    
-    /* Pump ratio control */
-    lcd_write_command(0xF7);
-    lcd_write_data(0x20);
-    HAL_Delay(10);
-    
-    /* Power Control 1 */
-    lcd_write_command(0xC0);
-    lcd_write_data(0x23);
-    HAL_Delay(10);
-    
-    /* Power Control 2 */
-    lcd_write_command(0xC1);
-    lcd_write_data(0x10);
-    HAL_Delay(10);
-    
-    /* VCOM Control 1 */
-    lcd_write_command(0xC5);
-    lcd_write_data(0x3E);
-    lcd_write_data(0x28);
-    HAL_Delay(10);
-    
-    /* VCOM Control 2 */
-    lcd_write_command(0xC7);
-    lcd_write_data(0x86);
-    HAL_Delay(10);
-    
-    /* Memory Access Control - DГњZЖЏLД°Ећ: DГјzgГјn landscape rejimi */
-    lcd_write_command(0x36);
-    lcd_write_data(0x48);  /* MY=1, MX=0, MV=0, ML=0, BGR=1, MH=0 (Landscape 320x240) */
-    HAL_Delay(10);
-    
-    /* Pixel Format Set */
-    lcd_write_command(0x3A);
-    lcd_write_data(0x55);  /* 16-bit/pixel */
-    HAL_Delay(10);
-    
-    /* Frame Rate Control */
-    lcd_write_command(0xB1);
-    lcd_write_data(0x00);
-    lcd_write_data(0x18);
-    HAL_Delay(10);
-    
-    /* Display Function Control */
-    lcd_write_command(0xB6);
-    lcd_write_data(0x08);
-    lcd_write_data(0x82);
-    lcd_write_data(0x27);
-    HAL_Delay(10);
-    
-    /* 3G Gamma Control */
-    lcd_write_command(0xF2);
-    lcd_write_data(0x00);
-    HAL_Delay(10);
-    
-    /* Gamma Set */
-    lcd_write_command(0x26);
-    lcd_write_data(0x01);
-    HAL_Delay(10);
-    
-    /* Positive Gamma Correction */
-    lcd_write_command(0xE0);
-    lcd_write_data(0x0F);
-    lcd_write_data(0x31);
-    lcd_write_data(0x2B);
-    lcd_write_data(0x0C);
-    lcd_write_data(0x0E);
-    lcd_write_data(0x08);
-    lcd_write_data(0x4E);
-    lcd_write_data(0xF1);
-    lcd_write_data(0x37);
-    lcd_write_data(0x07);
-    lcd_write_data(0x10);
-    lcd_write_data(0x03);
-    lcd_write_data(0x0E);
-    lcd_write_data(0x09);
-    lcd_write_data(0x00);
-    HAL_Delay(10);
-    
-    /* Negative Gamma Correction */
-    lcd_write_command(0xE1);
-    lcd_write_data(0x00);
-    lcd_write_data(0x0E);
-    lcd_write_data(0x14);
-    lcd_write_data(0x03);
-    lcd_write_data(0x11);
-    lcd_write_data(0x07);
-    lcd_write_data(0x31);
-    lcd_write_data(0xC1);
-    lcd_write_data(0x48);
-    lcd_write_data(0x08);
-    lcd_write_data(0x0F);
-    lcd_write_data(0x0C);
-    lcd_write_data(0x31);
-    lcd_write_data(0x36);
-    lcd_write_data(0x0F);
-    HAL_Delay(10);
-    
-    /* Sleep Out */
-    lcd_write_command(0x11);
-    HAL_Delay(150);  /* CRITICAL: Wait for sleep out to complete - artД±rД±ldД± */
-    
+
+    lcd_write_command(0x3A);                  /* Pixel Format Set */
+    lcd_write_data(0x55);                     /* 16-bit/pixel */
+
+    lcd_write_command(0x36);                  /* Memory Access Control */
+    lcd_write_data(0x28);                     /* MX=0, MY=1, MV=0, BGR=1 (Landscape 320x240) */
+
     /* Display ON */
-    lcd_write_command(0x29);
-    HAL_Delay(150);  /* DГњZЖЏLД°Ећ: Display stabillЙ™ЕџmЙ™si ГјГ§Гјn daha uzun gecikmЙ™ */
-    
-    /* Normal Display Mode ON */
-    lcd_write_command(0x13);
-    HAL_Delay(100);   /* DГњZЖЏLД°Ећ: EkranД±n tam hazД±r olmasД± ГјГ§Гјn daha uzun gecikmЙ™ */
-    
-    /* KRД°TД°K DГњZЖЏLД°Ећ: EkranД±n iЕџlЙ™diyini tЙ™sdiq et - Display ON-u yenidЙ™n gГ¶ndЙ™r */
-    lcd_write_command(0x29);
-    HAL_Delay(50);
+    lcd_write_command(0x11); HAL_Delay(120);  /* Sleep Out */
+    lcd_write_command(0x29);                  /* Display ON */
 }
 
-/* ------------------ EkranД± rЙ™nglЙ™ doldur ------------------ */
+/* ------------------ Ekranı rənglə doldur ------------------ */
 void ILI9341_FillScreen(uint16_t color)
 {
     uint32_t px = 320UL * 240UL;
@@ -211,20 +70,13 @@ void ILI9341_FillScreen(uint16_t color)
     lcd_write_data(0x00); lcd_write_data(0xEF); /* 239 */
 
     lcd_write_command(0x2C);  /* RAMWR */
-    __DSB();  /* KRД°TД°K DГњZЖЏLД°Ећ: RAMWR-dan sonra sinxronizasiya */
 
-    /* KRД°TД°K DГњZЖЏLД°Ећ: Optimizasiya - hЙ™r yazmadan sonra sinxronizasiya */
     while (px--) {
         LCD_RAM = color;
-        /* HЙ™r 1000 pikseldЙ™n bir sinxronizasiya - performans vЙ™ stabillik balansД± */
-        if ((px % 1000) == 0) {
-            __DSB();
-        }
     }
-    __DSB();  /* Son sinxronizasiya - bГјtГјn yazmalarД±n tamamlanmasД±nД± tЙ™min et */
 }
 
-/* ------------------ Pixel Г§Й™k ------------------ */
+/* ------------------ Pixel çək ------------------ */
 void ILI9341_DrawPixel(uint16_t x, uint16_t y, uint16_t color)
 {
     if (x >= 320 || y >= 240) return;
@@ -240,10 +92,9 @@ void ILI9341_DrawPixel(uint16_t x, uint16_t y, uint16_t color)
 
     lcd_write_command(0x2C);
     LCD_RAM = color;
-    __DSB();  /* KRД°TД°K DГњZЖЏLД°Ећ: Pixel yazmasД±ndan sonra sinxronizasiya */
 }
 
-/* ------------------ DГјzbucaqlД± Г§Й™k ------------------ */
+/* ------------------ Düzbucaqlı çək ------------------ */
 void ILI9341_DrawRectangle(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color)
 {
     for (uint16_t i = 0; i < height; i++) {
@@ -253,7 +104,7 @@ void ILI9341_DrawRectangle(uint16_t x, uint16_t y, uint16_t width, uint16_t heig
     }
 }
 
-/* ------------------ XЙ™tt Г§Й™k ------------------ */
+/* ------------------ Xətt çək ------------------ */
 void ILI9341_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color)
 {
     int16_t dx = abs(x2 - x1);
@@ -304,7 +155,7 @@ uint8_t ILI9341_IsButtonPressed(Button_t *btn, uint16_t touch_x, uint16_t touch_
             touch_y >= btn->y && touch_y <= btn->y + btn->height);
 }
 
-/* Ana menu sЙ™hifЙ™si */
+/* Ana menu səhifəsi */
 void ILI9341_ShowMainPage(void)
 {
     current_page = 0;
@@ -312,26 +163,26 @@ void ILI9341_ShowMainPage(void)
     /* Qara fon */
     ILI9341_FillScreen(ILI9341_COLOR_BLACK);
     
-    /* BaЕџlД±q */
+    /* Başlıq */
     ILI9341_DrawString(100, 20, "MAIN MENU", ILI9341_COLOR_WHITE, 0x0000, 3);
     
-    /* Settings dГјymЙ™si */
+    /* Settings düyməsi */
     Button_t settings_btn = {20, 80, 130, 40, ILI9341_COLOR_BLUE, "Settings"};
     ILI9341_DrawButton(&settings_btn);
     ILI9341_DrawString(50, 95, "SETTINGS", ILI9341_COLOR_WHITE, 0x0000, 2);
     
-    /* Test dГјymЙ™si */
+    /* Test düyməsi */
     Button_t test_btn = {170, 80, 130, 40, ILI9341_COLOR_GREEN, "Test"};
     ILI9341_DrawButton(&test_btn);
     ILI9341_DrawString(200, 95, "TEST", ILI9341_COLOR_WHITE, 0x0000, 2);
     
-    /* Info dГјymЙ™si */
+    /* Info düyməsi */
     Button_t info_btn = {20, 140, 130, 40, ILI9341_COLOR_YELLOW, "Info"};
     ILI9341_DrawButton(&info_btn);
     ILI9341_DrawString(50, 155, "INFO", ILI9341_COLOR_WHITE, 0x0000, 2);
 }
 
-/* Touch test sЙ™hifЙ™si */
+/* Touch test səhifəsi */
 void ILI9341_ShowTouchTestPage(void)
 {
     current_page = 4;
@@ -339,16 +190,16 @@ void ILI9341_ShowTouchTestPage(void)
     /* Qara fon */
     ILI9341_FillScreen(ILI9341_COLOR_BLACK);
     
-    /* BaЕџlД±q */
+    /* Başlıq */
     ILI9341_DrawRectangle(10, 5, 300, 20, ILI9341_COLOR_RED);
     ILI9341_DrawRectangle(12, 7, 296, 16, ILI9341_COLOR_WHITE);
     ILI9341_DrawString(120, 12, "TOUCH TEST", ILI9341_COLOR_RED, 0xFFFF, 1);
     
-    /* TЙ™limatlar */
+    /* Təlimatlar */
     ILI9341_DrawString(10, 37, "Touch the screen", ILI9341_COLOR_WHITE, 0x0000, 1);
     ILI9341_DrawString(10, 57, "to see red dots", ILI9341_COLOR_WHITE, 0x0000, 1);
     
-    /* Geri dГјymЙ™si */
+    /* Geri düyməsi */
     Button_t back_btn = {20, 200, 280, 35, ILI9341_COLOR_RED, "Back"};
     ILI9341_DrawButton(&back_btn);
     ILI9341_DrawString(120, 215, "BACK TO MENU", ILI9341_COLOR_WHITE, 0x0000, 2);
@@ -359,14 +210,14 @@ void ILI9341_HandleTouch(void)
 {
     uint16_t raw_x, raw_y, screen_x, screen_y;
     
-    /* Touch sensor iЕџlЙ™yirmi test et */
+    /* Touch sensor işləyirmi test et */
     if (XPT2046_IsTouched()) {
-        /* Raw koordinatlarД± oxu */
+        /* Raw koordinatları oxu */
         if (XPT2046_GetCoordinates(&raw_x, &raw_y)) {
-            /* Raw koordinatlarД± ekran koordinatlarД±na Г§evir */
+            /* Raw koordinatları ekran koordinatlarına çevir */
             XPT2046_ConvertToScreen(raw_x, raw_y, &screen_x, &screen_y);
             
-            /* Touch nГ¶qtЙ™sini gГ¶stЙ™rmЙ™ - silindi */
+            /* Touch nöqtəsini göstərmə - silindi */
             
             /* Menu navigation */
             if (current_page == 0) { // Main page
@@ -375,9 +226,9 @@ void ILI9341_HandleTouch(void)
                     current_page = 1;
                     ILI9341_ShowSettingsPage();
                 }
-                /* Test button - geniЕџ koordinatlar */
+                /* Test button - geniş koordinatlar */
                 else if (screen_x >= 160 && screen_x <= 310 && screen_y >= 70 && screen_y <= 130) {
-                    /* Debug: Test dГјymЙ™si basД±ldД± - ekranД±n mЙ™rkЙ™zindЙ™ bГ¶yГјk mavi dairЙ™ */
+                    /* Debug: Test düyməsi basıldı - ekranın mərkəzində böyük mavi dairə */
                     for(int i = -15; i <= 15; i++) {
                         for(int j = -15; j <= 15; j++) {
                             if ((i*i + j*j) <= 225) {
@@ -395,7 +246,7 @@ void ILI9341_HandleTouch(void)
                 }
             }
             else { // Other pages
-                /* Back button - bГјtГјn ekran */
+                /* Back button - bütün ekran */
                 if (screen_x >= 0 && screen_x <= 319 && screen_y >= 0 && screen_y <= 239) {
                     current_page = 0;
                     ILI9341_ShowMainPage();
@@ -410,91 +261,91 @@ void ILI9341_HandleTouch(void)
 /* Touch debug - silindi */
 void ILI9341_DebugTouch(void)
 {
-    /* HeГ§nЙ™ etmЙ™ */
+    /* Heçnə etmə */
 }
 
 /* Touch test - silindi */
 void ILI9341_TestTouch(void)
 {
-    /* HeГ§nЙ™ etmЙ™ */
+    /* Heçnə etmə */
 }
 
-/* Settings sЙ™hifЙ™si */
+/* Settings səhifəsi */
 void ILI9341_ShowSettingsPage(void)
 {
     current_page = 1;
     
-    /* YaЕџД±l fon */
+    /* Yaşıl fon */
     ILI9341_FillScreen(ILI9341_COLOR_GREEN);
     
-    /* BaЕџlД±q */
+    /* Başlıq */
     ILI9341_DrawRectangle(10, 10, 300, 30, ILI9341_COLOR_BLUE);
     ILI9341_DrawRectangle(12, 12, 296, 26, ILI9341_COLOR_WHITE);
     ILI9341_DrawString(120, 20, "SETTINGS", ILI9341_COLOR_BLUE, 0xFFFF, 2);
     
-    /* MЙ™zmun */
+    /* Məzmun */
     ILI9341_DrawString(50, 60, "LCD: 320x240", ILI9341_COLOR_WHITE, 0x0000, 2);
     ILI9341_DrawString(50, 80, "Touch: XPT2046", ILI9341_COLOR_WHITE, 0x0000, 2);
     ILI9341_DrawString(50, 100, "MCU: STM32F407", ILI9341_COLOR_WHITE, 0x0000, 2);
     ILI9341_DrawString(50, 120, "Driver: ILI9341", ILI9341_COLOR_WHITE, 0x0000, 2);
     
-    /* Geri dГјymЙ™si */
+    /* Geri düyməsi */
     Button_t back_btn = {20, 200, 280, 35, ILI9341_COLOR_RED, "Back"};
     ILI9341_DrawButton(&back_btn);
     ILI9341_DrawString(120, 215, "BACK TO MENU", ILI9341_COLOR_WHITE, 0x0000, 2);
 }
 
-/* Test sЙ™hifЙ™si */
+/* Test səhifəsi */
 void ILI9341_ShowTestPage(void)
 {
     current_page = 2;
     
-    /* QД±rmД±zД± fon */
+    /* Qırmızı fon */
     ILI9341_FillScreen(ILI9341_COLOR_RED);
     
-    /* BaЕџlД±q */
+    /* Başlıq */
     ILI9341_DrawRectangle(10, 10, 300, 30, ILI9341_COLOR_BLUE);
     ILI9341_DrawRectangle(12, 12, 296, 26, ILI9341_COLOR_WHITE);
     ILI9341_DrawString(140, 20, "TEST", ILI9341_COLOR_BLUE, 0xFFFF, 2);
     
-    /* Test mЙ™zmunu */
+    /* Test məzmunu */
     ILI9341_DrawString(50, 60, "Color Test: RED", ILI9341_COLOR_WHITE, 0x0000, 2);
     ILI9341_DrawString(50, 80, "Font Test: ABC abc 123", ILI9341_COLOR_WHITE, 0x0000, 2);
     ILI9341_DrawString(50, 100, "Touch Test: Touch buttons", ILI9341_COLOR_WHITE, 0x0000, 2);
     
-    /* Geri dГјymЙ™si */
+    /* Geri düyməsi */
     Button_t back_btn = {20, 200, 280, 35, ILI9341_COLOR_RED, "Back"};
     ILI9341_DrawButton(&back_btn);
     ILI9341_DrawString(120, 215, "BACK TO MENU", ILI9341_COLOR_WHITE, 0x0000, 2);
 }
 
-/* Info sЙ™hifЙ™si */
+/* Info səhifəsi */
 void ILI9341_ShowInfoPage(void)
 {
     current_page = 3;
     
-    /* SarД± fon */
+    /* Sarı fon */
     ILI9341_FillScreen(ILI9341_COLOR_YELLOW);
     
-    /* BaЕџlД±q */
+    /* Başlıq */
     ILI9341_DrawRectangle(10, 10, 300, 30, ILI9341_COLOR_BLUE);
     ILI9341_DrawRectangle(12, 12, 296, 26, ILI9341_COLOR_WHITE);
     ILI9341_DrawString(140, 20, "INFO", ILI9341_COLOR_BLUE, 0xFFFF, 2);
     
-    /* MЙ™lumat */
+    /* Məlumat */
     ILI9341_DrawString(50, 60, "STM32F407ZGT6", ILI9341_COLOR_BLACK, 0x0000, 2);
     ILI9341_DrawString(50, 80, "TFT 3.2 LCD", ILI9341_COLOR_BLACK, 0x0000, 2);
     ILI9341_DrawString(50, 100, "ILI9341 Driver", ILI9341_COLOR_BLACK, 0x0000, 2);
     ILI9341_DrawString(50, 120, "XPT2046 Touch", ILI9341_COLOR_BLACK, 0x0000, 2);
     ILI9341_DrawString(50, 140, "FSMC Interface", ILI9341_COLOR_BLACK, 0x0000, 2);
     
-    /* Geri dГјymЙ™si */
+    /* Geri düyməsi */
     Button_t back_btn = {20, 200, 280, 35, ILI9341_COLOR_RED, "Back"};
     ILI9341_DrawButton(&back_btn);
     ILI9341_DrawString(120, 215, "BACK TO MENU", ILI9341_COLOR_WHITE, 0x0000, 2);
 }
 
-/* ------------------ Font funksiyalarД± ------------------ */
+/* ------------------ Font funksiyaları ------------------ */
 void ILI9341_DrawChar(uint16_t x, uint16_t y, char c, uint16_t color, uint16_t bgcolor, uint8_t size)
 {
     if (c < 32 || c > 126) return;
@@ -505,14 +356,14 @@ void ILI9341_DrawChar(uint16_t x, uint16_t y, char c, uint16_t color, uint16_t b
         uint8_t line = font_data[i];
         for (uint8_t j = 0; j < 10; j++) {
             if (line & (1 << j)) {
-                // Pixel Г§Й™k
+                // Pixel çək
                 for (uint8_t sx = 0; sx < size; sx++) {
                     for (uint8_t sy = 0; sy < size; sy++) {
                         ILI9341_DrawPixel(x + i * size + sx, y + j * size + sy, color);
                     }
                 }
             } else if (bgcolor != color) {
-                // Background pixel Г§Й™k
+                // Background pixel çək
             for (uint8_t sx = 0; sx < size; sx++) {
                 for (uint8_t sy = 0; sy < size; sy++) {
                         ILI9341_DrawPixel(x + i * size + sx, y + j * size + sy, bgcolor);
@@ -542,9 +393,9 @@ void ILI9341_DrawString(uint16_t x, uint16_t y, const char *str, uint16_t color,
 
 /* Global variables for pressure control system */
 static uint8_t pressure_control_page = 0; // 0=main, 1=menu, 7=touch_cal, 8=pressure_cal, 9=pid_tune
-// REMOVED: 2=pwm, 3=pressure_limit, 4=drv, 5=zme, 6=motor - PWM vЙ™ PRES LIM bГ¶lmЙ™lЙ™ri silindi
+// REMOVED: 2=pwm, 3=pressure_limit, 4=drv, 5=zme, 6=motor - PWM və PRES LIM bölmələri silindi
 static float current_pressure = 0.0;
-// REMOVED: float pressure_limit = 300.0; // SД°LД°NDД° - artД±q g_system_status.target_pressure istifadЙ™ edilir
+// REMOVED: float pressure_limit = 300.0; // SİLİNDİ - artıq g_system_status.target_pressure istifadə edilir
 static float drv_percent = 0.0;
 static float zme_percent = 0.0;
 static float motor_percent = 0.0;
@@ -559,12 +410,11 @@ static float motor_frequency = 1000.0;
 /* Pressure sensor calibration variables */
 /* Note: These are NOT static so AdvancedPressureControl can access them */
 float min_voltage = 0.5;      /* Minimum voltage (0.5V) */
-float max_voltage = 5.0;     /* Maximum voltage (5.0V) */
-float min_pressure = 0.0;     /* DГњZЖЏLД°Ећ: Minimum pressure (0.0 bar - sД±fД±r tЙ™zyiq) */
+float max_voltage = 5.24;     /* Maximum voltage (5.24V) */
+float min_pressure = 0.0;     /* DÜZƏLİŞ: Minimum pressure (0.0 bar - sıfır təzyiq) */
 float max_pressure = 300.0;   /* Maximum pressure (300.0 bar) */
-/* STM32F4 ADC referans: 3.3V, ADC = (Voltage / 3.3) * 4095 */
-uint16_t adc_min = 620;       /* DГњZЖЏLД°Ећ: ADC at 0.5V = (0.5/3.3)*4095 в‰€ 620 (Й™vvЙ™l 410 idi) */
-uint16_t adc_max = 4095;      /* ADC at 5.0V = (5.0/3.3)*4095 в‰€ 6204 (saturasiya, 4095-dЙ™ mЙ™hdudlaЕџД±r) */
+uint16_t adc_min = 410;       /* ADC value at minimum pressure (0.5V) */
+uint16_t adc_max = 4095;      /* KRİTİK DÜZƏLİŞ: 12-bit ADC max = 4095 (2^12 - 1), NOT 4096 */
 static uint8_t calibration_mode = 0; /* 0=normal, 1=calibrate min, 2=calibrate max */
 
 /* Ensure we never overwrite valid calibration data with defaults */
@@ -595,8 +445,8 @@ static bool ILI9341_IsPressureCalibrationValid(const CalibrationData_t* cal)
 }
 
 /* Precise conversion constants */
-// DГњZЖЏLД°Ећ: P_PER_COUNT vЙ™ P_OFFSET silindi - artД±q g_calibration strukturundan istifadЙ™ edilir
-// BГјtГјn tЙ™zyiq konversiyalarД± Advanced sistemin g_calibration strukturundan istifadЙ™ edir
+// DÜZƏLİŞ: P_PER_COUNT və P_OFFSET silindi - artıq g_calibration strukturundan istifadə edilir
+// Bütün təzyiq konversiyaları Advanced sistemin g_calibration strukturundan istifadə edir
 static const float BAR_PER_VOLT = 66.3228f; /* bar per volt (display only) */
 static const float V_PER_COUNT = 0.00158f;  /* volt per ADC count (display only) */
 
@@ -613,7 +463,11 @@ static float zme_min_pressure = 3.5f;   /* minimum system pressure for ZME (bar)
 static float zme_max_pressure = 200.0f;  /* maximum system pressure for ZME (bar) */
 static float zme_frequency = 1000.0f;  /* ZME PWM frequency in Hz */
 
+// Button states
+static uint8_t avto_active = 0;  // REMOVED but kept for compatibility
+// stop_active - REMOVED (Stop button deleted)
 
+// Auto mode control variables - REMOVED (AutoMode deleted)
 
 /* Helper function to draw a button with text - no borders, white background */
 void ILI9341_DrawControlButton(uint16_t x, uint16_t y, uint16_t width, uint16_t height, 
@@ -698,13 +552,11 @@ void ILI9341_ShowPressureControlMain(void)
 {
     pressure_control_page = 0;
     
-    // Clear screen - KRД°TД°K DГњZЖЏLД°Ећ: Qara rЙ™nglЙ™ doldur
+    // Clear screen
     ILI9341_FillScreen(ILI9341_COLOR_BLACK);
-    HAL_Delay(50);  // EkranД±n tЙ™mizlЙ™nmЙ™si ГјГ§Гјn gecikmЙ™
     
-    // Title at top - keep text fully visible
-    ILI9341_DrawString(50, 5, "HIGH PRESSURE", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
-    ILI9341_DrawString(90, 30, "CONTROL", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
+    // Title at top - "HIGH PRESSURE CONTROL"
+    ILI9341_DrawString(40, 15, "HIGH PRESSURE CONTROL", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
     
     // Pressure gauge in center - slightly below title
     ILI9341_DrawPressureGauge(160, 80, 35, current_pressure, 300.0);
@@ -737,7 +589,16 @@ void ILI9341_ShowPressureControlMain(void)
     
     // Control buttons (Menu) - below pressure display
     ILI9341_DrawControlButton(15, 150, 70, 35, ILI9341_COLOR_WHITE, "Menu", 1);
+    // Auto button - REMOVED (AutoMode deleted)
+    // Manual button - REMOVED (Manual mode deleted)
+    // Stop button - REMOVED (Stop button deleted)
     
+    /* Auto mode status display - REMOVED (AutoMode deleted) */
+    
+    /* Show target pressure (from Advanced system) - eyni status dəyişənini istifadə edirik */
+    char target_info[30];
+    sprintf(target_info, "SP: %.1f bar", status->target_pressure);
+    ILI9341_DrawString(20, 210, target_info, ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
     
     /* Show valve status (for NO valves: 0% = open, 100% = closed) */
     char valve_status[50];
@@ -758,8 +619,8 @@ void ILI9341_ShowMenuPage(void)
     // Title - moved down to avoid Back button
     ILI9341_DrawString(120, 60, "MENU", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 3);
     
-    // REMOVED: PWM button - PWM bГ¶lmЙ™si silindi
-    // REMOVED: Pressure Limit button - PRES LIM bГ¶lmЙ™si silindi
+    // REMOVED: PWM button - PWM bölməsi silindi
+    // REMOVED: Pressure Limit button - PRES LIM bölməsi silindi
     
     // Pressure Sensor Calibration button
     ILI9341_DrawControlButton(80, 90, 160, 35, ILI9341_COLOR_WHITE, "PRESS CAL", 2);
@@ -771,7 +632,7 @@ void ILI9341_ShowMenuPage(void)
     ILI9341_DrawControlButton(20, 20, 60, 30, ILI9341_COLOR_WHITE, "Back", 1);
 }
 
-/* REMOVED: PWM control page - PWM bГ¶lmЙ™si silindi
+/* REMOVED: PWM control page - PWM bölməsi silindi
 void ILI9341_ShowPWMPage(void)
 {
     pressure_control_page = 2;
@@ -796,7 +657,7 @@ void ILI9341_ShowPWMPage(void)
 }
 */
 
-/* REMOVED: Pressure limit page - PRES LIM bГ¶lmЙ™si silindi
+/* REMOVED: Pressure limit page - PRES LIM bölməsi silindi
 void ILI9341_ShowPressureLimitPage(void)
 {
     pressure_control_page = 3;
@@ -816,6 +677,7 @@ void ILI9341_ShowPressureLimitPage(void)
     // Range display
     ILI9341_DrawString(100, 120, "0 - 300 BAR", ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 2);
     
+    // Auto mode status on pressure limit page - REMOVED (AutoMode deleted)
     
     // Control buttons
     ILI9341_DrawControlButton(50, 160, 50, 40, ILI9341_COLOR_WHITE, "-10", 2);
@@ -828,7 +690,7 @@ void ILI9341_ShowPressureLimitPage(void)
 }
 */
 
-/* REMOVED: DRV PWM control page - PWM bГ¶lmЙ™si silindi
+/* REMOVED: DRV PWM control page - PWM bölməsi silindi
 void ILI9341_ShowDRVPWMPage(void)
 {
     pressure_control_page = 4;
@@ -861,7 +723,7 @@ void ILI9341_ShowDRVPWMPage(void)
 }
 */
 
-/* REMOVED: ZME PWM control page - PWM bГ¶lmЙ™si silindi
+/* REMOVED: ZME PWM control page - PWM bölməsi silindi
 void ILI9341_ShowZMEPWMPage(void)
 {
     pressure_control_page = 5;
@@ -894,7 +756,7 @@ void ILI9341_ShowZMEPWMPage(void)
 }
 */
 
-/* REMOVED: Motor PWM control page - PWM bГ¶lmЙ™si silindi
+/* REMOVED: Motor PWM control page - PWM bölməsi silindi
 void ILI9341_ShowMotorPWMPage(void)
 {
     pressure_control_page = 6;
@@ -971,7 +833,7 @@ void ILI9341_ShowPressureCalibrationPage(void)
     ILI9341_DrawString(60, 20, "PRESSURE SENSOR", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
     ILI9341_DrawString(80, 45, "CALIBRATION", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
     
-    // DГњZЖЏLД°Ећ: KalibrlЙ™mЙ™ dЙ™yЙ™rlЙ™rini Advanced sistemdЙ™n gГ¶tГјr
+    // DÜZƏLİŞ: Kalibrləmə dəyərlərini Advanced sistemdən götür
     extern CalibrationData_t g_calibration;
     
     // Update UI variables from Advanced system calibration (for consistency)
@@ -1039,9 +901,9 @@ void ILI9341_ShowPIDTuningPage(void)
     
     ILI9341_DrawString(85, 15, "PID TUNING", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
     
-    // KRД°TД°K DГњZЖЏLД°Ећ: Manual ADC oxunmasД± silindi - yalnД±z PID sistemindЙ™n tЙ™zyiq gГ¶tГјrГјlГјr
-    // PID sistemi hЙ™r 10ms-dЙ™ bir ADC oxuyur vЙ™ g_system_status.current_pressure-Д± yenilЙ™yir
-    // Bu, ADC kanallarД±nД±n ziddiyyЙ™tini vЙ™ loop qeyri-dЙ™qiqliyini aradan qaldД±rД±r
+    // KRİTİK DÜZƏLİŞ: Manual ADC oxunması silindi - yalnız PID sistemindən təzyiq götürülür
+    // PID sistemi hər 10ms-də bir ADC oxuyur və g_system_status.current_pressure-ı yeniləyir
+    // Bu, ADC kanallarının ziddiyyətini və loop qeyri-dəqiqliyini aradan qaldırır
     SystemStatus_t* status = AdvancedPressureControl_GetStatus();
     float current_pressure_val = status->current_pressure;
     
@@ -1053,9 +915,9 @@ void ILI9341_ShowPIDTuningPage(void)
     ILI9341_DrawString(20, 45, info, ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
     sprintf(info, "SP: %.1f BAR", status->target_pressure);
     ILI9341_DrawString(150, 45, info, ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 1);
-    // SP +/- controls - DГњZЖЏLД°Ећ: 10-10 dЙ™yiЕџir, dГјymЙ™lЙ™r daha bГ¶yГјk vЙ™ "-10"/"+10" gГ¶stЙ™rir
-    ILI9341_DrawControlButton(260, 40, 30, 30, ILI9341_COLOR_WHITE, "-10", 1);  // DГњZЖЏLД°Ећ: "-10" gГ¶stЙ™rir vЙ™ daha bГ¶yГјk
-    ILI9341_DrawControlButton(295, 40, 30, 30, ILI9341_COLOR_WHITE, "+10", 1);  // DГњZЖЏLД°Ећ: "+10" gГ¶stЙ™rir vЙ™ daha bГ¶yГјk
+    // SP +/- controls - DÜZƏLİŞ: 10-10 dəyişir, düymələr daha böyük və "-10"/"+10" göstərir
+    ILI9341_DrawControlButton(260, 40, 30, 30, ILI9341_COLOR_WHITE, "-10", 1);  // DÜZƏLİŞ: "-10" göstərir və daha böyük
+    ILI9341_DrawControlButton(295, 40, 30, 30, ILI9341_COLOR_WHITE, "+10", 1);  // DÜZƏLİŞ: "+10" göstərir və daha böyük
     
     // Read current PID from AdvancedPressureControl system
     float kp = g_pid_zme.Kp;
@@ -1065,7 +927,7 @@ void ILI9341_ShowPIDTuningPage(void)
     // Kp row
     ILI9341_DrawString(20, 80, "Kp:", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
     char val[24];
-    // DГњZЖЏLД°Ећ: Standart format - Kp ГјГ§Гјn 2 onluq yer (0.00 formatД±)
+    // DÜZƏLİŞ: Standart format - Kp üçün 2 onluq yer (0.00 formatı)
     sprintf(val, "%.2f", kp);
     ILI9341_DrawString(80, 80, val, ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 2);
     ILI9341_DrawControlButton(190, 75, 45, 30, ILI9341_COLOR_WHITE, "-", 2);
@@ -1073,7 +935,7 @@ void ILI9341_ShowPIDTuningPage(void)
     
     // Ki row
     ILI9341_DrawString(20, 120, "Ki:", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
-    // DГњZЖЏLД°Ећ: Standart format - Ki ГјГ§Гјn 4 onluq yer (0.0000 formatД±)
+    // DÜZƏLİŞ: Standart format - Ki üçün 4 onluq yer (0.0000 formatı)
     sprintf(val, "%.4f", ki);
     ILI9341_DrawString(80, 120, val, ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 2);
     ILI9341_DrawControlButton(190, 115, 45, 30, ILI9341_COLOR_WHITE, "-", 2);
@@ -1081,7 +943,7 @@ void ILI9341_ShowPIDTuningPage(void)
     
     // Kd row
     ILI9341_DrawString(20, 160, "Kd:", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
-    // DГњZЖЏLД°Ећ: Standart format - Kd ГјГ§Гјn 3 onluq yer (0.000 formatД±)
+    // DÜZƏLİŞ: Standart format - Kd üçün 3 onluq yer (0.000 formatı)
     sprintf(val, "%.3f", kd);
     ILI9341_DrawString(80, 160, val, ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 2);
     ILI9341_DrawControlButton(190, 155, 45, 30, ILI9341_COLOR_WHITE, "-", 2);
@@ -1177,11 +1039,14 @@ void ILI9341_HandlePressureControlTouch(void)
                     if (screen_x >= 15 && screen_x <= 85 && screen_y >= 150 && screen_y <= 185) {
                         ILI9341_ShowMenuPage();
                     }
+                    /* Auto button - REMOVED (AutoMode deleted) */
+                    /* Manual button - REMOVED (Manual mode deleted) */
+                    /* Stop button - REMOVED (Stop button deleted) */
                     break;
                     
                 case 1: // Menu page
-                    // REMOVED: PWM button - PWM bГ¶lmЙ™si silindi
-                    // REMOVED: Pressure Limit button - PRES LIM bГ¶lmЙ™si silindi
+                    // REMOVED: PWM button - PWM bölməsi silindi
+                    // REMOVED: Pressure Limit button - PRES LIM bölməsi silindi
                     
                     // Pressure Sensor Calibration button (80-240 x, 90-125 y)
                     if (screen_x >= 80 && screen_x <= 240 && screen_y >= 90 && screen_y <= 125) {
@@ -1198,8 +1063,8 @@ void ILI9341_HandlePressureControlTouch(void)
                     break;
                     
                 // REMOVED: case 2 (PWM page), case 4 (DRV PWM page), case 5 (ZME PWM page), case 6 (Motor PWM page)
-                // PWM bГ¶lmЙ™si tamamilЙ™ silindi
-                // REMOVED: case 3 (Pressure limit page) - PRES LIM bГ¶lmЙ™si silindi
+                // PWM bölməsi tamamilə silindi
+                // REMOVED: case 3 (Pressure limit page) - PRES LIM bölməsi silindi
                     
                 case 7: // Touch Calibration page
                     // Mode buttons
@@ -1226,18 +1091,18 @@ void ILI9341_HandlePressureControlTouch(void)
                     
                     /* CAL MIN button - larger button */
                     if (screen_x >= 20 && screen_x <= 110 && screen_y >= 190 && screen_y <= 230) {
-                        /* KRД°TД°K DГњZЖЏLД°Ећ: ADC oxunmasД± PID sistemindЙ™n gГ¶tГјrГјlГјr - ADC bloklanmasД± yoxdur */
-                        /* PID sistemi hЙ™r 10ms-dЙ™ bir ADC oxuyur vЙ™ Status strukturuna yazД±r */
+                        /* KRİTİK DÜZƏLİŞ: ADC oxunması PID sistemindən götürülür - ADC bloklanması yoxdur */
+                        /* PID sistemi hər 10ms-də bir ADC oxuyur və Status strukturuna yazır */
                         SystemStatus_t* cal_status = AdvancedPressureControl_GetStatus();
-                        uint16_t adc_value = cal_status->raw_adc_value;  // Xam ADC dЙ™yЙ™ri Status-dan
+                        uint16_t adc_value = cal_status->raw_adc_value;  // Xam ADC dəyəri Status-dan
                         adc_min = adc_value;  /* Set as minimum ADC value */
-                        min_pressure = 0.0f; /* DГњZЖЏLД°Ећ: Set pressure to 0.0 bar (sД±fД±r tЙ™zyiq) */
+                        min_pressure = 0.0f; /* DÜZƏLİŞ: Set pressure to 0.0 bar (sıfır təzyiq) */
                         calibration_mode = 0; /* Reset calibration mode */
                         
                         /* Show confirmation */
                         ILI9341_DrawString(20, 200, "MIN CALIBRATED!", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 1);
                         
-                        /* DГњZЖЏLД°Ећ: KalibrlЙ™mЙ™ dЙ™yЙ™rlЙ™rini dЙ™rhal Advanced sistemЙ™ Г¶tГјr */
+                        /* DÜZƏLİŞ: Kalibrləmə dəyərlərini dərhal Advanced sistemə ötür */
                         extern CalibrationData_t g_calibration;
                         g_calibration.adc_min = (float)adc_min;
                         g_calibration.pressure_min = min_pressure;  // 0.0 bar
@@ -1249,24 +1114,23 @@ void ILI9341_HandlePressureControlTouch(void)
                                 printf("MIN Calibration updated - ADC: %d, Pressure: %.2f bar, Slope: %.6f, Offset: %.2f\r\n",
                                        adc_min, min_pressure, g_calibration.slope, g_calibration.offset);
                             }
-                        PressureControlConfig_UpdateCalibrationCache(&g_calibration);
-                        /* KRД°TД°K DГњZЖЏLД°Ећ: HAL_ADC_Stop() silindi - artД±q manual ADC oxunmasД± yoxdur */
+                        /* KRİTİK DÜZƏLİŞ: HAL_ADC_Stop() silindi - artıq manual ADC oxunması yoxdur */
                         ILI9341_ShowPressureCalibrationPage(); /* Refresh page */
                     }
                     /* CAL MAX button - larger button */
                     else if (screen_x >= 120 && screen_x <= 210 && screen_y >= 190 && screen_y <= 230) {
-                        /* KRД°TД°K DГњZЖЏLД°Ећ: ADC oxunmasД± PID sistemindЙ™n gГ¶tГјrГјlГјr - ADC bloklanmasД± yoxdur */
-                        /* PID sistemi hЙ™r 10ms-dЙ™ bir ADC oxuyur vЙ™ Status strukturuna yazД±r */
+                        /* KRİTİK DÜZƏLİŞ: ADC oxunması PID sistemindən götürülür - ADC bloklanması yoxdur */
+                        /* PID sistemi hər 10ms-də bir ADC oxuyur və Status strukturuna yazır */
                         SystemStatus_t* cal_status = AdvancedPressureControl_GetStatus();
-                        uint16_t adc_value = cal_status->raw_adc_value;  // Xam ADC dЙ™yЙ™ri Status-dan
+                        uint16_t adc_value = cal_status->raw_adc_value;  // Xam ADC dəyəri Status-dan
                         adc_max = adc_value;  /* Set as maximum ADC value */
-                        max_pressure = 300.0f; /* Set pressure to 300.0 bar (full range) - DГњZЖЏLД°Ећ: float literal */
+                        max_pressure = 300.0f; /* Set pressure to 300.0 bar (full range) - DÜZƏLİŞ: float literal */
                         calibration_mode = 0; /* Reset calibration mode */
                         
                         /* Show confirmation */
                         ILI9341_DrawString(110, 200, "MAX CALIBRATED!", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 1);
                         
-                        /* DГњZЖЏLД°Ећ: KalibrlЙ™mЙ™ dЙ™yЙ™rlЙ™rini dЙ™rhal Advanced sistemЙ™ Г¶tГјr */
+                        /* DÜZƏLİŞ: Kalibrləmə dəyərlərini dərhal Advanced sistemə ötür */
                         extern CalibrationData_t g_calibration;
                             g_calibration.adc_max = (float)adc_max;
                             g_calibration.pressure_max = max_pressure;
@@ -1278,15 +1142,14 @@ void ILI9341_HandlePressureControlTouch(void)
                                 printf("MAX Calibration updated - ADC: %d, Pressure: %.2f bar, Slope: %.6f, Offset: %.2f\r\n",
                                        adc_max, max_pressure, g_calibration.slope, g_calibration.offset);
                             }
-                        PressureControlConfig_UpdateCalibrationCache(&g_calibration);
-                        /* KRД°TД°K DГњZЖЏLД°Ећ: HAL_ADC_Stop() silindi - artД±q manual ADC oxunmasД± yoxdur */
-                        /* ADC dЙ™yЙ™ri Status-dan gГ¶tГјrГјlГјr, ona gГ¶rЙ™ dЙ™ Stop() lazД±m deyil */
+                        /* KRİTİK DÜZƏLİŞ: HAL_ADC_Stop() silindi - artıq manual ADC oxunması yoxdur */
+                        /* ADC dəyəri Status-dan götürülür, ona görə də Stop() lazım deyil */
                         ILI9341_ShowPressureCalibrationPage(); /* Refresh page */
                     }
                     /* SAVE button - larger button */
                     else if (screen_x >= 220 && screen_x <= 310 && screen_y >= 190 && screen_y <= 230) {
-                        /* DГњZЖЏLД°Ећ: Advanced sistem kalibrlЙ™mЙ™ funksiyasД±nД± istifadЙ™ et */
-                        // UI-dan kalibrlЙ™mЙ™ dЙ™yЙ™rlЙ™rini Advanced sistemЙ™ Г¶tГјr
+                        /* DÜZƏLİŞ: Advanced sistem kalibrləmə funksiyasını istifadə et */
+                        // UI-dan kalibrləmə dəyərlərini Advanced sistemə ötür
                         extern uint16_t adc_min, adc_max;
                         extern float min_pressure, max_pressure;
                         
@@ -1295,7 +1158,7 @@ void ILI9341_HandlePressureControlTouch(void)
                             ILI9341_DrawString(200, 200, "ERROR: Invalid ADC range!", ILI9341_COLOR_RED, ILI9341_COLOR_BLACK, 1);
                             HAL_Delay(2000);
                             ILI9341_ShowPressureCalibrationPage();
-                            // DГњZЖЏLД°Ећ: break yerinЙ™ return - if-else blokunun iГ§indЙ™ break istifadЙ™ oluna bilmЙ™z
+                            // DÜZƏLİŞ: break yerinə return - if-else blokunun içində break istifadə oluna bilməz
                             return;
                         }
                         
@@ -1303,14 +1166,13 @@ void ILI9341_HandlePressureControlTouch(void)
                         extern CalibrationData_t g_calibration;
                         g_calibration.adc_min = (float)adc_min;
                         g_calibration.adc_max = (float)adc_max;
-                        g_calibration.pressure_min = min_pressure;  // DГњZЖЏLД°Ећ: 0.0 bar olmalД±dД±r
+                        g_calibration.pressure_min = min_pressure;  // DÜZƏLİŞ: 0.0 bar olmalıdır
                         g_calibration.pressure_max = max_pressure;
                         
                         // Calculate slope and offset
                         g_calibration.slope = (max_pressure - min_pressure) / (float)(adc_max - adc_min);
-                        g_calibration.offset = min_pressure - (g_calibration.slope * (float)adc_min);  // DГњZЖЏLД°Ећ: min_pressure = 0.0f
+                        g_calibration.offset = min_pressure - (g_calibration.slope * (float)adc_min);  // DÜZƏLİŞ: min_pressure = 0.0f
                         g_calibration.calibrated = true;
-                        PressureControlConfig_UpdateCalibrationCache(&g_calibration);
                         
                         printf("Calibration updated from UI - ADC: %.0f-%.0f, Pressure: %.2f-%.2f bar, Slope: %.6f, Offset: %.2f\r\n",
                                g_calibration.adc_min, g_calibration.adc_max, 
@@ -1330,70 +1192,70 @@ void ILI9341_HandlePressureControlTouch(void)
                     break;
 
                 case 9: // PID Tuning page
-                    // SP - button (260-290, 40-70) - DГњZЖЏLД°Ећ: 10-10 dЙ™yiЕџir, dГјymЙ™ daha bГ¶yГјk
+                    // SP - button (260-290, 40-70) - DÜZƏLİŞ: 10-10 dəyişir, düymə daha böyük
                     if (screen_x >= 260 && screen_x <= 290 && screen_y >= 40 && screen_y <= 70) {
                         SystemStatus_t* status = AdvancedPressureControl_GetStatus();
-                        float new_sp = status->target_pressure - 10.0f;  // DГњZЖЏLД°Ећ: 1.0f Й™vЙ™zinЙ™ 10.0f
+                        float new_sp = status->target_pressure - 10.0f;  // DÜZƏLİŞ: 1.0f əvəzinə 10.0f
                         if (new_sp < 0.0f) new_sp = 0.0f;
                         AdvancedPressureControl_SetTargetPressure(new_sp);
-                        // REMOVED: pressure_limit = new_sp; // ArtД±q pressure_limit yoxdur
-                        ILI9341_ShowPIDTuningPage();  // SГјrЙ™tli yenilЙ™mЙ™ - delay yoxdur
+                        // REMOVED: pressure_limit = new_sp; // Artıq pressure_limit yoxdur
+                        ILI9341_ShowPIDTuningPage();  // Sürətli yeniləmə - delay yoxdur
                     }
-                    // SP + button (295-325, 40-70) - DГњZЖЏLД°Ећ: 10-10 dЙ™yiЕџir, dГјymЙ™ daha bГ¶yГјk
+                    // SP + button (295-325, 40-70) - DÜZƏLİŞ: 10-10 dəyişir, düymə daha böyük
                     else if (screen_x >= 295 && screen_x <= 325 && screen_y >= 40 && screen_y <= 70) {
                         SystemStatus_t* status = AdvancedPressureControl_GetStatus();
-                        float new_sp = status->target_pressure + 10.0f;  // DГњZЖЏLД°Ећ: 1.0f Й™vЙ™zinЙ™ 10.0f
+                        float new_sp = status->target_pressure + 10.0f;  // DÜZƏLİŞ: 1.0f əvəzinə 10.0f
                         if (new_sp > 300.0f) new_sp = 300.0f;
                         AdvancedPressureControl_SetTargetPressure(new_sp);
-                        // REMOVED: pressure_limit = new_sp; // ArtД±q pressure_limit yoxdur
-                        ILI9341_ShowPIDTuningPage();  // SГјrЙ™tli yenilЙ™mЙ™ - delay yoxdur
+                        // REMOVED: pressure_limit = new_sp; // Artıq pressure_limit yoxdur
+                        ILI9341_ShowPIDTuningPage();  // Sürətli yeniləmə - delay yoxdur
                     }
                     // Layout coordinates must match ShowPIDTuningPage
                     // Kp - button (190-235, 75-105)
                     else if (screen_x >= 190 && screen_x <= 235 && screen_y >= 75 && screen_y <= 105) {
-                        // DГњZЖЏLД°Ећ: Kp addД±mД± 0.1f-dЙ™n 0.05f-Й™ dЙ™yiЕџdirildi (daha incЙ™ tЙ™nzimlЙ™mЙ™)
-                        // 0.1f addД±mД± kiГ§ik dЙ™yЙ™rlЙ™r ГјГ§Гјn Г§ox qaba idi (mЙ™sЙ™lЙ™n, 0.1 в†’ 0.2 ikiqat artД±m)
+                        // DÜZƏLİŞ: Kp addımı 0.1f-dən 0.05f-ə dəyişdirildi (daha incə tənzimləmə)
+                        // 0.1f addımı kiçik dəyərlər üçün çox qaba idi (məsələn, 0.1 → 0.2 ikiqat artım)
                         float new_kp = g_pid_zme.Kp - 0.05f;
                         if (new_kp < 0.0f) new_kp = 0.0f;
                         // Update both ZME and DRV PID (they use same parameters)
                         AdvancedPressureControl_SetPIDParams(&g_pid_zme, new_kp, g_pid_zme.Ki, g_pid_zme.Kd);
                         AdvancedPressureControl_SetPIDParams(&g_pid_drv, new_kp, g_pid_drv.Ki, g_pid_drv.Kd);
-                        printf("Kp dЙ™yiЕџdirildi: %.2f\r\n", new_kp);  // Debug mesajД± (format 0.2f-Й™ dЙ™yiЕџdirildi)
+                        printf("Kp dəyişdirildi: %.2f\r\n", new_kp);  // Debug mesajı (format 0.2f-ə dəyişdirildi)
                         ILI9341_ShowPIDTuningPage();
                     }
                     // Kp + button (245-290, 75-105)
                     else if (screen_x >= 245 && screen_x <= 290 && screen_y >= 75 && screen_y <= 105) {
-                        // DГњZЖЏLД°Ећ: Kp addД±mД± 0.1f-dЙ™n 0.05f-Й™ dЙ™yiЕџdirildi (daha incЙ™ tЙ™nzimlЙ™mЙ™)
+                        // DÜZƏLİŞ: Kp addımı 0.1f-dən 0.05f-ə dəyişdirildi (daha incə tənzimləmə)
                         float new_kp = g_pid_zme.Kp + 0.05f;
                         if (new_kp > 10.0f) new_kp = 10.0f;
                         // Update both ZME and DRV PID (they use same parameters)
                         AdvancedPressureControl_SetPIDParams(&g_pid_zme, new_kp, g_pid_zme.Ki, g_pid_zme.Kd);
                         AdvancedPressureControl_SetPIDParams(&g_pid_drv, new_kp, g_pid_drv.Ki, g_pid_drv.Kd);
-                        printf("Kp dЙ™yiЕџdirildi: %.2f\r\n", new_kp);  // Debug mesajД± (format 0.2f-Й™ dЙ™yiЕџdirildi)
+                        printf("Kp dəyişdirildi: %.2f\r\n", new_kp);  // Debug mesajı (format 0.2f-ə dəyişdirildi)
                         ILI9341_ShowPIDTuningPage();
                     }
                     // Ki - button (190-235, 115-145)
                     else if (screen_x >= 190 && screen_x <= 235 && screen_y >= 115 && screen_y <= 145) {
-                        // DГњZЖЏLД°Ећ: Ki addД±mД± 0.001f-dЙ™n 0.005f-Й™ dЙ™yiЕџdirildi (daha sГјrЙ™tli tЙ™nzimlЙ™mЙ™)
-                        // 0.001f addД±mД± Г§ox kiГ§ikdir vЙ™ tЙ™nzimlЙ™mЙ™ni Г§ox yavaЕџ edir
-                        // 0.005f addД±mД± Ki dЙ™yЙ™rlЙ™ri 0.05 vЙ™ ya daha bГ¶yГјk olduqda daha praktikdir
+                        // DÜZƏLİŞ: Ki addımı 0.001f-dən 0.005f-ə dəyişdirildi (daha sürətli tənzimləmə)
+                        // 0.001f addımı çox kiçikdir və tənzimləməni çox yavaş edir
+                        // 0.005f addımı Ki dəyərləri 0.05 və ya daha böyük olduqda daha praktikdir
                         float new_ki = g_pid_zme.Ki - 0.005f;
                         if (new_ki < 0.0f) new_ki = 0.0f;
                         // Update both ZME and DRV PID (they use same parameters)
                         AdvancedPressureControl_SetPIDParams(&g_pid_zme, g_pid_zme.Kp, new_ki, g_pid_zme.Kd);
                         AdvancedPressureControl_SetPIDParams(&g_pid_drv, g_pid_drv.Kp, new_ki, g_pid_drv.Kd);
-                        printf("Ki dЙ™yiЕџdirildi: %.4f\r\n", new_ki);  // Debug mesajД±
+                        printf("Ki dəyişdirildi: %.4f\r\n", new_ki);  // Debug mesajı
                         ILI9341_ShowPIDTuningPage();
                     }
                     // Ki + button (245-290, 115-145)
                     else if (screen_x >= 245 && screen_x <= 290 && screen_y >= 115 && screen_y <= 145) {
-                        // DГњZЖЏLД°Ећ: Ki addД±mД± 0.001f-dЙ™n 0.005f-Й™ dЙ™yiЕџdirildi (daha sГјrЙ™tli tЙ™nzimlЙ™mЙ™)
+                        // DÜZƏLİŞ: Ki addımı 0.001f-dən 0.005f-ə dəyişdirildi (daha sürətli tənzimləmə)
                         float new_ki = g_pid_zme.Ki + 0.005f;
                         if (new_ki > 1.0f) new_ki = 1.0f;
                         // Update both ZME and DRV PID (they use same parameters)
                         AdvancedPressureControl_SetPIDParams(&g_pid_zme, g_pid_zme.Kp, new_ki, g_pid_zme.Kd);
                         AdvancedPressureControl_SetPIDParams(&g_pid_drv, g_pid_drv.Kp, new_ki, g_pid_drv.Kd);
-                        printf("Ki dЙ™yiЕџdirildi: %.4f\r\n", new_ki);  // Debug mesajД±
+                        printf("Ki dəyişdirildi: %.4f\r\n", new_ki);  // Debug mesajı
                         ILI9341_ShowPIDTuningPage();
                     }
                     // Kd - button (190-235, 155-185)
@@ -1464,9 +1326,9 @@ void ILI9341_PressureControlLogic(void)
     static uint32_t last_pid_update_time = 0;
     uint32_t current_time = HAL_GetTick();
     
-    // KRД°TД°K DГњZЖЏLД°Ећ: Target SP dЙ™yiЕџЙ™n kimi Flash-a yazma mЙ™ntiqini silin
-    // ArtД±q AdvancedPressureControl Г¶zГј target_pressure-i yaddaЕџdan oxuyur
-    // vЙ™ yalnД±z Save dГјymЙ™si basД±ldД±qda yazmalД±dД±r (PID Tuning sЙ™hifЙ™sindЙ™)
+    // KRİTİK DÜZƏLİŞ: Target SP dəyişən kimi Flash-a yazma məntiqini silin
+    // Artıq AdvancedPressureControl özü target_pressure-i yaddaşdan oxuyur
+    // və yalnız Save düyməsi basıldıqda yazmalıdır (PID Tuning səhifəsində)
     
     /* Run control logic every 100ms (Update only) */
     if (current_time - last_control_time >= 100) {
@@ -1480,8 +1342,8 @@ void ILI9341_PressureControlLogic(void)
         drv_percent = status->drv_pwm_percent;
         motor_percent = status->motor_pwm_percent;
         
-        /* Motor sГјrЙ™ti SP-yЙ™ gГ¶rЙ™ tЙ™nzimlЙ™nir - bu mЙ™ntiq AdvancedPressureControl_Step()-dЙ™dir.
-         * Bizim burada yalnД±z statusu yenilЙ™mЙ™yimiz lazД±mdД±r. */
+        /* Motor sürəti SP-yə görə tənzimlənir - bu məntiq AdvancedPressureControl_Step()-dədir.
+         * Bizim burada yalnız statusu yeniləməyimiz lazımdır. */
         if (motor_percent < 0.0f) motor_percent = 0.0f;
         if (motor_percent > 100.0f) motor_percent = 100.0f;
         
@@ -1498,11 +1360,13 @@ void ILI9341_PressureControlLogic(void)
         last_pid_update_time = current_time;
         
         if (pressure_control_page == 9) { // PID Tuning page
-            /* DГњZЖЏLД°Ећ: AdvancedPressureControl sistemindЙ™n tЙ™zyiq oxu (kalibrlЙ™mЙ™ sinxronizasiyasД± ГјГ§Гјn) */
-            /* DEPRECATED: PressureSensor_ConvertToPressure artД±q istifadЙ™ olunmur */
+            /* DÜZƏLİŞ: AdvancedPressureControl sistemindən təzyiq oxu (kalibrləmə sinxronizasiyası üçün) */
+            /* DEPRECATED: PressureSensor_ConvertToPressure artıq istifadə olunmur */
+            extern uint16_t adc_value;  // Will read fresh
+            uint16_t adc_val = 0;
             
-            // KRД°TД°K DГњZЖЏLД°Ећ: Manual ADC oxunmasД± silindi - yalnД±z PID sistemindЙ™n tЙ™zyiq gГ¶tГјrГјlГјr
-            // PID sistemi hЙ™r 10ms-dЙ™ bir ADC oxuyur vЙ™ g_system_status.current_pressure-Д± yenilЙ™yir
+            // KRİTİK DÜZƏLİŞ: Manual ADC oxunması silindi - yalnız PID sistemindən təzyiq götürülür
+            // PID sistemi hər 10ms-də bir ADC oxuyur və g_system_status.current_pressure-ı yeniləyir
             SystemStatus_t* status = AdvancedPressureControl_GetStatus();
             float current_pressure_val = status->current_pressure;
             
@@ -1587,25 +1451,21 @@ void PWM_SetZMEDutyCycle(float duty_percent)
 
 void PWM_SetMotorFrequency(float frequency_hz)
 {
-    if (frequency_hz < 100.0f) frequency_hz = 100.0f;
-    if (frequency_hz > 10000.0f) frequency_hz = 10000.0f;
+    if (frequency_hz < 100.0) frequency_hz = 100.0;
+    if (frequency_hz > 10000.0) frequency_hz = 10000.0;
     
-    /* TIM3 runs from a 1 MHz base clock (Prescaler = 83). Keep ARR within 16-bit. */
-    const uint32_t timer_clock_hz = 1000000U;
-    uint32_t desired_period = (uint32_t)(timer_clock_hz / frequency_hz);
-    if (desired_period == 0U) {
-        desired_period = 1U;
-    }
-    uint32_t arr = desired_period - 1U;
-    if (arr > 0xFFFFU) {
-        arr = 0xFFFFU;
-    }
+    /* Calculate period for desired frequency */
+    /* Timer clock: 84MHz (APB1 * 2) */
+    uint32_t timer_clock = 84000000; /* 84MHz */
+    uint32_t period = (timer_clock / frequency_hz) - 1;
     
-    __HAL_TIM_SET_AUTORELOAD(&htim3, arr);
+    /* Update timer period */
+    __HAL_TIM_SET_AUTORELOAD(&htim3, period);
     
+    /* Update global variable */
     motor_frequency = frequency_hz;
     
-    /* Recalculate duty cycle with new period so PWM keeps the same percentage */
+    /* Recalculate duty cycle with new period */
     PWM_SetMotorDutyCycle(motor_duty_cycle);
 }
 
@@ -1683,9 +1543,9 @@ void PressureSensor_CheckPinConfiguration(void)
 
 void PressureSensor_Calibrate(void)
 {
-    /* KRД°TД°K DГњZЖЏLД°Ећ: ADC oxunmasД± PID sistemindЙ™n gГ¶tГјrГјlГјr - ADC bloklanmasД± yoxdur */
+    /* KRİTİK DÜZƏLİŞ: ADC oxunması PID sistemindən götürülür - ADC bloklanması yoxdur */
     SystemStatus_t* status = AdvancedPressureControl_GetStatus();
-    uint16_t adc_value = status->raw_adc_value;  // Xam ADC dЙ™yЙ™ri Status-dan
+    uint16_t adc_value = status->raw_adc_value;  // Xam ADC dəyəri Status-dan
     
     if (calibration_mode == 1) {
         /* Calibrate minimum */
@@ -1700,11 +1560,11 @@ void PressureSensor_Calibrate(void)
 }
 
 /* 
- * QEYD: KalibrlЙ™mЙ™ mЙ™ntiqi yalnД±z Advanced sistem daxilindЙ™ (advanced_pressure_control.c)
- * saxlanД±lД±r. UI funksiyalarД± Advanced sistemin funksiyalarД±nД± Г§aДџД±rД±r:
- * - AdvancedPressureControl_LoadCalibration() - Flash-dan kalibrlЙ™mЙ™ yГјklЙ™mЙ™
- * - AdvancedPressureControl_SaveCalibration() - Flash-a kalibrlЙ™mЙ™ yazma
- * - AdvancedPressureControl_ReadPressure() - TЙ™zyiq oxuma (kalibrlЙ™mЙ™ ilЙ™)
+ * QEYD: Kalibrləmə məntiqi yalnız Advanced sistem daxilində (advanced_pressure_control.c)
+ * saxlanılır. UI funksiyaları Advanced sistemin funksiyalarını çağırır:
+ * - AdvancedPressureControl_LoadCalibration() - Flash-dan kalibrləmə yükləmə
+ * - AdvancedPressureControl_SaveCalibration() - Flash-a kalibrləmə yazma
+ * - AdvancedPressureControl_ReadPressure() - Təzyiq oxuma (kalibrləmə ilə)
  */
 
 /* Convert pressure to motor percentage (0-100%) */
@@ -1780,14 +1640,14 @@ float PressureToZMEPercent(float pressure)
 /* IMPROVED debug function to check sensor status */
 void PressureSensor_DebugStatus(void)
 {
-    /* KRД°TД°K DГњZЖЏLД°Ећ: ADC oxunmasД± PID sistemindЙ™n gГ¶tГјrГјlГјr - ADC bloklanmasД± yoxdur */
+    /* KRİTİK DÜZƏLİŞ: ADC oxunması PID sistemindən götürülür - ADC bloklanması yoxdur */
     SystemStatus_t* status = AdvancedPressureControl_GetStatus();
-    uint16_t raw_adc = status->raw_adc_value;  // Xam ADC dЙ™yЙ™ri Status-dan
+    uint16_t raw_adc = status->raw_adc_value;  // Xam ADC dəyəri Status-dan
     
     /* Calculate voltage: V = (ADC / 4095) * 3.3V */
     float voltage = (float)raw_adc * 3.3f / 4095.0f;
     
-    /* PID sistemindЙ™n tЙ™zyiq dЙ™yЙ™rini gГ¶tГјr */
+    /* PID sistemindən təzyiq dəyərini götür */
     float pressure = status->current_pressure;
     
     /* Check for sensor problems - only show critical errors */
@@ -1803,8 +1663,8 @@ void PressureSensor_DebugStatus(void)
         }
     }
     /* Normal reading - no debug clutter on main page */
-    /* KRД°TД°K DГњZЖЏLД°Ећ: HAL_ADC_Stop() silindi - artД±q manual ADC oxunmasД± yoxdur */
-    /* ADC dЙ™yЙ™ri Status-dan gГ¶tГјrГјlГјr, ona gГ¶rЙ™ dЙ™ Stop() lazД±m deyil */
+    /* KRİTİK DÜZƏLİŞ: HAL_ADC_Stop() silindi - artıq manual ADC oxunması yoxdur */
+    /* ADC dəyəri Status-dan götürülür, ona görə də Stop() lazım deyil */
 }
 
 void ILI9341_HandleCalibrationTouch(void)
@@ -1818,16 +1678,16 @@ void ILI9341_HandleCalibrationTouch(void)
         if (current_time - last_adc_update > 200) { /* Update every 200ms for better responsiveness */
             last_adc_update = current_time;
             
-            /* KRД°TД°K DГњZЖЏLД°Ећ: ADC oxunmasД± PID sistemindЙ™n gГ¶tГјrГјlГјr - ADC bloklanmasД± yoxdur */
+            /* KRİTİK DÜZƏLİŞ: ADC oxunması PID sistemindən götürülür - ADC bloklanması yoxdur */
             SystemStatus_t* status = AdvancedPressureControl_GetStatus();
-            uint16_t adc_value = status->raw_adc_value;  // Xam ADC dЙ™yЙ™ri Status-dan
+            uint16_t adc_value = status->raw_adc_value;  // Xam ADC dəyəri Status-dan
             
             /* Update display with current ADC value */
             char adc_str[30];
             sprintf(adc_str, "ADC: %d", adc_value);
             ILI9341_DrawString(20, 170, adc_str, ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
             
-            /* PID sistemindЙ™n tЙ™zyiq dЙ™yЙ™rini gГ¶tГјr */
+            /* PID sistemindən təzyiq dəyərini götür */
             float current_pressure = status->current_pressure;
             char pressure_str[30];
             sprintf(pressure_str, "Pressure: %.1f bar", current_pressure);
@@ -1837,9 +1697,12 @@ void ILI9341_HandleCalibrationTouch(void)
             char debug_cal_str[50];
             sprintf(debug_cal_str, "Cal: %d-%d -> %.1f-%.1f", adc_min, adc_max, min_pressure, max_pressure);
             ILI9341_DrawString(20, 190, debug_cal_str, ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 1);
-            /* KRД°TД°K DГњZЖЏLД°Ећ: HAL_ADC_Stop() silindi - artД±q manual ADC oxunmasД± yoxdur */
-            /* ADC dЙ™yЙ™ri Status-dan gГ¶tГјrГјlГјr, ona gГ¶rЙ™ dЙ™ Stop() lazД±m deyil */
+            /* KRİTİK DÜZƏLİŞ: HAL_ADC_Stop() silindi - artıq manual ADC oxunması yoxdur */
+            /* ADC dəyəri Status-dan götürülür, ona görə də Stop() lazım deyil */
         }
     }
 }
 
+/* ==================== AUTO MODE CONTROL FUNCTIONS ==================== */
+
+/* AutoMode functions - REMOVED (AutoMode deleted) */
