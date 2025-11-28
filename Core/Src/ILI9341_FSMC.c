@@ -974,6 +974,11 @@ void ILI9341_ShowPressureCalibrationPage(void)
     // DÜZƏLİŞ: Kalibrləmə dəyərlərini Advanced sistemdən götür
     extern CalibrationData_t g_calibration;
     
+    // KRİTİK DÜZƏLİŞ: Voltage dəyərləri həmişə hardware spesifikasiyasına uyğun olmalıdır
+    // Sensor: 0.5V (0 bar) -> 5.0V (300 bar) - bu dəyərlər dəyişməzdir
+    min_voltage = 0.5f;   // Həmişə 0.5V
+    max_voltage = 5.0f;    // Həmişə 5.0V (flash-dakı köhnə 5.24V dəyərinə baxmayaraq)
+    
     // Update UI variables from Advanced system calibration (for consistency)
     bool calibration_valid = ILI9341_IsPressureCalibrationValid(&g_calibration);
     if (!calibration_valid) {
