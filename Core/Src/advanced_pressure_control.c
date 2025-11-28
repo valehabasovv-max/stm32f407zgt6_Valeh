@@ -115,6 +115,8 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
     static uint16_t last_valid_adc = ADC_MIN;
     static uint32_t error_count = 0;
     static uint32_t debug_count = 0;
+    static uint16_t last_read_value = 0;
+    static uint32_t same_value_count = 0;
     debug_count++;
 
     /* DÜZƏLİŞ: ADC state yoxlaması - Continuous mode-da ADC davamlı işləməlidir
@@ -133,7 +135,9 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
             return last_valid_adc;
         } else {
             // ADC yenidən başladıldı - qısa gecikmə ver ki, konversiya başlasın
-            HAL_Delay(1);
+            HAL_Delay(2);
+            // EOC flag-ini təmizlə ki, yeni konversiyanı gözləyək
+            __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_EOC);
         }
     }
 
@@ -144,33 +148,69 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
         if (error_count < 10 || (error_count % 100 == 0)) {
             printf("WARNING[%lu]: ADC Overrun detected and cleared\r\n", debug_count);
         }
+        // Overrun olduqda ADC-ni yenidən başlat
+        HAL_ADC_Stop(&hadc3);
+        HAL_Delay(2);
+        HAL_ADC_Start(&hadc3);
+        __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_EOC);
     }
 
-    /* KRİTİK DÜZƏLİŞ: Konversiyanın bitməsini yoxla */
-    /* Continuous mode-da ADC davamlı konversiya edir, EOC flag-ini yoxlamaq lazımdır */
-    /* Əgər konversiya hazır deyilsə, qısa müddət gözlə və yenidən yoxla */
+    /* KRİTİK DÜZƏLİŞ: Continuous mode-da yeni konversiyanın bitməsini gözlə */
+    /* Əvvəlcə mövcud EOC flag-ini təmizlə ki, yeni konversiyanı gözləyək */
+    __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_EOC);
+    
+    /* Yeni konversiyanın bitməsini gözlə */
     uint32_t start_time = HAL_GetTick();
-    uint32_t timeout_ms = 20;  // DÜZƏLİŞ: 10ms-dən 20ms-ə artırıldı
+    uint32_t timeout_ms = 50;  // DÜZƏLİŞ: Continuous mode üçün daha uzun timeout
     uint32_t wait_count = 0;
+    
+    // Yeni EOC flag-inin qalxmasını gözlə
     while (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC) == RESET) {
         wait_count++;
         if ((HAL_GetTick() - start_time) >= timeout_ms) {
             error_count++;
             if (error_count < 10 || (error_count % 100 == 0)) {
-                printf("ERROR[%lu]: ADC conversion timeout (waited %lu cycles), state=0x%08lX, last_valid=%u\r\n", 
-                       debug_count, wait_count, HAL_ADC_GetState(&hadc3), last_valid_adc);
+                printf("ERROR[%lu]: ADC conversion timeout (waited %lu ms), state=0x%08lX, last_valid=%u\r\n", 
+                       debug_count, timeout_ms, HAL_ADC_GetState(&hadc3), last_valid_adc);
             }
-            // KRİTİK DÜZƏLİŞ: Timeout olduqda ADC-ni yenidən başlat
+            // KRİTİK DÜZƏLİŞ: Timeout olduqda ADC-ni tam yenidən başlat
             HAL_ADC_Stop(&hadc3);
-            HAL_Delay(1);
-            HAL_ADC_Start(&hadc3);
+            HAL_Delay(5);
+            if (HAL_ADC_Start(&hadc3) == HAL_OK) {
+                HAL_Delay(2);
+                __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_EOC);
+            }
             return last_valid_adc;
         }
+        // Qısa gecikmə ver ki, CPU bloklanmasın
+        HAL_Delay(1);
     }
 
     /* EOC flag təmizlə və dəyəri oxu */
     __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_EOC);
     uint16_t adc_value = (uint16_t)HAL_ADC_GetValue(&hadc3);
+    
+    // KRİTİK DÜZƏLİŞ: Eyni dəyərin ardıcıl oxunmasını yoxla
+    if (adc_value == last_read_value && debug_count > 5) {
+        // Əgər eyni dəyər 10 dəfədən çox oxunursa, ADC-ni yenidən başlat
+        same_value_count++;
+        if (same_value_count > 10) {
+            printf("WARNING[%lu]: ADC stuck at value %u for %lu reads, restarting ADC\r\n", 
+                   debug_count, adc_value, same_value_count);
+            HAL_ADC_Stop(&hadc3);
+            HAL_Delay(5);
+            HAL_ADC_Start(&hadc3);
+            HAL_Delay(2);
+            __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_EOC);
+            same_value_count = 0;
+            // last_read_value-i sıfırla ki, yenidən yoxlama aparılsın
+            last_read_value = 0;
+        }
+    } else {
+        // Dəyər dəyişdi, counter-i sıfırla
+        same_value_count = 0;
+    }
+    last_read_value = adc_value;
     
     /* KRİTİK DÜZƏLİŞ: 12-bit ADC maksimum dəyəri 4095-dir (2^12 - 1)
      * Bəzən HAL_ADC_GetValue() qeyri-etibarlı dəyərlər qaytara bilər
