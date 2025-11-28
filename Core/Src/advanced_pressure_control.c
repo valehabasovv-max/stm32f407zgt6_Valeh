@@ -115,12 +115,16 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
     static uint16_t last_valid_adc = ADC_MIN;
     static uint32_t error_count = 0;
 
-    /* Əgər hansısa səbəbdən ADC dayanıbsa, onu yenidən işə sal */
-    if ((HAL_ADC_GetState(&hadc3) & HAL_ADC_STATE_REG_BUSY) == 0U) {
+    /* DÜZƏLİŞ: ADC state yoxlaması - Continuous mode-da ADC davamlı işləməlidir
+     * Əgər ADC dayanıbsa (READY vəziyyətindədirsə), onu yenidən işə sal */
+    uint32_t adc_state = HAL_ADC_GetState(&hadc3);
+    if ((adc_state & HAL_ADC_STATE_REG_BUSY) == 0U) {
+        // ADC dayanıb - yenidən başlat
         if (HAL_ADC_Start(&hadc3) != HAL_OK) {
             error_count++;
             if (error_count < 5) {
-                printf("ERROR: ADC Start failed, using last valid value: %u\r\n", last_valid_adc);
+                printf("ERROR: ADC Start failed (state=0x%08lX), using last valid value: %u\r\n", 
+                       adc_state, last_valid_adc);
             }
             return last_valid_adc;
         }
@@ -166,11 +170,12 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
         adc_value = 4095U;  // Maksimum 12-bit ADC dəyəri
     }
 
-    /* İlk oxunuşda 0 dəyəri gəlirsə, kalibrlənmiş minimumu saxla */
-    if (adc_value == 0U && last_valid_adc == ADC_MIN) {
+    /* DÜZƏLİŞ: ADC 0 dəyəri qeyri-etibarlıdır (sensor bağlı deyil və ya xəta var)
+     * Hər halda son etibarlı dəyəri qaytar */
+    if (adc_value == 0U) {
         error_count++;
         if (error_count < 5) {
-            printf("WARNING: ADC reading is 0, using last valid value: %u\r\n", last_valid_adc);
+            printf("WARNING: ADC reading is 0 (sensor disconnected?), using last valid value: %u\r\n", last_valid_adc);
         }
         return last_valid_adc;
     }
@@ -257,6 +262,14 @@ static float AdvancedPressureControl_ConvertAdcToPressure(uint16_t adc_raw) {
 
     // Tarixçəni yenilə
     pressure_history[history_index] = pressure;
+    
+    // DÜZƏLİŞ: history_index-i artırmadan əvvəl count hesabla
+    // Çünki history_index artırıldıqdan sonra 0 ola bilər və count yanlış hesablanar
+    uint8_t count = history_filled ? 8U : (history_index + 1U);
+    if (count == 0U) {
+        count = 1U;
+    }
+    
     history_index = (history_index + 1U) % 8U;
     if (history_index == 0U) {
         history_filled = true;
@@ -264,10 +277,6 @@ static float AdvancedPressureControl_ConvertAdcToPressure(uint16_t adc_raw) {
 
     // Moving Average hesabla
     float filtered_pressure = 0.0f;
-    uint8_t count = history_filled ? 8U : history_index;
-    if (count == 0U) {
-        count = 1U;
-    }
     for (uint8_t i = 0U; i < count; i++) {
         filtered_pressure += pressure_history[i];
     }
@@ -284,10 +293,16 @@ static float AdvancedPressureControl_ConvertAdcToPressure(uint16_t adc_raw) {
                adc_raw, pressure, g_calibration.offset, g_calibration.slope);
     }
 
-    // KRİTİK DÜZƏLİŞ: Yalnız aşağı limit clamp edilir
+    // DÜZƏLİŞ: Həm minimum, həm də maksimum limit clamp edilir
+    // Minimum clamp: mənfi təzyiqin qarşısını alır
     float min_pressure_clamp = (g_calibration.pressure_min < 0.0f) ? 0.0f : g_calibration.pressure_min;
     if (pressure < min_pressure_clamp) {
         pressure = min_pressure_clamp;
+    }
+    
+    // Maksimum clamp: sensor diapazonunu aşan dəyərlərin qarşısını alır
+    if (pressure > g_calibration.pressure_max) {
+        pressure = g_calibration.pressure_max;
     }
 
     return pressure;
@@ -307,6 +322,16 @@ static float AdvancedPressureControl_ConvertAdcToPressure(uint16_t adc_raw) {
  */
 float AdvancedPressureControl_ReadPressure(void) {
     uint16_t adc_raw = AdvancedPressureControl_ReadADC();
+    
+    // DÜZƏLİŞ: ADC dəyərini çevirmədən əvvəl clamp et
+    // Bu, mənfi təzyiq dəyərlərinin qarşısını alır
+    if (adc_raw < ADC_MIN) {
+        adc_raw = ADC_MIN;
+    }
+    if (adc_raw > ADC_MAX) {
+        adc_raw = ADC_MAX;
+    }
+    
     return AdvancedPressureControl_ConvertAdcToPressure(adc_raw);
 }
 
@@ -871,10 +896,12 @@ void AdvancedPressureControl_Step(void) {
     
     
     // 0. Təzyiqi Oxu (Safety yoxlaması üçün lazımdır)
+    // DÜZƏLİŞ: AdvancedPressureControl_ReadPressure() istifadə et ki, ADC clamp düzgün işləsin
     // KRİTİK DÜZƏLİŞ: Xam ADC dəyərini də Status strukturuna yaz (UI üçün)
     uint16_t raw_adc = AdvancedPressureControl_ReadADC();
     g_system_status.raw_adc_value = raw_adc;
-    g_system_status.current_pressure = AdvancedPressureControl_ConvertAdcToPressure(raw_adc);
+    // DÜZƏLİŞ: ReadPressure() istifadə et ki, ADC clamp və filtrləmə düzgün işləsin
+    g_system_status.current_pressure = AdvancedPressureControl_ReadPressure();
     
     // Validate pressure reading without hiding genuine over-pressure conditions
     if (!isfinite(g_system_status.current_pressure) || g_system_status.current_pressure < 0.0f) {
@@ -1265,8 +1292,8 @@ void AdvancedPressureControl_LoadCalibration(void) {
         float max_voltage;        // 5.24V
         float min_pressure;       // 0.0 bar
         float max_pressure;       // 300.0 bar
-        uint16_t adc_min;         // 410
-        uint16_t adc_max;         // 4096
+        uint16_t adc_min;         // 620 (DÜZƏLİŞ: əvvəl 410 idi)
+        uint16_t adc_max;         // 4095 (DÜZƏLİŞ: 12-bit ADC maksimum dəyəri, 4096 deyil!)
         uint32_t checksum;        // Data integrity check
     } calibration_data_t;
     
@@ -1362,8 +1389,8 @@ void AdvancedPressureControl_SaveCalibration(void) {
         float max_voltage;        // 5.24V (not used in Advanced system, but kept for compatibility)
         float min_pressure;       // 0.0 bar
         float max_pressure;       // 300.0 bar
-        uint16_t adc_min;         // 410
-        uint16_t adc_max;         // 4096
+        uint16_t adc_min;         // 620 (DÜZƏLİŞ: əvvəl 410 idi)
+        uint16_t adc_max;         // 4095 (DÜZƏLİŞ: 12-bit ADC maksimum dəyəri, 4096 deyil!)
         uint32_t checksum;        // Data integrity check
     } calibration_data_t;
     
