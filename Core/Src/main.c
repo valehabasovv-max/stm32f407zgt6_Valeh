@@ -111,7 +111,22 @@ int main(void)
   
   /* KRİTİK DÜZƏLİŞ: ADC-ni Continuous Mode-da başlat */
   /* Continuous mode-da ADC davamlı konversiya edir, Start/Stop lazım deyil */
-  HAL_ADC_Start(&hadc3);  // ADC-ni bir dəfə başlat, davamlı işləyəcək
+  /* DÜZƏLİŞ: ADC-nin düzgün başladığını təsdiq et */
+  HAL_StatusTypeDef adc_start_status = HAL_ADC_Start(&hadc3);
+  if (adc_start_status != HAL_OK) {
+      printf("ERROR: ADC Start failed during initialization! Status: %d\r\n", adc_start_status);
+      Error_Handler();
+  }
+  // ADC-nin ilk konversiyasının bitməsini gözlə
+  HAL_Delay(10);
+  // İlk ADC dəyərini oxu (kalibrasiya üçün)
+  if (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC) != RESET) {
+      uint16_t initial_adc = HAL_ADC_GetValue(&hadc3);
+      __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_EOC);
+      printf("INFO: ADC initialized successfully, initial reading: %u\r\n", initial_adc);
+  } else {
+      printf("WARNING: ADC EOC flag not set after initialization\r\n");
+  }
   
   MX_TIM3_Init();
   MX_TIM6_Init();
