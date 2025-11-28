@@ -732,7 +732,7 @@ void PressureControlConfig_SaveCalibrationData(void) {
     typedef struct {
         uint32_t magic;           /* Magic number: 0x12345678 */
         float min_voltage;        /* 0.5V */
-        float max_voltage;        /* 5.0V */
+        float max_voltage;        /* 5.2V */
         float min_pressure;       /* 0.0 bar */
         float max_pressure;       /* 300.0 bar */
         uint16_t adc_min;         /* 410 */
@@ -763,7 +763,7 @@ void PressureControlConfig_SaveCalibrationData(void) {
     calibration_data_t cal_data;
     cal_data.magic = 0x12345678;
     cal_data.min_voltage = 0.5f;  // Default values, kept for compatibility
-    cal_data.max_voltage = 5.0f;
+    cal_data.max_voltage = 5.2f;
     cal_data.min_pressure = min_pressure_value;
     cal_data.max_pressure = max_pressure_value;
     cal_data.adc_min = (uint16_t)(adc_min_value + 0.5f);  // Round to nearest integer

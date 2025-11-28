@@ -559,12 +559,12 @@ static float motor_frequency = 1000.0;
 /* Pressure sensor calibration variables */
 /* Note: These are NOT static so AdvancedPressureControl can access them */
 float min_voltage = 0.5;      /* Minimum voltage (0.5V) */
-float max_voltage = 5.0;     /* Maximum voltage (5.0V) */
+float max_voltage = 5.2;     /* Maximum voltage (5.2V) */
 float min_pressure = 0.0;     /* DÜZƏLİŞ: Minimum pressure (0.0 bar - sıfır təzyiq) */
 float max_pressure = 300.0;   /* Maximum pressure (300.0 bar) */
 /* STM32F4 ADC referans: 3.3V, ADC = (Voltage / 3.3) * 4095 */
 uint16_t adc_min = 620;       /* DÜZƏLİŞ: ADC at 0.5V = (0.5/3.3)*4095 ≈ 620 (əvvəl 410 idi) */
-uint16_t adc_max = 4095;      /* ADC at 5.0V = (5.0/3.3)*4095 ≈ 6204 (saturasiya, 4095-də məhdudlaşır) */
+uint16_t adc_max = 4095;      /* ADC at 5.2V = (5.2/3.3)*4095 ≈ 6447 (saturasiya, 4095-də məhdudlaşır) */
 static uint8_t calibration_mode = 0; /* 0=normal, 1=calibrate min, 2=calibrate max */
 
 /* Ensure we never overwrite valid calibration data with defaults */
@@ -975,9 +975,9 @@ void ILI9341_ShowPressureCalibrationPage(void)
     extern CalibrationData_t g_calibration;
     
     // KRİTİK DÜZƏLİŞ: Voltage dəyərləri həmişə hardware spesifikasiyasına uyğun olmalıdır
-    // Sensor: 0.5V (0 bar) -> 5.0V (300 bar) - bu dəyərlər dəyişməzdir
+    // Sensor: 0.5V (0 bar) -> 5.2V (300 bar) - bu dəyərlər dəyişməzdir
     min_voltage = 0.5f;   // Həmişə 0.5V
-    max_voltage = 5.0f;    // Həmişə 5.0V (flash-dakı köhnə 5.24V dəyərinə baxmayaraq)
+    max_voltage = 5.2f;    // Həmişə 5.2V
     
     // Update UI variables from Advanced system calibration (for consistency)
     bool calibration_valid = ILI9341_IsPressureCalibrationValid(&g_calibration);
