@@ -25,6 +25,7 @@
 #include "ILI9341_FSMC.h"
 #include "advanced_pressure_control.h"
 #include "pressure_control_config.h"
+#include "adc_diagnostic.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -242,6 +243,51 @@ int main(void)
   /* Pressure control system - ana səhifə */
   ILI9341_ShowPressureControlMain();
   HAL_Delay(100);  /* Ekranın çəkilməsi üçün gecikmə */
+  
+  /* ===  ADC DİAQNOSTİKASI === */
+  /* DÜZƏLİŞ: ADC 632-də qalıb və təzyiq 0.00 göstərir - diaqnostika işə sal */
+  printf("\n\n");
+  printf("*****************************************************************\n");
+  printf("*  ADC DİAQNOSTİKA BAŞLAYIR (632 stuck ADC və 0.00 pressure)  *\n");
+  printf("*****************************************************************\n");
+  HAL_Delay(100);
+  
+  /* 1. İlk olaraq tam diaqnostika işə sal */
+  ADC_RunDiagnostic();
+  HAL_Delay(500);
+  
+  /* 2. Hardware test (birbaşa ADC oxuma) */
+  ADC_TestHardwareDirectly();
+  HAL_Delay(500);
+  
+  /* 3. Əgər problem davam edirsə, recalibration et */
+  printf("Əgər problem hələ də varsa, recalibration tətbiq olunacaq...\n");
+  HAL_Delay(1000);
+  
+  /* Yoxla: ADC dəyəri 632 ətrafındadır və təzyiq 0.00-dır? */
+  SystemStatus_t* status_check = AdvancedPressureControl_GetStatus();
+  uint16_t check_adc = status_check->raw_adc_value;
+  float check_pressure = status_check->current_pressure;
+  
+  if ((check_adc >= 630 && check_adc <= 640) && (check_pressure < 0.5f)) {
+      printf("\n⚠ PROBLEMLİ DİAQNOZ TƏSDİQLƏNDİ: ADC=%u, Pressure=%.2f bar\n", 
+             check_adc, check_pressure);
+      printf("Recalibration tətbiq olunur...\n\n");
+      ADC_ForceRecalibration();
+      HAL_Delay(1000);
+      
+      /* Yenidən yoxla */
+      printf("\nYenidən yoxlama...\n");
+      ADC_RunDiagnostic();
+  } else {
+      printf("\n✓ Sistem normal görünür: ADC=%u, Pressure=%.2f bar\n\n", 
+             check_adc, check_pressure);
+  }
+  
+  printf("*****************************************************************\n");
+  printf("*              ADC DİAQNOSTİKA TAM                             *\n");
+  printf("*****************************************************************\n\n");
+  HAL_Delay(1000);
   
   /* USER CODE END 2 */
 
