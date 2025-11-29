@@ -80,24 +80,40 @@ static bool AdvancedPressureControl_IsCalibrationRangeValid(uint16_t adc_min_val
         return false;
     }
 
-    // KRİTİK DÜZƏLİŞ: ADC minimum dəyəri ən azı 200 olmalıdır (çox kiçik dəyərlər sensor pozulmasıdır)
-    // ADC maksimum dəyəri ən çox 4095 olmalıdır (12-bit ADC)
-    // Həmçinin ADC_MIN (620) ətrafında olmalıdır - sensor 0.5V verir, bu ≈ 620 ADC-dir
-    if (adc_min_val < 200U || adc_min_val > 1000U) {
-        printf("VALIDATION FAILED: ADC min (%u) out of reasonable range [200-1000] (expected ~620)\r\n", adc_min_val);
+    // KRİTİK DÜZƏLİŞ: ADC dəyərlərinin ağlabatan olduğunu yoxla
+    // Voltage divider ilə: ADC_MIN ≈ 310, ADC_MAX ≈ 3103
+    // Voltage divider olmadan: ADC_MIN ≈ 620, ADC_MAX ≈ 4095
+    
+#if VOLTAGE_DIVIDER_ENABLED
+    // Voltage divider var - daha geniş tolerance
+    uint16_t expected_min = 250U;   // 0.20V-0.30V aralığı
+    uint16_t expected_max_low = 2500U;
+    uint16_t expected_max_high = 3500U;
+    uint16_t min_range = 2000U;
+#else
+    // Voltage divider yox - köhnə validasiya
+    uint16_t expected_min = 200U;
+    uint16_t expected_max_low = 3000U;
+    uint16_t expected_max_high = 4095U;
+    uint16_t min_range = 2000U;
+#endif
+    
+    if (adc_min_val < expected_min || adc_min_val > 1000U) {
+        printf("VALIDATION FAILED: ADC min (%u) out of reasonable range [%u-1000] (expected ~%u)\r\n", 
+               adc_min_val, expected_min, ADC_MIN);
         return false;
     }
     
-    if (adc_max_val < 3000U || adc_max_val > 4095U) {
-        printf("VALIDATION FAILED: ADC max (%u) out of reasonable range [3000-4095] (expected ~4095)\r\n", adc_max_val);
+    if (adc_max_val < expected_max_low || adc_max_val > expected_max_high) {
+        printf("VALIDATION FAILED: ADC max (%u) out of reasonable range [%u-%u] (expected ~%u)\r\n", 
+               adc_max_val, expected_max_low, expected_max_high, ADC_MAX);
         return false;
     }
 
-    // KRİTİK DÜZƏLİŞ: ADC aralığı ən azı 2000 olmalıdır (sensor 0.5V-5.0V aralığında işləyir)
-    // 0.5V → 620 ADC, 5.0V → 6204 ADC (amma 4095-də saturated)
-    // Minimum aralıq: 4095 - 620 = 3475 (amma ən azı 2000 qəbul edək)
-    if ((adc_max_val - adc_min_val) < 2000U) {
-        printf("VALIDATION FAILED: ADC range (%u) too narrow (min 2000 required)\r\n", adc_max_val - adc_min_val);
+    // KRİTİK DÜZƏLİŞ: ADC aralığı ən azı min_range olmalıdır
+    if ((adc_max_val - adc_min_val) < min_range) {
+        printf("VALIDATION FAILED: ADC range (%u) too narrow (min %u required)\r\n", 
+               adc_max_val - adc_min_val, min_range);
         return false;
     }
 

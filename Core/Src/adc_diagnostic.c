@@ -157,16 +157,30 @@ void ADC_TestHardwareDirectly(void) {
  */
 void ADC_ForceRecalibration(void) {
     printf("\n--- FORCING RECALIBRATION ---\n");
-    printf("Setting calibration to defaults:\n");
-    printf("  ADC: 620 - 4095\n");
-    printf("  Pressure: 0.0 - 300.0 bar\n");
     
-    g_calibration.adc_min = 620.0f;
-    g_calibration.adc_max = 4095.0f;
+#if VOLTAGE_DIVIDER_ENABLED
+    printf("Setting calibration to defaults (Voltage Divider Mode):\n");
+    printf("  ADC: %u - %u\n", ADC_MIN, ADC_MAX);
+    printf("  Pressure: 0.0 - 300.0 bar\n");
+    printf("  NOTE: Voltage divider converts sensor 0.5V-5.0V → ADC 0.25V-2.5V\n");
+    
+    g_calibration.adc_min = (float)ADC_MIN;
+    g_calibration.adc_max = (float)ADC_MAX;
+#else
+    printf("Setting calibration to defaults (Direct Mode - NO VOLTAGE DIVIDER):\n");
+    printf("  ADC: %u - %u\n", ADC_MIN, ADC_MAX);
+    printf("  Pressure: 0.0 - 300.0 bar\n");
+    printf("  ⚠ WARNING: Without voltage divider, max readable pressure is ~230 bar!\n");
+    printf("  ⚠ Sensor voltages above 3.3V will saturate ADC at 4095\n");
+    
+    g_calibration.adc_min = (float)ADC_MIN;
+    g_calibration.adc_max = (float)ADC_MAX;
+#endif
+    
     g_calibration.pressure_min = 0.0f;
     g_calibration.pressure_max = 300.0f;
-    g_calibration.slope = (300.0f - 0.0f) / (4095.0f - 620.0f);
-    g_calibration.offset = 0.0f - (g_calibration.slope * 620.0f);
+    g_calibration.slope = (300.0f - 0.0f) / ((float)ADC_MAX - (float)ADC_MIN);
+    g_calibration.offset = 0.0f - (g_calibration.slope * (float)ADC_MIN);
     g_calibration.calibrated = true;
     
     printf("New calibration values:\n");
