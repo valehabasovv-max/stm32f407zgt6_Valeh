@@ -15,12 +15,9 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "advanced_pressure_control.h"
 #include <stdint.h>
 #include <stdbool.h>
-
-/* Include advanced_pressure_control.h for CalibrationData_t type */
-/* This is safe because advanced_pressure_control.h does not include pressure_control_config.h */
-#include "advanced_pressure_control.h"
 
 /* =========================================================================
    CONFIGURATION PARAMETERS
@@ -73,10 +70,26 @@ extern "C" {
 
 // Pressure Sensor Configuration
 // KRİTİK DÜZƏLİŞ: 12-bit ADC maksimum dəyəri 4095-dir (2^12 - 1), 4096 deyil!
-// 0.5V (0 bar) -> 410, 5.0V (300 bar) -> 4095 (5.0V Vref fərziyyəsi ilə)
-// PRESSURE_SLOPE = (300.0 - 0.0) / (4095 - 410) ≈ 0.08137 bar/ADC count
-#define CONFIG_PRESSURE_SENSOR_ADC_MIN 500
-#define CONFIG_PRESSURE_SENSOR_ADC_MAX 4095
+// STM32F4 ADC referans gərginliyi: 3.3V
+// Sensor çıxışı: 0.5V (0 bar) -> 5.0V (300 bar)
+// ADC hesablaması: ADC = (Voltage / 3.3V) * 4095
+// 0.5V -> ADC = (0.5 / 3.3) * 4095 ≈ 620
+// 5.0V -> ADC = (5.0 / 3.3) * 4095 ≈ 6204 (saturasiya, 4095-də məhdudlaşır)
+// PRESSURE_SLOPE = (300.0 - 0.0) / (ADC_MAX - ADC_MIN)
+// With voltage divider: (300.0 - 0.0) / (3500 - 500) = 0.1000 bar/ADC count
+// Without voltage divider: (300.0 - 0.0) / (4095 - 620) = 0.0864 bar/ADC count
+
+// Voltage divider konfiqurasiyası (advanced_pressure_control.h ilə eyni olmalıdır)
+#define VOLTAGE_DIVIDER_ENABLED 1  // 1 = var, 0 = yoxdur
+
+#if VOLTAGE_DIVIDER_ENABLED
+  #define CONFIG_PRESSURE_SENSOR_ADC_MIN 500    // 0 bar (real measured)
+  #define CONFIG_PRESSURE_SENSOR_ADC_MAX 3500   // 300 bar (real measured)
+#else
+  #define CONFIG_PRESSURE_SENSOR_ADC_MIN 620    // 0.5V (without divider)
+  #define CONFIG_PRESSURE_SENSOR_ADC_MAX 4095   // 3.3V (without divider, max ~230 bar)
+#endif
+
 #define CONFIG_PRESSURE_SENSOR_PRESSURE_MIN 0.0f
 #define CONFIG_PRESSURE_SENSOR_PRESSURE_MAX 300.0f
 
@@ -173,6 +186,7 @@ void PressureControlConfig_CompleteCalibration(void);
 void PressureControlConfig_ResetCalibration(void);
 bool PressureControlConfig_IsCalibrated(void);
 void PressureControlConfig_PrintCalibrationData(void);
+void PressureControlConfig_UpdateCalibrationCache(const CalibrationData_t* source);
 
 /* Valve Configuration */
 void PressureControlConfig_SetValveLimits(Valve_Config_t* config);

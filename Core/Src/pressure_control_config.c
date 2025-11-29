@@ -908,3 +908,29 @@ void PressureControlConfig_OptimizePIDParams(void) {
     printf("New ZME PID: Kp=%.3f, Ki=%.3f, Kd=%.3f\r\n", 
            g_pid_zme_tuning.kp, g_pid_zme_tuning.ki, g_pid_zme_tuning.kd);
 }
+
+/**
+ * @brief Update calibration cache from source data
+ * @param source Pointer to source calibration data
+ * @note This function synchronizes calibration data between modules
+ */
+void PressureControlConfig_UpdateCalibrationCache(const CalibrationData_t* source) {
+    if (source == NULL) {
+        printf("ERROR: UpdateCalibrationCache called with NULL pointer\r\n");
+        return;
+    }
+    
+    // Update the configuration system's calibration cache
+    g_calibration_data.adc_min = source->adc_min;
+    g_calibration_data.adc_max = source->adc_max;
+    g_calibration_data.pressure_min = source->pressure_min;
+    g_calibration_data.pressure_max = source->pressure_max;
+    g_calibration_data.slope = source->slope;
+    g_calibration_data.offset = source->offset;
+    g_calibration_data.calibrated = source->calibrated;
+    g_calibration_data.calibration_date = source->calibration_date;
+    
+    printf("Calibration cache updated: ADC[%.0f-%.0f] -> Pressure[%.1f-%.1f] bar\r\n",
+           g_calibration_data.adc_min, g_calibration_data.adc_max,
+           g_calibration_data.pressure_min, g_calibration_data.pressure_max);
+}
