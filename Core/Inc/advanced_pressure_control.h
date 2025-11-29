@@ -27,19 +27,39 @@ extern "C" {
    I. KALİBRƏLƏMƏ SABİTLƏRİ (Öz Dəyərlərinizlə Doldurun)
    ========================================================================= */
 
-// Təzyiq Sensoru (ADC)
-// KRİTİK DÜZƏLİŞ: 12-bit ADC maksimum dəyəri 4095-dir (2^12 - 1), 4096 deyil!
-// STM32F4 ADC referans gərginliyi: 3.3V
-// Sensor çıxışı: 0.5V (0 bar) -> 5.0V (300 bar)
-// ADC hesablaması: ADC = (Voltage / 3.3V) * 4095
-// 0.5V -> ADC = (0.5 / 3.3) * 4095 ≈ 620
-// 5.0V -> ADC = (5.0 / 3.3) * 4095 ≈ 6204 (saturasiya, 4095-də məhdudlaşır)
-#define ADC_MIN 620   // DÜZƏLİŞ: 0.5V üçün düzgün ADC dəyəri (əvvəl 410 idi)
-#define ADC_MAX 4095  // 5.0V üçün ADC saturasiyası (maksimum 4095)
+// Təzyiq Sensoru (ADC) - VOLTAGE DIVIDER İLƏ
+// 
+// Hardware Konfiqurasiyası:
+// - Sensor çıxışı: 0.5V (0 bar) -> 5.0V (300 bar)
+// - Voltage Divider: R1=10kΩ, R2=10kΩ (divisor=0.5)
+// - ADC girişi: 0.25V (0 bar) -> 2.5V (300 bar)
+// - STM32F4 ADC referans gərginliyi: 3.3V
+// - 12-bit ADC: 0-4095
+//
+// ADC hesablaması (Voltage Divider ilə):
+// Sensor 0.5V -> Divider 0.25V -> ADC = (0.25 / 3.3) * 4095 ≈ 310
+// Sensor 5.0V -> Divider 2.50V -> ADC = (2.50 / 3.3) * 4095 ≈ 3103
+//
+// KRİTİK: Voltage divider OLMADAN sensor 5V çıxışı ADC-ni zədələyə bilər!
+//         və 3.3V-dən yuxarı gərginliklər saturated (4095) oxunur.
+//
+#define VOLTAGE_DIVIDER_ENABLED 1  // 1 = Voltage divider var, 0 = yoxdur
+
+#if VOLTAGE_DIVIDER_ENABLED
+  // Voltage Divider ilə (300 bar-a qədər ölçmək üçün)
+  // Real ölçülən dəyərlər istifadəçi tərəfindən təyin edilib
+  #define ADC_MIN 500    // 0 bar (sensor 0.5V ilə voltage divider)
+  #define ADC_MAX 3500   // 300 bar (sensor 5.0V ilə voltage divider)
+#else
+  // Voltage Divider olmadan (yalnız 0-230 bar ölçülə bilir)
+  #define ADC_MIN 620    // 0.5V
+  #define ADC_MAX 4095   // 3.3V (saturated, real max ~230 bar)
+#endif
+
 #define PRESSURE_MIN 0.0f
 #define PRESSURE_MAX 300.0f
 #define PRESSURE_SLOPE ((PRESSURE_MAX - PRESSURE_MIN) / (float)(ADC_MAX - ADC_MIN))
-// PRESSURE_SLOPE = (300.0 - 0.0) / (4095 - 620) = 300.0 / 3475 ≈ 0.0864 bar/ADC count
+// PRESSURE_SLOPE = (300.0 - 0.0) / (3500 - 500) = 300.0 / 3000 = 0.1000 bar/ADC count
 
 // ZME Klapanı (Normally Open - Tərs Məntiq)
 #define ZME_PWM_MIN 0.0f     // Təzyiq Maksimum (Açıq)

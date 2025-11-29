@@ -162,6 +162,73 @@ int main(void)
   /* Load calibration data from flash memory (if not already loaded by PressureControlConfig_Init) */
   AdvancedPressureControl_LoadCalibration();
   
+  /* KRİTİK DÜZƏLİŞ: Kalibrasiya validasiyasını yoxla
+   * Əgər Flash-dan yüklənmiş kalibrasiya validasiyadan keçmirsə, onu default dəyərlərlə əvəz et
+   * və Flash-a qeyd et ki, səhv kalibrasiya istifadə olunmasın */
+  extern CalibrationData_t g_calibration;
+  uint16_t adc_min_check = (uint16_t)(g_calibration.adc_min + 0.5f);
+  uint16_t adc_max_check = (uint16_t)(g_calibration.adc_max + 0.5f);
+  
+  // Validasiya: ADC aralığı voltage divider konfiqurasiyasına uyğun olmalıdır
+#if VOLTAGE_DIVIDER_ENABLED
+  // Voltage divider ilə: ADC 500-3500 aralığı
+  uint16_t expected_min_low = 400;
+  uint16_t expected_min_high = 700;
+  uint16_t expected_max_low = 3000;
+  uint16_t expected_max_high = 4000;
+#else
+  // Voltage divider olmadan: ADC 620-4095 aralığı
+  uint16_t expected_min_low = 200;
+  uint16_t expected_min_high = 1000;
+  uint16_t expected_max_low = 3000;
+  uint16_t expected_max_high = 4095;
+#endif
+  
+  if (adc_min_check < expected_min_low || adc_min_check > expected_min_high || 
+      adc_max_check < expected_max_low || adc_max_check > expected_max_high ||
+      (adc_max_check - adc_min_check) < 2000) {
+      printf("\n");
+      printf("*****************************************************************\n");
+      printf("*  ⚠ XƏBƏRDARLIQ: KALIBRASIYA SƏHV AŞKAR EDİLDİ!              *\n");
+      printf("*****************************************************************\n");
+      printf("*  Flash-dakı kalibrasiya validasiyadan keçmədi:\n");
+      printf("*    ADC: %u - %u (Gözlənilən: %u - %u)\n", 
+             adc_min_check, adc_max_check, ADC_MIN, ADC_MAX);
+      printf("*    Pressure: %.2f - %.2f bar\n", g_calibration.pressure_min, g_calibration.pressure_max);
+#if VOLTAGE_DIVIDER_ENABLED
+      printf("*\n");
+      printf("*  Voltage Divider aktiv\n");
+      printf("*  Real measured: ADC 500-3500 → Pressure 0-300 bar\n");
+#else
+      printf("*\n");
+      printf("*  Voltage Divider DEAKTİV\n");
+      printf("*  DİQQƏT: 230 bar-dan yuxarı ölçülə bilməz!\n");
+#endif
+      printf("*\n");
+      printf("*  Default kalibrasiya dəyərləri yüklənəcək və Flash-a yazılacaq.\n");
+      printf("*****************************************************************\n\n");
+      HAL_Delay(1000);
+      
+      // Force recalibration with defaults
+      ADC_ForceRecalibration();
+      HAL_Delay(500);
+      
+      // Verify it was applied
+      printf("Yenidən yoxlanır...\n");
+      printf("  ADC Range: %.0f - %.0f\n", g_calibration.adc_min, g_calibration.adc_max);
+      printf("  Pressure Range: %.2f - %.2f bar\n", g_calibration.pressure_min, g_calibration.pressure_max);
+      printf("  Slope: %.6f\n", g_calibration.slope);
+      printf("  Offset: %.2f\n\n", g_calibration.offset);
+  } else {
+      printf("Kalibrasiya validasiyadan keçdi. Flash-dakı dəyərlər istifadə olunur.\n");
+#if VOLTAGE_DIVIDER_ENABLED
+      printf("Voltage Divider aktiv: Sensor 0.5V-5.0V → ADC %u-%u (0-300 bar)\n\n", 
+             adc_min_check, adc_max_check);
+#else
+      printf("Voltage Divider DEAKTİV: ⚠ Maksimum ~230 bar ölçülə bilər!\n\n");
+#endif
+  }
+  
   /* Initialize the advanced PID-based pressure control system */
   AdvancedPressureControl_Init();
   HAL_Delay(100);

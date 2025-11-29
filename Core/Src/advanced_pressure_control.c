@@ -76,25 +76,71 @@ static bool AdvancedPressureControl_IsCalibrationRangeValid(uint16_t adc_min_val
                                                             float pressure_max_val)
 {
     if (adc_min_val >= adc_max_val) {
+        printf("VALIDATION FAILED: ADC min (%u) >= ADC max (%u)\r\n", adc_min_val, adc_max_val);
         return false;
     }
 
-    if (adc_min_val < 50U || adc_max_val > 4095U) {
+    // KRİTİK DÜZƏLİŞ: ADC dəyərlərinin ağlabatan olduğunu yoxla
+    // Voltage divider ilə: ADC_MIN ≈ 310, ADC_MAX ≈ 3103
+    // Voltage divider olmadan: ADC_MIN ≈ 620, ADC_MAX ≈ 4095
+    
+#if VOLTAGE_DIVIDER_ENABLED
+    // Voltage divider var - real measured values
+    uint16_t expected_min = 400U;   // ADC Min tolerance
+    uint16_t expected_max_low = 3000U;
+    uint16_t expected_max_high = 4000U;
+    uint16_t min_range = 2500U;  // Minimum ADC range
+#else
+    // Voltage divider yox - köhnə validasiya
+    uint16_t expected_min = 200U;
+    uint16_t expected_max_low = 3000U;
+    uint16_t expected_max_high = 4095U;
+    uint16_t min_range = 2000U;
+#endif
+    
+    if (adc_min_val < expected_min || adc_min_val > 1000U) {
+        printf("VALIDATION FAILED: ADC min (%u) out of reasonable range [%u-1000] (expected ~%u)\r\n", 
+               adc_min_val, expected_min, ADC_MIN);
+        return false;
+    }
+    
+    if (adc_max_val < expected_max_low || adc_max_val > expected_max_high) {
+        printf("VALIDATION FAILED: ADC max (%u) out of reasonable range [%u-%u] (expected ~%u)\r\n", 
+               adc_max_val, expected_max_low, expected_max_high, ADC_MAX);
         return false;
     }
 
-    if ((adc_max_val - adc_min_val) < 200U) {
+    // KRİTİK DÜZƏLİŞ: ADC aralığı ən azı min_range olmalıdır
+    if ((adc_max_val - adc_min_val) < min_range) {
+        printf("VALIDATION FAILED: ADC range (%u) too narrow (min %u required)\r\n", 
+               adc_max_val - adc_min_val, min_range);
         return false;
     }
 
     if (!isfinite(pressure_min_val) || !isfinite(pressure_max_val)) {
+        printf("VALIDATION FAILED: Pressure values not finite\r\n");
         return false;
     }
 
     if (pressure_max_val <= pressure_min_val) {
+        printf("VALIDATION FAILED: Pressure max (%.2f) <= Pressure min (%.2f)\r\n", pressure_max_val, pressure_min_val);
+        return false;
+    }
+    
+    // KRİTİK DÜZƏLİŞ: Pressure aralığı ağlabatan olmalıdır
+    // Sensor 0-300 bar aralığındadır, ona görə də pressure_min ≈ 0 və pressure_max ≈ 300 olmalıdır
+    if (pressure_min_val < -10.0f || pressure_min_val > 50.0f) {
+        printf("VALIDATION FAILED: Pressure min (%.2f) out of reasonable range [-10, 50]\r\n", pressure_min_val);
+        return false;
+    }
+    
+    if (pressure_max_val < 100.0f || pressure_max_val > 400.0f) {
+        printf("VALIDATION FAILED: Pressure max (%.2f) out of reasonable range [100, 400]\r\n", pressure_max_val);
         return false;
     }
 
+    printf("VALIDATION OK: ADC %u-%u → Pressure %.2f-%.2f bar\r\n", 
+           adc_min_val, adc_max_val, pressure_min_val, pressure_max_val);
     return true;
 }
 
@@ -342,10 +388,41 @@ static float AdvancedPressureControl_ConvertAdcToPressure(uint16_t adc_raw) {
     // DEBUG: İlk çağırışda kalibrləmə məlumatlarını göstər
     static bool first_call = true;
     if (first_call) {
-        printf("DEBUG: Calibration values - ADC: %.0f-%.0f, Pressure: %.2f-%.2f bar, Slope: %.6f, Offset: %.2f\r\n",
-               g_calibration.adc_min, g_calibration.adc_max,
-               g_calibration.pressure_min, g_calibration.pressure_max,
-               g_calibration.slope, g_calibration.offset);
+        printf("\n");
+        printf("========================================================================\n");
+        printf("  KALIBRASIYA MƏLUMATLARI\n");
+        printf("========================================================================\n");
+        printf("  ADC Range:      %.0f - %.0f\n", g_calibration.adc_min, g_calibration.adc_max);
+        printf("  Pressure Range: %.2f - %.2f bar\n", g_calibration.pressure_min, g_calibration.pressure_max);
+        printf("  Slope:          %.6f bar/ADC\n", g_calibration.slope);
+        printf("  Offset:         %.2f bar\n", g_calibration.offset);
+        printf("  Formula:        Pressure = %.2f + (ADC * %.6f)\n", g_calibration.offset, g_calibration.slope);
+        printf("========================================================================\n");
+        
+        // KRİTİK DİAGNOSTİK: Kalibrasiya dəyərlərini yoxla
+        // Əgər ADC aralığı çox dar və ya pressure aralığı çox kiçikdirsə, xəbərdarlıq ver
+        float adc_range = g_calibration.adc_max - g_calibration.adc_min;
+        float pressure_range = g_calibration.pressure_max - g_calibration.pressure_min;
+        
+        if (adc_range < 2000.0f) {
+            printf("  ⚠ WARNING: ADC range (%.0f) is too narrow! Expected > 2000\n", adc_range);
+            printf("  ⚠ This will cause incorrect pressure readings!\n");
+            printf("  ⚠ Expected: ADC Min ~620, ADC Max ~4095\n");
+        }
+        
+        if (pressure_range < 50.0f) {
+            printf("  ⚠ WARNING: Pressure range (%.2f bar) is too narrow!\n", pressure_range);
+            printf("  ⚠ Expected: Pressure Min ~0.0 bar, Pressure Max ~300.0 bar\n");
+        }
+        
+        // KRİTİK: Slope çox kiçik olarsa, ADC dəyişiklikləri təzyiqə təsir etməyəcək
+        if (g_calibration.slope < 0.01f) {
+            printf("  ⚠ WARNING: Slope (%.6f) is too small!\n", g_calibration.slope);
+            printf("  ⚠ Expected slope: ~%.6f bar/ADC\n", PRESSURE_SLOPE);
+            printf("  ⚠ ADC changes will have minimal effect on pressure reading!\n");
+        }
+        
+        printf("========================================================================\n\n");
         first_call = false;
     }
 
