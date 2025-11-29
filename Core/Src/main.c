@@ -162,6 +162,43 @@ int main(void)
   /* Load calibration data from flash memory (if not already loaded by PressureControlConfig_Init) */
   AdvancedPressureControl_LoadCalibration();
   
+  /* KRİTİK DÜZƏLİŞ: Kalibrasiya validasiyasını yoxla
+   * Əgər Flash-dan yüklənmiş kalibrasiya validasiyadan keçmirsə, onu default dəyərlərlə əvəz et
+   * və Flash-a qeyd et ki, səhv kalibrasiya istifadə olunmasın */
+  extern CalibrationData_t g_calibration;
+  uint16_t adc_min_check = (uint16_t)(g_calibration.adc_min + 0.5f);
+  uint16_t adc_max_check = (uint16_t)(g_calibration.adc_max + 0.5f);
+  
+  // Sadə validasiya: ADC aralığı ağlabatan olmalıdır
+  if (adc_min_check < 200 || adc_min_check > 1000 || 
+      adc_max_check < 3000 || adc_max_check > 4095 ||
+      (adc_max_check - adc_min_check) < 2000) {
+      printf("\n");
+      printf("*****************************************************************\n");
+      printf("*  ⚠ XƏBƏRDARLIQ: KALIBRASIYA SƏHV AŞKAR EDİLDİ!              *\n");
+      printf("*****************************************************************\n");
+      printf("*  Flash-dakı kalibrasiya validasiyadan keçmədi:\n");
+      printf("*    ADC: %u - %u (Gözlənilən: 620 - 4095)\n", adc_min_check, adc_max_check);
+      printf("*    Pressure: %.2f - %.2f bar\n", g_calibration.pressure_min, g_calibration.pressure_max);
+      printf("*\n");
+      printf("*  Default kalibrasiya dəyərləri yüklənəcək və Flash-a yazılacaq.\n");
+      printf("*****************************************************************\n\n");
+      HAL_Delay(1000);
+      
+      // Force recalibration with defaults
+      ADC_ForceRecalibration();
+      HAL_Delay(500);
+      
+      // Verify it was applied
+      printf("Yenidən yoxlanır...\n");
+      printf("  ADC Range: %.0f - %.0f\n", g_calibration.adc_min, g_calibration.adc_max);
+      printf("  Pressure Range: %.2f - %.2f bar\n", g_calibration.pressure_min, g_calibration.pressure_max);
+      printf("  Slope: %.6f\n", g_calibration.slope);
+      printf("  Offset: %.2f\n\n", g_calibration.offset);
+  } else {
+      printf("Kalibrasiya validasiyadan keçdi. Flash-dakı dəyərlər istifadə olunur.\n\n");
+  }
+  
   /* Initialize the advanced PID-based pressure control system */
   AdvancedPressureControl_Init();
   HAL_Delay(100);
