@@ -171,11 +171,11 @@ int main(void)
   
   // Validasiya: ADC aralığı voltage divider konfiqurasiyasına uyğun olmalıdır
 #if VOLTAGE_DIVIDER_ENABLED
-  // Voltage divider ilə: ADC 310-3103 aralığı
-  uint16_t expected_min_low = 250;
-  uint16_t expected_min_high = 400;
-  uint16_t expected_max_low = 2500;
-  uint16_t expected_max_high = 3500;
+  // Voltage divider ilə: ADC 500-3500 aralığı
+  uint16_t expected_min_low = 400;
+  uint16_t expected_min_high = 700;
+  uint16_t expected_max_low = 3000;
+  uint16_t expected_max_high = 4000;
 #else
   // Voltage divider olmadan: ADC 620-4095 aralığı
   uint16_t expected_min_low = 200;
@@ -197,8 +197,8 @@ int main(void)
       printf("*    Pressure: %.2f - %.2f bar\n", g_calibration.pressure_min, g_calibration.pressure_max);
 #if VOLTAGE_DIVIDER_ENABLED
       printf("*\n");
-      printf("*  Voltage Divider aktiv (R1=R2=10kΩ)\n");
-      printf("*  Sensor 0.5V-5.0V → Divider 0.25V-2.5V → ADC 310-3103\n");
+      printf("*  Voltage Divider aktiv\n");
+      printf("*  Real measured: ADC 500-3500 → Pressure 0-300 bar\n");
 #else
       printf("*\n");
       printf("*  Voltage Divider DEAKTİV\n");

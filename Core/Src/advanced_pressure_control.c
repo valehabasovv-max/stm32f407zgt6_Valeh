@@ -85,11 +85,11 @@ static bool AdvancedPressureControl_IsCalibrationRangeValid(uint16_t adc_min_val
     // Voltage divider olmadan: ADC_MIN ≈ 620, ADC_MAX ≈ 4095
     
 #if VOLTAGE_DIVIDER_ENABLED
-    // Voltage divider var - daha geniş tolerance
-    uint16_t expected_min = 250U;   // 0.20V-0.30V aralığı
-    uint16_t expected_max_low = 2500U;
-    uint16_t expected_max_high = 3500U;
-    uint16_t min_range = 2000U;
+    // Voltage divider var - real measured values
+    uint16_t expected_min = 400U;   // ADC Min tolerance
+    uint16_t expected_max_low = 3000U;
+    uint16_t expected_max_high = 4000U;
+    uint16_t min_range = 2500U;  // Minimum ADC range
 #else
     // Voltage divider yox - köhnə validasiya
     uint16_t expected_min = 200U;

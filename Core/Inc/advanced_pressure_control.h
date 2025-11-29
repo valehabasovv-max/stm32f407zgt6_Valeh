@@ -47,8 +47,9 @@ extern "C" {
 
 #if VOLTAGE_DIVIDER_ENABLED
   // Voltage Divider ilə (300 bar-a qədər ölçmək üçün)
-  #define ADC_MIN 310    // 0.25V (sensor 0.5V × 0.5)
-  #define ADC_MAX 3103   // 2.50V (sensor 5.0V × 0.5)
+  // Real ölçülən dəyərlər istifadəçi tərəfindən təyin edilib
+  #define ADC_MIN 500    // 0 bar (sensor 0.5V ilə voltage divider)
+  #define ADC_MAX 3500   // 300 bar (sensor 5.0V ilə voltage divider)
 #else
   // Voltage Divider olmadan (yalnız 0-230 bar ölçülə bilir)
   #define ADC_MIN 620    // 0.5V
@@ -58,7 +59,7 @@ extern "C" {
 #define PRESSURE_MIN 0.0f
 #define PRESSURE_MAX 300.0f
 #define PRESSURE_SLOPE ((PRESSURE_MAX - PRESSURE_MIN) / (float)(ADC_MAX - ADC_MIN))
-// PRESSURE_SLOPE = (300.0 - 0.0) / (3103 - 310) = 300.0 / 2793 ≈ 0.1074 bar/ADC count
+// PRESSURE_SLOPE = (300.0 - 0.0) / (3500 - 500) = 300.0 / 3000 = 0.1000 bar/ADC count
 
 // ZME Klapanı (Normally Open - Tərs Məntiq)
 #define ZME_PWM_MIN 0.0f     // Təzyiq Maksimum (Açıq)

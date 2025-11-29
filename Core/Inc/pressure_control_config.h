@@ -75,15 +75,15 @@ extern "C" {
 // 0.5V -> ADC = (0.5 / 3.3) * 4095 ≈ 620
 // 5.0V -> ADC = (5.0 / 3.3) * 4095 ≈ 6204 (saturasiya, 4095-də məhdudlaşır)
 // PRESSURE_SLOPE = (300.0 - 0.0) / (ADC_MAX - ADC_MIN)
-// With voltage divider: (300.0 - 0.0) / (3103 - 310) = 0.1074 bar/ADC count
+// With voltage divider: (300.0 - 0.0) / (3500 - 500) = 0.1000 bar/ADC count
 // Without voltage divider: (300.0 - 0.0) / (4095 - 620) = 0.0864 bar/ADC count
 
 // Voltage divider konfiqurasiyası (advanced_pressure_control.h ilə eyni olmalıdır)
 #define VOLTAGE_DIVIDER_ENABLED 1  // 1 = var, 0 = yoxdur
 
 #if VOLTAGE_DIVIDER_ENABLED
-  #define CONFIG_PRESSURE_SENSOR_ADC_MIN 310    // 0.25V (with divider)
-  #define CONFIG_PRESSURE_SENSOR_ADC_MAX 3103   // 2.50V (with divider)
+  #define CONFIG_PRESSURE_SENSOR_ADC_MIN 500    // 0 bar (real measured)
+  #define CONFIG_PRESSURE_SENSOR_ADC_MAX 3500   // 300 bar (real measured)
 #else
   #define CONFIG_PRESSURE_SENSOR_ADC_MIN 620    // 0.5V (without divider)
   #define CONFIG_PRESSURE_SENSOR_ADC_MAX 4095   // 3.3V (without divider, max ~230 bar)
