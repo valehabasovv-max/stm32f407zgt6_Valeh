@@ -122,11 +122,11 @@ int main(void)
   ILI9341_Init();
   HAL_Delay(100);
   
-  /* TEST EKRANI */
+  /* TEST EKRANI - v2 */
   ILI9341_FillScreen(ILI9341_COLOR_BLACK);
-  ILI9341_DrawString(30, 50, "LCD TEST OK!", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 3);
-  ILI9341_DrawString(30, 100, "Sistem hazirlaniyor", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
-  HAL_Delay(2000);
+  ILI9341_DrawString(30, 50, "*** YENI KOD ***", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 3);
+  ILI9341_DrawString(30, 100, "Versiya 2.0", ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 2);
+  HAL_Delay(1500);
   
   /* PWM başlat */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
