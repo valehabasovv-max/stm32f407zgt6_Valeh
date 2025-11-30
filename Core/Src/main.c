@@ -129,65 +129,67 @@ int main(void)
   ILI9341_Init();
   HAL_Delay(100);
   
-  /* DÜZƏLİŞ: LCD test uğurlu oldusa, mesaj göstər */
+  /* DEBUG: Hər addımda LCD-də göstər - ekran SİLİNMİR */
   ILI9341_FillScreen(ILI9341_COLOR_BLACK);
-  ILI9341_DrawString(50, 100, "LCD TEST OK!", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 3);
-  HAL_Delay(1000);
   
-  /* Sadə ana ekran - heç bir PID/Config funksiyası çağırılmır */
-  ILI9341_FillScreen(ILI9341_COLOR_BLACK);
-  ILI9341_DrawString(20, 20, "HIGH PRESSURE CONTROL", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
-  ILI9341_DrawString(80, 80, "0.00 BAR", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 3);
-  ILI9341_DrawString(20, 140, "SP: 100 bar", ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 2);
-  ILI9341_DrawString(200, 140, "SAFE", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 2);
-  ILI9341_DrawControlButton(20, 180, 80, 40, ILI9341_COLOR_WHITE, "Menu", 2);
+  /* Step 1 */
+  ILI9341_DrawString(10, 10, "1.LCD OK", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 2);
   
-  /* PWM başlat */
+  /* Step 2 - Delay test */
+  HAL_Delay(500);
+  ILI9341_DrawString(10, 40, "2.Delay OK", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 2);
+  
+  /* Step 3 - PWM */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
-  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0);
-  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, 0);
-  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 0);
-  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, 0);
+  ILI9341_DrawString(10, 70, "3.PWM OK", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 2);
   
-  /* Touch ekran */
+  /* Step 4 - Touch */
   XPT2046_Init();
+  ILI9341_DrawString(10, 100, "4.Touch OK", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 2);
+  
+  /* Step 5 - Loop ready */
+  ILI9341_DrawString(10, 130, "5.HAZIR!", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 3);
+  
+  /* Pressure display area */
+  ILI9341_DrawString(10, 180, "Tezyiq:", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
+  ILI9341_DrawString(120, 180, "0.00 BAR", ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 2);
   
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  uint32_t counter = 0;
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
     
-    /* Sadə ADC oxuma və ekran yeniləmə */
-    static uint32_t last_update = 0;
-    if (HAL_GetTick() - last_update > 300) {
-        last_update = HAL_GetTick();
-        
-        /* ADC-dən birbaşa oxu */
-        uint16_t adc_value = 0;
+    counter++;
+    
+    /* Hər 500ms-də ekranı yenilə */
+    if (counter % 10 == 0) {
+        /* ADC oxu */
+        uint16_t adc = 0;
         if (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC)) {
-            adc_value = HAL_ADC_GetValue(&hadc3);
+            adc = HAL_ADC_GetValue(&hadc3);
         }
         
-        /* Sadə təzyiq hesablama */
-        float pressure = 0.0f;
-        if (adc_value > 620) {
-            pressure = (float)(adc_value - 620) * 300.0f / 3475.0f;
-        }
-        if (pressure > 300.0f) pressure = 300.0f;
+        /* Sadə təzyiq */
+        float p = (adc > 620) ? ((float)(adc - 620) * 300.0f / 3475.0f) : 0.0f;
+        if (p > 300.0f) p = 300.0f;
         
-        /* Təzyiq dəyərini göstər */
-        char buf[20];
-        sprintf(buf, "%6.2f BAR", pressure);
-        ILI9341_DrawRectangle(80, 80, 180, 30, ILI9341_COLOR_BLACK);
-        ILI9341_DrawString(80, 80, buf, ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 3);
+        /* Göstər */
+        char buf[30];
+        sprintf(buf, "%.1f BAR  ", p);
+        ILI9341_DrawString(120, 180, buf, ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 2);
+        
+        /* Counter göstər - hərəkət olduğunu görmək üçün */
+        sprintf(buf, "C:%lu  ", counter/10);
+        ILI9341_DrawString(10, 210, buf, ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
     }
     
     HAL_Delay(50);
