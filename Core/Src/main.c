@@ -147,16 +147,16 @@ int main(void)
   
   // Validasiya: ADC aralığı voltage divider konfiqurasiyasına uyğun olmalıdır
 #if VOLTAGE_DIVIDER_ENABLED
-  // Voltage divider ilə: ADC 500-3500 aralığı
-  uint16_t expected_min_low = 400;
-  uint16_t expected_min_high = 700;
-  uint16_t expected_max_low = 3000;
-  uint16_t expected_max_high = 4000;
+  // Voltage divider ilə: ADC 310-3103 aralığı (sensor 0.5V-5V → divider 0.25V-2.5V)
+  uint16_t expected_min_low = 200;    // ADC_MIN tolerans alt hədd
+  uint16_t expected_min_high = 500;   // ADC_MIN tolerans üst hədd
+  uint16_t expected_max_low = 2500;   // ADC_MAX tolerans alt hədd
+  uint16_t expected_max_high = 3500;  // ADC_MAX tolerans üst hədd
 #else
   // Voltage divider olmadan: ADC 620-4095 aralığı
-  uint16_t expected_min_low = 200;
-  uint16_t expected_min_high = 1000;
-  uint16_t expected_max_low = 3000;
+  uint16_t expected_min_low = 400;
+  uint16_t expected_min_high = 800;
+  uint16_t expected_max_low = 3500;
   uint16_t expected_max_high = 4095;
 #endif
   
