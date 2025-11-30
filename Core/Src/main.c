@@ -142,9 +142,7 @@ void Draw_MainScreen(void) {
         ILI9341_DrawString(20, 10, "HIGH PRESSURE CONTROL", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
         
         // Aşağıdakı düymələr
-        Draw_Button(10, 190, 100, 45, "MENU", ILI9341_COLOR_WHITE);
-        Draw_Button(120, 190, 100, 45, "START", ILI9341_COLOR_GREEN);
-        Draw_Button(230, 190, 80, 45, "STOP", ILI9341_COLOR_RED);
+        Draw_Button(120, 190, 80, 45, "MENU", ILI9341_COLOR_WHITE);
         
         need_full_redraw = 0;
     }
@@ -251,19 +249,9 @@ void Handle_Touch(void) {
     switch (screen_mode) {
         case SCREEN_MAIN:
             // MENU düyməsi
-            if (Button_Pressed(10, 190, 100, 45)) {
+            if (Button_Pressed(120, 190, 80, 45)) {
                 screen_mode = SCREEN_MENU;
                 need_full_redraw = 1;
-            }
-            // START düyməsi
-            else if (Button_Pressed(120, 190, 100, 45)) {
-                if (system_mode == MODE_SAFE) {
-                    system_mode = MODE_FILLING;
-                }
-            }
-            // STOP düyməsi
-            else if (Button_Pressed(230, 190, 80, 45)) {
-                system_mode = MODE_SAFE;
             }
             break;
             
