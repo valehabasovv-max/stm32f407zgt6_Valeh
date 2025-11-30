@@ -34,25 +34,168 @@ void ILI9341_Init(void)
     /* Backlight ON */
     HAL_GPIO_WritePin(LCD_LIG_GPIO_Port, LCD_LIG_Pin, GPIO_PIN_SET);
 
-    /* HW reset pulse */
+    /* HW reset pulse - UZUN RESET */
     HAL_GPIO_WritePin(LCD_RST_GPIO_Port, LCD_RST_Pin, GPIO_PIN_RESET);
-    HAL_Delay(10);
+    HAL_Delay(50);  /* DÜZƏLİŞ: 10ms-dən 50ms-ə artırıldı */
     HAL_GPIO_WritePin(LCD_RST_GPIO_Port, LCD_RST_Pin, GPIO_PIN_SET);
-    HAL_Delay(120);
+    HAL_Delay(150); /* DÜZƏLİŞ: 120ms-dən 150ms-ə artırıldı */
 
-    /* ILI9341 initialization sequence */
-    lcd_write_command(0x01); HAL_Delay(5);    /* Software Reset */
-    lcd_write_command(0x28);                  /* Display OFF */
-
-    lcd_write_command(0x3A);                  /* Pixel Format Set */
-    lcd_write_data(0x55);                     /* 16-bit/pixel */
-
-    lcd_write_command(0x36);                  /* Memory Access Control */
-    lcd_write_data(0x28);                     /* MX=0, MY=1, MV=0, BGR=1 (Landscape 320x240) */
-
+    /* ============================================
+     * TAM ILI9341 BAŞLATMA ARDICILLIĞI
+     * ============================================ */
+    
+    /* Software Reset */
+    lcd_write_command(0x01);
+    HAL_Delay(50);
+    
+    /* Display OFF */
+    lcd_write_command(0x28);
+    HAL_Delay(10);
+    
+    /* Power Control A */
+    lcd_write_command(0xCB);
+    lcd_write_data(0x39);
+    lcd_write_data(0x2C);
+    lcd_write_data(0x00);
+    lcd_write_data(0x34);
+    lcd_write_data(0x02);
+    
+    /* Power Control B */
+    lcd_write_command(0xCF);
+    lcd_write_data(0x00);
+    lcd_write_data(0xC1);  /* DÜZƏLİŞ: 0x81 əvəzinə 0xC1 */
+    lcd_write_data(0x30);
+    
+    /* Driver Timing Control A */
+    lcd_write_command(0xE8);
+    lcd_write_data(0x85);
+    lcd_write_data(0x00);  /* DÜZƏLİŞ: 0x01 əvəzinə 0x00 */
+    lcd_write_data(0x78);  /* DÜZƏLİŞ: 0x79 əvəzinə 0x78 */
+    
+    /* Driver Timing Control B */
+    lcd_write_command(0xEA);
+    lcd_write_data(0x00);
+    lcd_write_data(0x00);
+    
+    /* Power On Sequence Control */
+    lcd_write_command(0xED);
+    lcd_write_data(0x64);
+    lcd_write_data(0x03);
+    lcd_write_data(0x12);
+    lcd_write_data(0x81);
+    
+    /* Pump Ratio Control */
+    lcd_write_command(0xF7);
+    lcd_write_data(0x20);
+    
+    /* Power Control 1 - VRH[5:0] */
+    lcd_write_command(0xC0);
+    lcd_write_data(0x23);  /* 4.60V */
+    
+    /* Power Control 2 - SAP[2:0], BT[3:0] */
+    lcd_write_command(0xC1);
+    lcd_write_data(0x10);
+    
+    /* VCOM Control 1 */
+    lcd_write_command(0xC5);
+    lcd_write_data(0x3E);  /* VMH = 4.250V */
+    lcd_write_data(0x28);  /* VML = -1.500V */
+    
+    /* VCOM Control 2 */
+    lcd_write_command(0xC7);
+    lcd_write_data(0x86);  /* VMF = -58 */
+    
+    /* Memory Access Control - Landscape 320x240 */
+    lcd_write_command(0x36);
+    lcd_write_data(0x28);  /* MY=0, MX=0, MV=1, ML=0, BGR=1, MH=0 */
+    
+    /* Pixel Format Set - 16 bit/pixel */
+    lcd_write_command(0x3A);
+    lcd_write_data(0x55);  /* RGB565 */
+    
+    /* Frame Rate Control (Normal Mode) */
+    lcd_write_command(0xB1);
+    lcd_write_data(0x00);
+    lcd_write_data(0x18);  /* 79Hz frame rate */
+    
+    /* Display Function Control */
+    lcd_write_command(0xB6);
+    lcd_write_data(0x08);
+    lcd_write_data(0x82);
+    lcd_write_data(0x27);
+    
+    /* Entry Mode Set */
+    lcd_write_command(0xB7);
+    lcd_write_data(0x07);
+    
+    /* 3Gamma Function Disable */
+    lcd_write_command(0xF2);
+    lcd_write_data(0x00);
+    
+    /* Gamma Set - Curve 1 */
+    lcd_write_command(0x26);
+    lcd_write_data(0x01);
+    
+    /* Positive Gamma Correction */
+    lcd_write_command(0xE0);
+    lcd_write_data(0x0F);
+    lcd_write_data(0x31);
+    lcd_write_data(0x2B);
+    lcd_write_data(0x0C);
+    lcd_write_data(0x0E);
+    lcd_write_data(0x08);
+    lcd_write_data(0x4E);
+    lcd_write_data(0xF1);
+    lcd_write_data(0x37);
+    lcd_write_data(0x07);
+    lcd_write_data(0x10);
+    lcd_write_data(0x03);
+    lcd_write_data(0x0E);
+    lcd_write_data(0x09);
+    lcd_write_data(0x00);
+    
+    /* Negative Gamma Correction */
+    lcd_write_command(0xE1);
+    lcd_write_data(0x00);
+    lcd_write_data(0x0E);
+    lcd_write_data(0x14);
+    lcd_write_data(0x03);
+    lcd_write_data(0x11);
+    lcd_write_data(0x07);
+    lcd_write_data(0x31);
+    lcd_write_data(0xC1);
+    lcd_write_data(0x48);
+    lcd_write_data(0x08);
+    lcd_write_data(0x0F);
+    lcd_write_data(0x0C);
+    lcd_write_data(0x31);
+    lcd_write_data(0x36);
+    lcd_write_data(0x0F);
+    
+    /* Column Address Set (0-319) */
+    lcd_write_command(0x2A);
+    lcd_write_data(0x00);
+    lcd_write_data(0x00);
+    lcd_write_data(0x01);
+    lcd_write_data(0x3F);
+    
+    /* Page Address Set (0-239) */
+    lcd_write_command(0x2B);
+    lcd_write_data(0x00);
+    lcd_write_data(0x00);
+    lcd_write_data(0x00);
+    lcd_write_data(0xEF);
+    
+    /* Sleep Out */
+    lcd_write_command(0x11);
+    HAL_Delay(150);  /* DÜZƏLİŞ: 120ms-dən 150ms-ə artırıldı - sleep out tam tamamlanana qədər gözlə */
+    
     /* Display ON */
-    lcd_write_command(0x11); HAL_Delay(120);  /* Sleep Out */
-    lcd_write_command(0x29);                  /* Display ON */
+    lcd_write_command(0x29);
+    HAL_Delay(50);   /* DÜZƏLİŞ: Display ON-dan sonra gözlə */
+    
+    /* Memory Write - RAM-a yazmağa hazırla */
+    lcd_write_command(0x2C);
 }
 
 /* ------------------ Ekranı rənglə doldur ------------------ */
