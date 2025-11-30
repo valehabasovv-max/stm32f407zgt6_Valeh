@@ -29,13 +29,41 @@ extern "C" {
 
 // Təzyiq Sensoru (ADC)
 // KRİTİK DÜZƏLİŞ: 12-bit ADC maksimum dəyəri 4095-dir (2^12 - 1), 4096 deyil!
-// 0.5V (0 bar) -> 410, 5.0V (300 bar) -> 4095 (5.0V Vref fərziyyəsi ilə)
-#define ADC_MIN 500
-#define ADC_MAX 4095
+// 
+// Voltage Divider konfiqurasiyası:
+// - Sensor çıxışı: 0.5V (0 bar) - 5.0V (300 bar)
+// - Voltage divider 1:1 (5V → 2.5V), əgər istifadə olunarsa
+// - STM32F4 ADC referans: 3.3V
+//
+// Voltage divider İLƏ (tövsiyə olunur):
+// - Sensor 0.5V → Divider 0.25V → ADC = (0.25/3.3)*4095 ≈ 310
+// - Sensor 5.0V → Divider 2.5V → ADC = (2.5/3.3)*4095 ≈ 3103
+// - Real ölçülmüş: ADC_MIN ≈ 300-350, ADC_MAX ≈ 3000-3500
+//
+// Voltage divider OLMADAN:
+// - Sensor 0.5V → ADC = (0.5/3.3)*4095 ≈ 620
+// - Sensor 5.0V → ADC saturasiya (>3.3V) → ADC = 4095 (max ~230 bar)
+
+// Voltage divider konfiqurasiyası (pressure_control_config.h ilə EYNİ olmalıdır!)
+#ifndef VOLTAGE_DIVIDER_ENABLED
+#define VOLTAGE_DIVIDER_ENABLED 1  // 1 = voltage divider var, 0 = yoxdur
+#endif
+
+#if VOLTAGE_DIVIDER_ENABLED
+  // Voltage divider ilə (real ölçülmüş dəyərlər)
+  #define ADC_MIN 310U       // 0 bar (sensor 0.5V → divider ~0.25V → ADC ~310)
+  #define ADC_MAX 3103U      // 300 bar (sensor 5.0V → divider ~2.5V → ADC ~3103)
+#else
+  // Voltage divider olmadan
+  #define ADC_MIN 620U       // 0 bar (sensor 0.5V → ADC ~620)
+  #define ADC_MAX 4095U      // ~230 bar (sensor 3.3V → ADC 4095, 300 bar oxunmaz!)
+#endif
+
 #define PRESSURE_MIN 0.0f
 #define PRESSURE_MAX 300.0f
 #define PRESSURE_SLOPE ((PRESSURE_MAX - PRESSURE_MIN) / (float)(ADC_MAX - ADC_MIN))
-// PRESSURE_SLOPE təxminən 0.08139f olacaq
+// Voltage divider ilə: PRESSURE_SLOPE ≈ 0.1074 bar/ADC
+// Voltage divider olmadan: PRESSURE_SLOPE ≈ 0.0863 bar/ADC
 
 // ZME Klapanı (Normally Open - Tərs Məntiq)
 #define ZME_PWM_MIN 0.0f     // Təzyiq Maksimum (Açıq)

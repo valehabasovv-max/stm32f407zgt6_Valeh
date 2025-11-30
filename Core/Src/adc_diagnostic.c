@@ -91,21 +91,56 @@ void ADC_RunDiagnostic(void) {
     uint16_t current_adc = AdvancedPressureControl_ReadADC();
     float current_pressure = status->current_pressure;
     
-    if (current_adc == 632 || (current_adc >= 630 && current_adc <= 634)) {
-        printf("⚠ ADC qiymət 632 ətrafında qalıb!\n");
+    // ADC_MIN dəyərini yoxla (voltage divider-ə görə fərqli ola bilər)
+    printf("Expected ADC range: %u - %u\n", ADC_MIN, ADC_MAX);
+    printf("Current ADC: %u\n", current_adc);
+    printf("Current Pressure: %.2f bar\n\n", current_pressure);
+    
+#if VOLTAGE_DIVIDER_ENABLED
+    // Voltage divider ilə: ADC_MIN ≈ 310, ADC_MAX ≈ 3103
+    if (current_adc < 250 || current_adc > 3500) {
+        printf("⚠ ADC qiymət gözlənilən aralıqdan kənardır!\n");
+        printf("  Gözlənilən: %u - %u\n", ADC_MIN, ADC_MAX);
+        printf("  Oxunan: %u\n", current_adc);
         printf("  Səbəblər:\n");
-        printf("  1. ADC continuous mode düzgün işləmir\n");
-        printf("  2. Sensor qoşulması problemlidir (PA3 pin)\n");
-        printf("  3. Sensor gərginliyi 0.5V-ə yaxındır (0 bar)\n");
-        printf("  4. ADC referans gərginliyi problemlidir (3.3V olmalıdır)\n");
+        printf("  1. Voltage divider düzgün qoşulmayıb\n");
+        printf("  2. Sensor problemlidir\n");
+        printf("  3. Kabel qoşulması yoxlanılmalıdır\n");
+    }
+#else
+    // Voltage divider olmadan: ADC_MIN ≈ 620, ADC_MAX ≈ 4095
+    if (current_adc < 500 || current_adc > 4095) {
+        printf("⚠ ADC qiymət gözlənilən aralıqdan kənardır!\n");
+        printf("  Gözlənilən: %u - %u\n", ADC_MIN, ADC_MAX);
+        printf("  Oxunan: %u\n", current_adc);
+        printf("  Səbəblər:\n");
+        printf("  1. Sensor problemlidir\n");
+        printf("  2. Kabel qoşulması yoxlanılmalıdır\n");
+        printf("  3. Sensor gərginliyi 5V-dan yüksək ola bilməz (STM32 zədələnə bilər!)\n");
+    }
+#endif
+    
+    // Təzyiq 0.00 bar problemi yoxlaması
+    if (current_pressure < 0.5f && current_adc > ADC_MIN) {
+        printf("⚠ Təzyiq 0.00 göstərir, amma ADC > ADC_MIN (%u)!\n", ADC_MIN);
+        printf("  Oxunan ADC: %u\n", current_adc);
+        printf("  Gözlənilən təzyiq: %.2f bar\n", 
+               g_calibration.offset + ((float)current_adc * g_calibration.slope));
+        printf("\n  Potensial səbəblər:\n");
+        printf("  1. Kalibrasiya məlumatları düzgün yüklənməyib\n");
+        printf("  2. Offset (%.2f) çox böyük/kiçikdir\n", g_calibration.offset);
+        printf("  3. Slope (%.6f) səhvdir\n", g_calibration.slope);
+        printf("\n  TÖVSİYƏ: ADC_ForceRecalibration() çağırın\n");
     }
     
-    if (current_pressure == 0.0f && current_adc > 620) {
-        printf("⚠ Təzyiq 0.00 göstərir, amma ADC > 620!\n");
+    // ADC dəyəri ADC_MIN-dən aşağıdırsa
+    if (current_adc < ADC_MIN) {
+        printf("⚠ ADC dəyəri ADC_MIN-dən (%u) aşağıdır: %u\n", ADC_MIN, current_adc);
+        printf("  Bu, sensor gərginliyinin 0 bar-dan da aşağı olduğunu göstərir.\n");
         printf("  Səbəblər:\n");
-        printf("  1. Kalibrasiya məlumatları düzgün yüklənməyib\n");
-        printf("  2. Offset/Slope hesablamaları yanlışdır\n");
-        printf("  3. Həddindən artıq clamping tətbiq olunur\n");
+        printf("  1. Sensor düzgün qoşulmayıb\n");
+        printf("  2. Sensor qida gərginliyi (5V/12V) yoxlanılmalıdır\n");
+        printf("  3. GND bağlantısı yoxlanılmalıdır\n");
     }
     
     printf("\n");
@@ -154,24 +189,32 @@ void ADC_TestHardwareDirectly(void) {
 
 /**
  * @brief Force recalibration with manual values
+ * 
+ * KRİTİK: Bu funksiya kalibrasiya məlumatlarını default dəyərlərə sıfırlayır.
+ * Voltage divider konfiqurasiyasına görə ADC_MIN və ADC_MAX dəyərləri istifadə olunur.
  */
 void ADC_ForceRecalibration(void) {
-    printf("\n--- FORCING RECALIBRATION ---\n");
+    printf("\n");
+    printf("=================================================================\n");
+    printf("           KALİBRASİYA SIFILAMA (FORCE RECALIBRATION)\n");
+    printf("=================================================================\n");
     
 #if VOLTAGE_DIVIDER_ENABLED
-    printf("Setting calibration to defaults (Voltage Divider Mode):\n");
-    printf("  ADC: %u - %u\n", ADC_MIN, ADC_MAX);
-    printf("  Pressure: 0.0 - 300.0 bar\n");
-    printf("  NOTE: Voltage divider converts sensor 0.5V-5.0V → ADC 0.25V-2.5V\n");
+    printf("Mode: VOLTAGE DIVIDER AKTİV\n");
+    printf("  Sensor: 0.5V (0 bar) - 5.0V (300 bar)\n");
+    printf("  Divider: 1:1 (5V → 2.5V, 0.5V → 0.25V)\n");
+    printf("  ADC: %u (0 bar) - %u (300 bar)\n", ADC_MIN, ADC_MAX);
+    printf("  Formula: Pressure = (ADC - %u) * %.4f bar\n", ADC_MIN, 
+           (300.0f / ((float)ADC_MAX - (float)ADC_MIN)));
     
     g_calibration.adc_min = (float)ADC_MIN;
     g_calibration.adc_max = (float)ADC_MAX;
 #else
-    printf("Setting calibration to defaults (Direct Mode - NO VOLTAGE DIVIDER):\n");
-    printf("  ADC: %u - %u\n", ADC_MIN, ADC_MAX);
-    printf("  Pressure: 0.0 - 300.0 bar\n");
-    printf("  ⚠ WARNING: Without voltage divider, max readable pressure is ~230 bar!\n");
-    printf("  ⚠ Sensor voltages above 3.3V will saturate ADC at 4095\n");
+    printf("Mode: VOLTAGE DIVIDER YOX (Direct Connection)\n");
+    printf("  Sensor: 0.5V (0 bar) - 5.0V (300 bar)\n");
+    printf("  ⚠ XƏBƏRDARLIQ: STM32 ADC maksimum 3.3V qəbul edir!\n");
+    printf("  ⚠ 230 bar-dan yuxarı təzyiqlər düzgün ölçülməyəcək!\n");
+    printf("  ADC: %u (0 bar) - %u (~230 bar max)\n", ADC_MIN, ADC_MAX);
     
     g_calibration.adc_min = (float)ADC_MIN;
     g_calibration.adc_max = (float)ADC_MAX;
@@ -183,16 +226,39 @@ void ADC_ForceRecalibration(void) {
     g_calibration.offset = 0.0f - (g_calibration.slope * (float)ADC_MIN);
     g_calibration.calibrated = true;
     
-    printf("New calibration values:\n");
+    printf("\nYeni kalibrasiya dəyərləri:\n");
+    printf("  ADC Range: %.0f - %.0f\n", g_calibration.adc_min, g_calibration.adc_max);
+    printf("  Pressure Range: %.2f - %.2f bar\n", g_calibration.pressure_min, g_calibration.pressure_max);
     printf("  Slope: %.6f bar/ADC\n", g_calibration.slope);
     printf("  Offset: %.2f bar\n", g_calibration.offset);
     
     // Test with current ADC reading
+    printf("\nTest nəticəsi:\n");
     uint16_t current_adc = AdvancedPressureControl_ReadADC();
     float test_pressure = g_calibration.offset + ((float)current_adc * g_calibration.slope);
-    printf("Current ADC: %u → Pressure: %.2f bar\n", current_adc, test_pressure);
+    
+    // Clamp negative pressure to 0
+    if (test_pressure < 0.0f) {
+        printf("  ADC=%u → Raw=%.2f bar → Clamped=0.00 bar (mənfi dəyər 0-a clamp olundu)\n", 
+               current_adc, test_pressure);
+        test_pressure = 0.0f;
+    } else {
+        printf("  ADC=%u → Pressure=%.2f bar\n", current_adc, test_pressure);
+    }
+    
+    // Show pressure for different ADC values
+    printf("\nADC-Təzyiq cədvəli (yeni kalibrasiya ilə):\n");
+    uint16_t test_values[] = {ADC_MIN, (ADC_MIN + ADC_MAX)/4, (ADC_MIN + ADC_MAX)/2, 
+                              3*(ADC_MIN + ADC_MAX)/4, ADC_MAX};
+    for (int i = 0; i < 5; i++) {
+        float p = g_calibration.offset + ((float)test_values[i] * g_calibration.slope);
+        if (p < 0.0f) p = 0.0f;
+        if (p > 300.0f) p = 300.0f;
+        printf("  ADC=%u → %.2f bar\n", test_values[i], p);
+    }
     
     // Save to flash
     AdvancedPressureControl_SaveCalibration();
-    printf("Calibration saved to flash.\n\n");
+    printf("\nKalibrasiya Flash yaddaşa qeyd edildi.\n");
+    printf("=================================================================\n\n");
 }

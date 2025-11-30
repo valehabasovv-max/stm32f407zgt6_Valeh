@@ -43,14 +43,27 @@ PID_Tuning_t g_pid_drv_tuning = {
     .tuning_aggressiveness = 1.0f
 };
 
+// KRİTİK DÜZƏLİŞ: Slope və offset default dəyərlərlə hesablanmalıdır!
+// Əvvəlki kod slope=0.0f və calibrated=false idi, bu da bütün təzyiq oxunuşlarının 0 olmasına səbəb olurdu!
+// 
+// Düzgün hesablama:
+// slope = (pressure_max - pressure_min) / (adc_max - adc_min)
+//       = (300.0 - 0.0) / (CONFIG_PRESSURE_SENSOR_ADC_MAX - CONFIG_PRESSURE_SENSOR_ADC_MIN)
+// offset = pressure_min - (slope * adc_min)
+//        = 0.0 - (slope * CONFIG_PRESSURE_SENSOR_ADC_MIN)
+#define CONFIG_PRESSURE_SLOPE ((CONFIG_PRESSURE_SENSOR_PRESSURE_MAX - CONFIG_PRESSURE_SENSOR_PRESSURE_MIN) / \
+                               (float)(CONFIG_PRESSURE_SENSOR_ADC_MAX - CONFIG_PRESSURE_SENSOR_ADC_MIN))
+#define CONFIG_PRESSURE_OFFSET (CONFIG_PRESSURE_SENSOR_PRESSURE_MIN - \
+                                (CONFIG_PRESSURE_SLOPE * (float)CONFIG_PRESSURE_SENSOR_ADC_MIN))
+
 Calibration_Data_t g_calibration_data = {
     .adc_min = CONFIG_PRESSURE_SENSOR_ADC_MIN,
     .adc_max = CONFIG_PRESSURE_SENSOR_ADC_MAX,
     .pressure_min = CONFIG_PRESSURE_SENSOR_PRESSURE_MIN,
     .pressure_max = CONFIG_PRESSURE_SENSOR_PRESSURE_MAX,
-    .slope = 0.0f,
-    .offset = 0.0f,
-    .calibrated = false,
+    .slope = CONFIG_PRESSURE_SLOPE,      // DÜZƏLİŞ: Default slope hesablandı
+    .offset = CONFIG_PRESSURE_OFFSET,    // DÜZƏLİŞ: Default offset hesablandı
+    .calibrated = true,                  // DÜZƏLİŞ: Default dəyərlərlə calibrated=true
     .calibration_date = 0
 };
 
@@ -100,12 +113,29 @@ void PressureControlConfig_Init(void) {
                                        g_pid_drv_tuning.ki, 
                                        g_pid_drv_tuning.kd);
     
-    // Calculate calibration slope
-    if (g_calibration_data.calibrated) {
+    // KRİTİK DÜZƏLİŞ: Slope və offset HƏMİŞƏ hesablanmalıdır!
+    // Əvvəlki kod yalnız calibrated=true olduqda hesablayırdı, bu da
+    // Flash-da data olmadıqda slope=0 qalması və təzyiqin həmişə 0 göstərməsinə səbəb olurdu.
+    // 
+    // Yeni məntiq: Slope və offset həmişə hesablanır, əgər ADC aralığı valid-dirsə
+    if (g_calibration_data.adc_max > g_calibration_data.adc_min) {
         g_calibration_data.slope = (g_calibration_data.pressure_max - g_calibration_data.pressure_min) / 
                                   (g_calibration_data.adc_max - g_calibration_data.adc_min);
         g_calibration_data.offset = g_calibration_data.pressure_min - 
                                    (g_calibration_data.slope * g_calibration_data.adc_min);
+        g_calibration_data.calibrated = true;
+        
+        printf("Config: Calibration slope calculated: %.6f bar/ADC, offset: %.2f bar\r\n",
+               g_calibration_data.slope, g_calibration_data.offset);
+    } else {
+        // ADC aralığı invalid - default dəyərləri istifadə et
+        printf("ERROR: Invalid ADC range (min=%.0f, max=%.0f), using defaults\r\n",
+               g_calibration_data.adc_min, g_calibration_data.adc_max);
+        g_calibration_data.adc_min = (float)CONFIG_PRESSURE_SENSOR_ADC_MIN;
+        g_calibration_data.adc_max = (float)CONFIG_PRESSURE_SENSOR_ADC_MAX;
+        g_calibration_data.slope = CONFIG_PRESSURE_SLOPE;
+        g_calibration_data.offset = CONFIG_PRESSURE_OFFSET;
+        g_calibration_data.calibrated = true;
     }
     
     printf("Configuration initialized successfully\r\n");
@@ -269,34 +299,89 @@ void PressureControlConfig_AddCalibrationPoint(float adc_value, float pressure_v
 
 /**
  * @brief Complete calibration process
+ * 
+ * KRİTİK DÜZƏLİŞ: ADC aralığı validasiyası gücləndirildi.
+ * Minimum ADC aralığı (2000) tələb olunur ki, slope çox kiçik olmasın.
  */
 void PressureControlConfig_CompleteCalibration(void) {
-    if (g_calibration_data.adc_min > 0 && g_calibration_data.adc_max > g_calibration_data.adc_min) {
+    // ADC aralığı validasiyası
+    float adc_range = g_calibration_data.adc_max - g_calibration_data.adc_min;
+    
+    // Minimum aralıq yoxlaması - slope çox kiçik olmamalıdır
+    const float MIN_ADC_RANGE = 1500.0f;  // Minimum 1500 ADC count fərq olmalıdır
+    
+    if (g_calibration_data.adc_max > g_calibration_data.adc_min && adc_range >= MIN_ADC_RANGE) {
         // Calculate slope and offset
-        g_calibration_data.slope = (g_calibration_data.pressure_max - g_calibration_data.pressure_min) / 
-                                  (g_calibration_data.adc_max - g_calibration_data.adc_min);
+        g_calibration_data.slope = (g_calibration_data.pressure_max - g_calibration_data.pressure_min) / adc_range;
         g_calibration_data.offset = g_calibration_data.pressure_min - 
                                    (g_calibration_data.slope * g_calibration_data.adc_min);
         g_calibration_data.calibrated = true;
+        g_calibration_data.calibration_date = HAL_GetTick();
         
         printf("Calibration completed successfully\r\n");
+        printf("  ADC Range: %.0f - %.0f (range: %.0f)\r\n", 
+               g_calibration_data.adc_min, g_calibration_data.adc_max, adc_range);
+        printf("  Pressure Range: %.2f - %.2f bar\r\n",
+               g_calibration_data.pressure_min, g_calibration_data.pressure_max);
+        printf("  Slope: %.6f bar/ADC\r\n", g_calibration_data.slope);
+        printf("  Offset: %.2f bar\r\n", g_calibration_data.offset);
+        
+        // Advanced sistemdəki kalibrasiya strukturunu da yenilə
+        extern CalibrationData_t g_calibration;
+        g_calibration.adc_min = g_calibration_data.adc_min;
+        g_calibration.adc_max = g_calibration_data.adc_max;
+        g_calibration.pressure_min = g_calibration_data.pressure_min;
+        g_calibration.pressure_max = g_calibration_data.pressure_max;
+        g_calibration.slope = g_calibration_data.slope;
+        g_calibration.offset = g_calibration_data.offset;
+        g_calibration.calibrated = true;
+        
         PressureControlConfig_PrintCalibrationData();
         
-        // Save calibration data
+        // Save calibration data to both systems
         PressureControlConfig_SaveCalibrationData();
+        AdvancedPressureControl_SaveCalibration();
     } else {
-        printf("Calibration failed: Invalid data points\r\n");
+        printf("Calibration FAILED: Invalid data points\r\n");
+        printf("  ADC Min: %.0f\r\n", g_calibration_data.adc_min);
+        printf("  ADC Max: %.0f\r\n", g_calibration_data.adc_max);
+        printf("  ADC Range: %.0f (minimum %.0f required)\r\n", adc_range, MIN_ADC_RANGE);
+        printf("  Calibration NOT saved!\r\n");
     }
 }
 
 /**
- * @brief Reset calibration data
+ * @brief Reset calibration data to defaults
+ * 
+ * KRİTİK DÜZƏLİŞ: Slope=0 etmək əvəzinə default dəyərlərə sıfırlayır.
+ * Bu, təzyiq oxunuşlarının işləməyə davam etməsini təmin edir.
  */
 void PressureControlConfig_ResetCalibration(void) {
-    g_calibration_data.calibrated = false;
-    g_calibration_data.slope = 0.0f;
-    g_calibration_data.offset = 0.0f;
-    printf("Calibration data reset\r\n");
+    // Default dəyərlərə sıfırla (slope=0 etmə!)
+    g_calibration_data.adc_min = (float)CONFIG_PRESSURE_SENSOR_ADC_MIN;
+    g_calibration_data.adc_max = (float)CONFIG_PRESSURE_SENSOR_ADC_MAX;
+    g_calibration_data.pressure_min = CONFIG_PRESSURE_SENSOR_PRESSURE_MIN;
+    g_calibration_data.pressure_max = CONFIG_PRESSURE_SENSOR_PRESSURE_MAX;
+    g_calibration_data.slope = CONFIG_PRESSURE_SLOPE;
+    g_calibration_data.offset = CONFIG_PRESSURE_OFFSET;
+    g_calibration_data.calibrated = true;  // Default dəyərlərlə calibrated=true
+    g_calibration_data.calibration_date = 0;
+    
+    // Advanced sistemdəki kalibrasiya strukturunu da sıfırla
+    extern CalibrationData_t g_calibration;
+    g_calibration.adc_min = g_calibration_data.adc_min;
+    g_calibration.adc_max = g_calibration_data.adc_max;
+    g_calibration.pressure_min = g_calibration_data.pressure_min;
+    g_calibration.pressure_max = g_calibration_data.pressure_max;
+    g_calibration.slope = g_calibration_data.slope;
+    g_calibration.offset = g_calibration_data.offset;
+    g_calibration.calibrated = true;
+    
+    printf("Calibration data reset to defaults:\r\n");
+    printf("  ADC Range: %.0f - %.0f\r\n", g_calibration_data.adc_min, g_calibration_data.adc_max);
+    printf("  Pressure Range: %.2f - %.2f bar\r\n", g_calibration_data.pressure_min, g_calibration_data.pressure_max);
+    printf("  Slope: %.6f bar/ADC\r\n", g_calibration_data.slope);
+    printf("  Offset: %.2f bar\r\n", g_calibration_data.offset);
 }
 
 /**

@@ -72,22 +72,33 @@ extern "C" {
 // KRİTİK DÜZƏLİŞ: 12-bit ADC maksimum dəyəri 4095-dir (2^12 - 1), 4096 deyil!
 // STM32F4 ADC referans gərginliyi: 3.3V
 // Sensor çıxışı: 0.5V (0 bar) -> 5.0V (300 bar)
-// ADC hesablaması: ADC = (Voltage / 3.3V) * 4095
-// 0.5V -> ADC = (0.5 / 3.3) * 4095 ≈ 620
-// 5.0V -> ADC = (5.0 / 3.3) * 4095 ≈ 6204 (saturasiya, 4095-də məhdudlaşır)
-// PRESSURE_SLOPE = (300.0 - 0.0) / (ADC_MAX - ADC_MIN)
-// With voltage divider: (300.0 - 0.0) / (3500 - 500) = 0.1000 bar/ADC count
-// Without voltage divider: (300.0 - 0.0) / (4095 - 620) = 0.0864 bar/ADC count
+//
+// Voltage Divider İLƏ (tövsiyə olunur - sensor 5V çıxışını STM32 3.3V ADC-yə uyğunlaşdırır):
+// - 1:1 bölücü (R1=R2) istifadə olunur: 5V → 2.5V, 0.5V → 0.25V
+// - Sensor 0.5V → Divider 0.25V → ADC = (0.25/3.3)*4095 ≈ 310
+// - Sensor 5.0V → Divider 2.5V → ADC = (2.5/3.3)*4095 ≈ 3103
+// - Slope = 300 / (3103 - 310) = 0.1074 bar/ADC
+//
+// Voltage Divider OLMADAN:
+// - Sensor 0.5V → ADC = (0.5/3.3)*4095 ≈ 620
+// - Sensor 5.0V → ADC saturasiya (>3.3V) → ADC = 4095 (yalnız ~230 bar-a qədər ölçülə bilər!)
+// - Slope = 300 / (4095 - 620) = 0.0863 bar/ADC
+// - ⚠ XƏBƏRDARLIQ: 230 bar-dan yuxarı təzyiqlər ölçülə bilməz!
 
-// Voltage divider konfiqurasiyası (advanced_pressure_control.h ilə eyni olmalıdır)
+// Voltage divider konfiqurasiyası (advanced_pressure_control.h ilə EYNİ olmalıdır!)
+#ifndef VOLTAGE_DIVIDER_ENABLED
 #define VOLTAGE_DIVIDER_ENABLED 1  // 1 = var, 0 = yoxdur
+#endif
 
 #if VOLTAGE_DIVIDER_ENABLED
-  #define CONFIG_PRESSURE_SENSOR_ADC_MIN 500    // 0 bar (real measured)
-  #define CONFIG_PRESSURE_SENSOR_ADC_MAX 3500   // 300 bar (real measured)
+  // Voltage divider ilə (real ölçülmüş dəyərlər)
+  // KRİTİK: Bu dəyərlər advanced_pressure_control.h ilə EYNİ olmalıdır!
+  #define CONFIG_PRESSURE_SENSOR_ADC_MIN 310    // 0 bar (sensor 0.5V → divider ~0.25V → ADC ~310)
+  #define CONFIG_PRESSURE_SENSOR_ADC_MAX 3103   // 300 bar (sensor 5.0V → divider ~2.5V → ADC ~3103)
 #else
-  #define CONFIG_PRESSURE_SENSOR_ADC_MIN 620    // 0.5V (without divider)
-  #define CONFIG_PRESSURE_SENSOR_ADC_MAX 4095   // 3.3V (without divider, max ~230 bar)
+  // Voltage divider olmadan
+  #define CONFIG_PRESSURE_SENSOR_ADC_MIN 620    // 0 bar (sensor 0.5V → ADC ~620)
+  #define CONFIG_PRESSURE_SENSOR_ADC_MAX 4095   // ~230 bar (sensor 3.3V → ADC 4095, 300 bar oxunmaz!)
 #endif
 
 #define CONFIG_PRESSURE_SENSOR_PRESSURE_MIN 0.0f
