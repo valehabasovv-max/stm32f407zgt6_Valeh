@@ -235,7 +235,7 @@ void Handle_Touch(void) {
     
     if (XPT2046_IsTouched()) {
         uint16_t raw_x, raw_y;
-        XPT2046_GetTouchPoint(&raw_x, &raw_y);
+        XPT2046_GetCoordinates(&raw_x, &raw_y);
         
         // Koordinat çevrilməsi (kalibrasiyaya görə)
         touch_x = raw_x;
