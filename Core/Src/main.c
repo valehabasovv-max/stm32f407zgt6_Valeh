@@ -24,6 +24,7 @@
 #include "ILI9341_FSMC.h"
 #include "XPT2046.h"
 #include <stdio.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -55,6 +56,38 @@ SRAM_HandleTypeDef hsram1;
 
 /* USER CODE BEGIN PV */
 
+/* =============== SİSTEM DƏYİŞƏNLƏRİ =============== */
+// Təzyiq dəyişənləri
+float main_pressure = 0.0f;        // Hazırki təzyiq (bar)
+float main_setpoint = 100.0f;      // Hədəf təzyiq (bar)
+float main_tolerance = 5.0f;       // Tolerans (bar)
+
+// Sistem rejimi
+typedef enum {
+    MODE_SAFE,      // Təhlükəsiz - hər şey bağlı
+    MODE_FILLING,   // Dolduruluр - inlet açıq
+    MODE_HOLDING,   // Saxlanılır - hər şey bağlı
+    MODE_RELEASING  // Boşaldılır - outlet açıq
+} SystemMode;
+SystemMode system_mode = MODE_SAFE;
+
+// Ekran rejimi
+typedef enum {
+    SCREEN_MAIN,    // Əsas ekran
+    SCREEN_MENU,    // Menyu
+    SCREEN_SETPOINT // Setpoint ayarı
+} ScreenMode;
+ScreenMode screen_mode = SCREEN_MAIN;
+
+// Touch dəyişənləri
+uint8_t touch_pressed = 0;
+uint8_t last_touch = 0;
+uint16_t touch_x = 0, touch_y = 0;
+
+// Yeniləmə sayğacı
+uint32_t last_update = 0;
+uint8_t need_full_redraw = 1;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -67,11 +100,283 @@ static void MX_TIM3_Init(void);
 static void MX_TIM6_Init(void);
 static void MX_SPI1_Init(void);
 /* USER CODE BEGIN PFP */
-
+void Draw_MainScreen(void);
+void Draw_MenuScreen(void);
+void Draw_SetpointScreen(void);
+void Handle_Touch(void);
+void Update_Pressure(void);
+void Control_Valves(void);
+void Draw_Button(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const char* text, uint16_t color);
+uint8_t Button_Pressed(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+/* =============== DÜYMƏ FUNKSİYALARI =============== */
+void Draw_Button(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const char* text, uint16_t color) {
+    // Düymə çərçivəsi
+    ILI9341_DrawRect(x, y, w, h, color);
+    ILI9341_DrawRect(x+1, y+1, w-2, h-2, color);
+    // Mətn (ortada)
+    uint16_t text_x = x + (w - strlen(text) * 12) / 2;
+    uint16_t text_y = y + (h - 16) / 2;
+    ILI9341_DrawString(text_x, text_y, text, color, ILI9341_COLOR_BLACK, 2);
+}
+
+uint8_t Button_Pressed(uint16_t bx, uint16_t by, uint16_t bw, uint16_t bh) {
+    if (!touch_pressed || last_touch) return 0;  // Yalnız yeni basış
+    if (touch_x >= bx && touch_x <= bx + bw &&
+        touch_y >= by && touch_y <= by + bh) {
+        return 1;
+    }
+    return 0;
+}
+
+/* =============== ƏSAS EKRAN =============== */
+void Draw_MainScreen(void) {
+    if (need_full_redraw) {
+        ILI9341_FillScreen(ILI9341_COLOR_BLACK);
+        
+        // Başlıq
+        ILI9341_DrawString(20, 10, "HIGH PRESSURE CONTROL", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
+        
+        // Aşağıdakı düymələr
+        Draw_Button(10, 190, 100, 45, "MENU", ILI9341_COLOR_WHITE);
+        Draw_Button(120, 190, 100, 45, "START", ILI9341_COLOR_GREEN);
+        Draw_Button(230, 190, 80, 45, "STOP", ILI9341_COLOR_RED);
+        
+        need_full_redraw = 0;
+    }
+    
+    // Təzyiq dəyəri (böyük)
+    char buf[20];
+    sprintf(buf, "%5.1f", main_pressure);
+    ILI9341_DrawString(60, 55, buf, ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 4);
+    ILI9341_DrawString(200, 70, "BAR", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 2);
+    
+    // Setpoint
+    sprintf(buf, "SP: %3.0f bar", main_setpoint);
+    ILI9341_DrawString(20, 120, buf, ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 2);
+    
+    // Status
+    const char* status_text;
+    uint16_t status_color;
+    switch (system_mode) {
+        case MODE_SAFE:
+            status_text = "SAFE    ";
+            status_color = ILI9341_COLOR_GREEN;
+            break;
+        case MODE_FILLING:
+            status_text = "FILLING ";
+            status_color = ILI9341_COLOR_YELLOW;
+            break;
+        case MODE_HOLDING:
+            status_text = "HOLDING ";
+            status_color = ILI9341_COLOR_CYAN;
+            break;
+        case MODE_RELEASING:
+            status_text = "RELEASE ";
+            status_color = ILI9341_COLOR_RED;
+            break;
+        default:
+            status_text = "UNKNOWN ";
+            status_color = ILI9341_COLOR_WHITE;
+    }
+    ILI9341_DrawString(180, 120, status_text, status_color, ILI9341_COLOR_BLACK, 2);
+    
+    // Proqres bar
+    uint16_t bar_width = (uint16_t)((main_pressure / 300.0f) * 280);
+    if (bar_width > 280) bar_width = 280;
+    ILI9341_FillRect(20, 155, bar_width, 20, ILI9341_COLOR_GREEN);
+    ILI9341_FillRect(20 + bar_width, 155, 280 - bar_width, 20, ILI9341_COLOR_DARKGREY);
+    ILI9341_DrawRect(20, 155, 280, 20, ILI9341_COLOR_WHITE);
+}
+
+/* =============== MENYU EKRANI =============== */
+void Draw_MenuScreen(void) {
+    if (need_full_redraw) {
+        ILI9341_FillScreen(ILI9341_COLOR_BLACK);
+        ILI9341_DrawString(100, 10, "MENU", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 3);
+        
+        Draw_Button(40, 60, 240, 45, "SET PRESSURE", ILI9341_COLOR_CYAN);
+        Draw_Button(40, 115, 240, 45, "CALIBRATE", ILI9341_COLOR_YELLOW);
+        Draw_Button(40, 170, 240, 45, "BACK", ILI9341_COLOR_WHITE);
+        
+        need_full_redraw = 0;
+    }
+}
+
+/* =============== SETPOINT EKRANI =============== */
+void Draw_SetpointScreen(void) {
+    if (need_full_redraw) {
+        ILI9341_FillScreen(ILI9341_COLOR_BLACK);
+        ILI9341_DrawString(50, 10, "SET PRESSURE", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
+        
+        // +/- düymələri
+        Draw_Button(30, 60, 60, 50, "-10", ILI9341_COLOR_RED);
+        Draw_Button(100, 60, 60, 50, "-1", ILI9341_COLOR_RED);
+        Draw_Button(170, 60, 60, 50, "+1", ILI9341_COLOR_GREEN);
+        Draw_Button(240, 60, 60, 50, "+10", ILI9341_COLOR_GREEN);
+        
+        Draw_Button(80, 180, 160, 45, "OK", ILI9341_COLOR_CYAN);
+        
+        need_full_redraw = 0;
+    }
+    
+    // Setpoint dəyəri
+    char buf[20];
+    sprintf(buf, "%3.0f BAR  ", main_setpoint);
+    ILI9341_DrawString(90, 130, buf, ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 3);
+}
+
+/* =============== TOUCH İDARƏETMƏSİ =============== */
+void Handle_Touch(void) {
+    // Touch oxu
+    last_touch = touch_pressed;
+    
+    if (XPT2046_IsTouched()) {
+        uint16_t raw_x, raw_y;
+        XPT2046_GetTouchPoint(&raw_x, &raw_y);
+        
+        // Koordinat çevrilməsi (kalibrasiyaya görə)
+        touch_x = raw_x;
+        touch_y = raw_y;
+        touch_pressed = 1;
+    } else {
+        touch_pressed = 0;
+    }
+    
+    // Ekrana görə touch idarəetməsi
+    switch (screen_mode) {
+        case SCREEN_MAIN:
+            // MENU düyməsi
+            if (Button_Pressed(10, 190, 100, 45)) {
+                screen_mode = SCREEN_MENU;
+                need_full_redraw = 1;
+            }
+            // START düyməsi
+            else if (Button_Pressed(120, 190, 100, 45)) {
+                if (system_mode == MODE_SAFE) {
+                    system_mode = MODE_FILLING;
+                }
+            }
+            // STOP düyməsi
+            else if (Button_Pressed(230, 190, 80, 45)) {
+                system_mode = MODE_SAFE;
+            }
+            break;
+            
+        case SCREEN_MENU:
+            // SET PRESSURE
+            if (Button_Pressed(40, 60, 240, 45)) {
+                screen_mode = SCREEN_SETPOINT;
+                need_full_redraw = 1;
+            }
+            // BACK
+            else if (Button_Pressed(40, 170, 240, 45)) {
+                screen_mode = SCREEN_MAIN;
+                need_full_redraw = 1;
+            }
+            break;
+            
+        case SCREEN_SETPOINT:
+            // -10
+            if (Button_Pressed(30, 60, 60, 50)) {
+                main_setpoint -= 10;
+                if (main_setpoint < 0) main_setpoint = 0;
+            }
+            // -1
+            else if (Button_Pressed(100, 60, 60, 50)) {
+                main_setpoint -= 1;
+                if (main_setpoint < 0) main_setpoint = 0;
+            }
+            // +1
+            else if (Button_Pressed(170, 60, 60, 50)) {
+                main_setpoint += 1;
+                if (main_setpoint > 300) main_setpoint = 300;
+            }
+            // +10
+            else if (Button_Pressed(240, 60, 60, 50)) {
+                main_setpoint += 10;
+                if (main_setpoint > 300) main_setpoint = 300;
+            }
+            // OK
+            else if (Button_Pressed(80, 180, 160, 45)) {
+                screen_mode = SCREEN_MAIN;
+                need_full_redraw = 1;
+            }
+            break;
+    }
+}
+
+/* =============== TƏZYİQ YENİLƏMƏSİ =============== */
+void Update_Pressure(void) {
+    uint16_t adc = 0;
+    if (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC)) {
+        adc = HAL_ADC_GetValue(&hadc3);
+    }
+    
+    // Təzyiq hesabla (0.5-4.5V -> 0-300 bar)
+    // ADC: 620 = 0.5V (0 bar), 4095 = 4.5V (300 bar)
+    if (adc > 620) {
+        main_pressure = (float)(adc - 620) * 300.0f / 3475.0f;
+    } else {
+        main_pressure = 0.0f;
+    }
+    if (main_pressure > 300.0f) main_pressure = 300.0f;
+    if (main_pressure < 0.0f) main_pressure = 0.0f;
+}
+
+/* =============== KLAPAN İDARƏETMƏSİ =============== */
+void Control_Valves(void) {
+    // TIM3 PWM: CH1=Inlet, CH2=Outlet (0-65535)
+    
+    switch (system_mode) {
+        case MODE_SAFE:
+            // Hər şey bağlı
+            __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0);      // Inlet bağlı
+            __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, 0);      // Outlet bağlı
+            break;
+            
+        case MODE_FILLING:
+            // Inlet açıq, outlet bağlı
+            __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 65535);  // Inlet tam açıq
+            __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, 0);      // Outlet bağlı
+            
+            // Hədəfə çatdıqda holding rejiminə keç
+            if (main_pressure >= main_setpoint) {
+                system_mode = MODE_HOLDING;
+            }
+            break;
+            
+        case MODE_HOLDING:
+            // Hər şey bağlı, təzyiq saxlanılır
+            __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0);
+            __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, 0);
+            
+            // Əgər təzyiq düşübsə, yenidən doldur
+            if (main_pressure < main_setpoint - main_tolerance) {
+                system_mode = MODE_FILLING;
+            }
+            // Əgər təzyiq çox yüksəkdirsə, boşalt
+            if (main_pressure > main_setpoint + main_tolerance * 2) {
+                system_mode = MODE_RELEASING;
+            }
+            break;
+            
+        case MODE_RELEASING:
+            // Outlet açıq, inlet bağlı
+            __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0);      // Inlet bağlı
+            __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, 65535);  // Outlet tam açıq
+            
+            // Hədəfə çatdıqda holding rejiminə keç
+            if (main_pressure <= main_setpoint) {
+                system_mode = MODE_HOLDING;
+            }
+            break;
+    }
+}
 
 /* USER CODE END 0 */
 
@@ -122,11 +427,12 @@ int main(void)
   ILI9341_Init();
   HAL_Delay(100);
   
-  /* TEST EKRANI - v2 */
+  /* AÇILIŞ EKRANI */
   ILI9341_FillScreen(ILI9341_COLOR_BLACK);
-  ILI9341_DrawString(30, 50, "*** YENI KOD ***", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 3);
-  ILI9341_DrawString(30, 100, "Versiya 2.0", ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 2);
-  HAL_Delay(1500);
+  ILI9341_DrawString(40, 60, "HIGH PRESSURE", ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 3);
+  ILI9341_DrawString(70, 100, "CONTROL v3.0", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 2);
+  ILI9341_DrawString(60, 160, "Touch to start...", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
+  HAL_Delay(2000);
   
   /* PWM başlat */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
@@ -137,12 +443,8 @@ int main(void)
   /* Touch başlat */
   XPT2046_Init();
   
-  /* ANA EKRAN */
-  ILI9341_FillScreen(ILI9341_COLOR_BLACK);
-  ILI9341_DrawString(25, 10, "HIGH PRESSURE CONTROL", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
-  ILI9341_DrawString(20, 140, "SP: 100 bar", ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 2);
-  ILI9341_DrawString(200, 140, "SAFE", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 2);
-  ILI9341_DrawString(20, 200, "Menu", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
+  /* Əsas ekranı çək */
+  need_full_redraw = 1;
   
   /* USER CODE END 2 */
 
@@ -154,25 +456,29 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     
-    /* ADC oxu */
-    uint16_t adc = 0;
-    if (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC)) {
-        adc = HAL_ADC_GetValue(&hadc3);
+    /* 1. Təzyiq oxu */
+    Update_Pressure();
+    
+    /* 2. Touch idarəetməsi */
+    Handle_Touch();
+    
+    /* 3. Klapan idarəetməsi */
+    Control_Valves();
+    
+    /* 4. Ekran yenilə */
+    switch (screen_mode) {
+        case SCREEN_MAIN:
+            Draw_MainScreen();
+            break;
+        case SCREEN_MENU:
+            Draw_MenuScreen();
+            break;
+        case SCREEN_SETPOINT:
+            Draw_SetpointScreen();
+            break;
     }
     
-    /* Təzyiq hesabla */
-    float p = 0.0f;
-    if (adc > 620) {
-        p = (float)(adc - 620) * 300.0f / 3475.0f;
-    }
-    if (p > 300.0f) p = 300.0f;
-    
-    /* Təzyiq göstər */
-    char buf[20];
-    sprintf(buf, "%.1f BAR   ", p);
-    ILI9341_DrawString(70, 70, buf, ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 3);
-    
-    HAL_Delay(200);
+    HAL_Delay(50);  // 20 FPS
     
   }
   /* USER CODE END 3 */
