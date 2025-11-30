@@ -16,15 +16,18 @@
 #define LCD_LIG_Pin         GPIO_PIN_0
 
 /* ---------------- Rənglər (RGB565) ---------------- */
-#define ILI9341_COLOR_BLACK   0x0000
-#define ILI9341_COLOR_WHITE   0xFFFF
-#define ILI9341_COLOR_RED     0xF800
-#define ILI9341_COLOR_GREEN   0x07E0
-#define ILI9341_COLOR_BLUE    0x001F
-#define ILI9341_COLOR_YELLOW  0xFFE0
-#define ILI9341_COLOR_CYAN    0x07FF
-#define ILI9341_COLOR_ORANGE  0xFD20
-#define ILI9341_COLOR_MAGENTA 0xF81F
+#define ILI9341_COLOR_BLACK     0x0000
+#define ILI9341_COLOR_WHITE     0xFFFF
+#define ILI9341_COLOR_RED       0xF800
+#define ILI9341_COLOR_GREEN     0x07E0
+#define ILI9341_COLOR_BLUE      0x001F
+#define ILI9341_COLOR_YELLOW    0xFFE0
+#define ILI9341_COLOR_CYAN      0x07FF
+#define ILI9341_COLOR_ORANGE    0xFD20
+#define ILI9341_COLOR_MAGENTA   0xF81F
+#define ILI9341_COLOR_DARKGREY  0x4208
+#define ILI9341_COLOR_GREY      0x8410
+#define ILI9341_COLOR_LIGHTGREY 0xC618
 
 /* İctimai funksiyalar */
 void ILI9341_Init(void);
@@ -33,6 +36,8 @@ void ILI9341_SetBacklight(uint8_t on);  /* Backlight idarəetməsi (0=OFF, 1=ON)
 void ILI9341_FillScreen(uint16_t color);
 void ILI9341_DrawPixel(uint16_t x, uint16_t y, uint16_t color);
 void ILI9341_DrawRectangle(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color);
+void ILI9341_FillRect(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color);
+void ILI9341_DrawRect(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color);
 void ILI9341_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color);
 void ILI9341_DrawChar(uint16_t x, uint16_t y, char c, uint16_t color, uint16_t bgcolor, uint8_t size);
 void ILI9341_DrawString(uint16_t x, uint16_t y, const char *str, uint16_t color, uint16_t bgcolor, uint8_t size);

@@ -315,13 +315,42 @@ void ILI9341_DrawPixel(uint16_t x, uint16_t y, uint16_t color)
     LCD_RAM = color;
 }
 
-/* ------------------ Düzbucaqlı çək ------------------ */
+/* ------------------ Düzbucaqlı çək (dolu) ------------------ */
 void ILI9341_DrawRectangle(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color)
 {
     for (uint16_t i = 0; i < height; i++) {
         for (uint16_t j = 0; j < width; j++) {
             ILI9341_DrawPixel(x + j, y + i, color);
         }
+    }
+}
+
+/* ------------------ Dolu düzbucaqlı (FillRect) ------------------ */
+void ILI9341_FillRect(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color)
+{
+    /* FillRect = DrawRectangle (dolu düzbucaqlı) */
+    ILI9341_DrawRectangle(x, y, width, height, color);
+}
+
+/* ------------------ Çərçivə düzbucaqlı (DrawRect) ------------------ */
+void ILI9341_DrawRect(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color)
+{
+    /* Yalnız çərçivə - 4 xətt */
+    /* Üst xətt */
+    for (uint16_t i = 0; i < width; i++) {
+        ILI9341_DrawPixel(x + i, y, color);
+    }
+    /* Alt xətt */
+    for (uint16_t i = 0; i < width; i++) {
+        ILI9341_DrawPixel(x + i, y + height - 1, color);
+    }
+    /* Sol xətt */
+    for (uint16_t i = 0; i < height; i++) {
+        ILI9341_DrawPixel(x, y + i, color);
+    }
+    /* Sağ xətt */
+    for (uint16_t i = 0; i < height; i++) {
+        ILI9341_DrawPixel(x + width - 1, y + i, color);
     }
 }
 
