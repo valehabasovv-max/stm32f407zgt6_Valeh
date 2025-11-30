@@ -23,9 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "ILI9341_FSMC.h"
 #include "XPT2046.h"
-#include "advanced_pressure_control.h"
-#include "pressure_control_config.h"
-#include "adc_diagnostic.h"
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -134,59 +132,28 @@ int main(void)
   /* DÜZƏLİŞ: LCD test uğurlu oldusa, mesaj göstər */
   ILI9341_FillScreen(ILI9341_COLOR_BLACK);
   ILI9341_DrawString(50, 100, "LCD TEST OK!", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 3);
-  ILI9341_DrawString(30, 150, "Sistem basladir...", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
-  HAL_Delay(500);  /* Qısa gecikmə - mesajı görmək üçün */
+  HAL_Delay(1000);
   
-  /* === SÜRƏTLI İNİSİALİZASİYA === */
+  /* Sadə ana ekran - heç bir PID/Config funksiyası çağırılmır */
+  ILI9341_FillScreen(ILI9341_COLOR_BLACK);
+  ILI9341_DrawString(20, 20, "HIGH PRESSURE CONTROL", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
+  ILI9341_DrawString(80, 80, "0.00 BAR", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 3);
+  ILI9341_DrawString(20, 140, "SP: 100 bar", ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 2);
+  ILI9341_DrawString(200, 140, "SAFE", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 2);
+  ILI9341_DrawControlButton(20, 180, 80, 40, ILI9341_COLOR_WHITE, "Menu", 2);
   
-  /* LCD-də yükləmə göstər */
-  ILI9341_DrawString(30, 180, "Yuklenilir...", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 2);
-  
-  /* Konfiqurasiya sistemini başlat */
-  PressureControlConfig_Init();
-  
-  /* Kalibrləmə yüklə */
-  AdvancedPressureControl_LoadCalibration();
-  
-  /* PID sistemini başlat */
-  AdvancedPressureControl_Init();
-  
-  /* PID aktivləşdir */
-  SystemStatus_t* pid_status = AdvancedPressureControl_GetStatus();
-  pid_status->control_enabled = true;
-  
-  /* Default target pressure */
-  if (pid_status->target_pressure < 0.1f) {
-      AdvancedPressureControl_SetTargetPressure(100.0f);
-  }
-  
-  /* === PWM INITIALIZATION === */
+  /* PWM başlat */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
-  
   __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0);
   __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, 0);
   __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 0);
   __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, 0);
-  __HAL_TIM_SET_AUTORELOAD(&htim3, 83999);
   
-  /* Timer 6 - control loop */
-  HAL_TIM_Base_Start_IT(&htim6);
-  
-  /* SPI və Touch ekran */
-  __HAL_RCC_SPI1_CLK_ENABLE();
-  __HAL_RCC_GPIOA_CLK_ENABLE();
-  __HAL_RCC_GPIOB_CLK_ENABLE();
-  __HAL_RCC_GPIOF_CLK_ENABLE();
+  /* Touch ekran */
   XPT2046_Init();
-  XPT2046_SetCalibration(200, 3800, 200, 3800);
-  XPT2046_SetCoordMode(1);
-  
-  /* === ANA EKRANI GÖSTƏR === */
-  ILI9341_FillScreen(ILI9341_COLOR_BLACK);
-  ILI9341_ShowPressureControlMain();
   
   /* USER CODE END 2 */
 
@@ -198,41 +165,34 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     
-  /* Pressure control touch handling */
-  ILI9341_HandlePressureControlTouch();
-  
-  /* Pressure sensor calibration handling */
-  ILI9341_HandleCalibrationTouch();
-  
-  /* Auto mode processing - REMOVED (AutoMode deleted) */
-  
-  /* Pressure control logic - maintains pressure at set limit */
-  ILI9341_PressureControlLogic();
-  
-  /* === ADVANCED PRESSURE CONTROL SYSTEM === */
-  
-  /* DÜZƏLİŞ: Birbaşa Step() çağırın - Timer 6 artıq 10ms tezliyə qurulub */
-  /* AdvancedPressureControl_TimerCallback() wrapper funksiyası silindi */
-  /* Timer interrupt callback-də (HAL_TIM_PeriodElapsedCallback) birbaşa çağırılır */
-    
-    /* KRİTİK DÜZƏLİŞ: Manual ADC oxunması silindi - yalnız PID sistemindən təzyiq götürülür */
-    /* PID sistemi hər 10ms-də bir ADC oxuyur və g_system_status.current_pressure-ı yeniləyir */
-    /* Bu, ADC kanallarının ziddiyyətini və loop qeyri-dəqiqliyini aradan qaldırır */
-    static uint32_t pressure_update_time = 0;
-    if (HAL_GetTick() - pressure_update_time > 100) { // Update display every 100ms
-        pressure_update_time = HAL_GetTick();
+    /* Sadə ADC oxuma və ekran yeniləmə */
+    static uint32_t last_update = 0;
+    if (HAL_GetTick() - last_update > 300) {
+        last_update = HAL_GetTick();
         
-        /* PID sistemindən təzyiq dəyərini götür (artıq ADC oxunub və hesablanıb) */
-        SystemStatus_t* status = AdvancedPressureControl_GetStatus();
-        float pressure = status->current_pressure;
+        /* ADC-dən birbaşa oxu */
+        uint16_t adc_value = 0;
+        if (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC)) {
+            adc_value = HAL_ADC_GetValue(&hadc3);
+        }
         
-        /* Update pressure display */
-        ILI9341_UpdatePressureDisplay(pressure);
+        /* Sadə təzyiq hesablama */
+        float pressure = 0.0f;
+        if (adc_value > 620) {
+            pressure = (float)(adc_value - 620) * 300.0f / 3475.0f;
+        }
+        if (pressure > 300.0f) pressure = 300.0f;
+        
+        /* Təzyiq dəyərini göstər */
+        char buf[20];
+        sprintf(buf, "%6.2f BAR", pressure);
+        ILI9341_DrawRectangle(80, 80, 180, 30, ILI9341_COLOR_BLACK);
+        ILI9341_DrawString(80, 80, buf, ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 3);
     }
     
-    HAL_Delay(20); /* Kiçik gecikmə - touch responsivliyi üçün */
+    HAL_Delay(50);
     
-    }
+  }
   /* USER CODE END 3 */
 }
 
@@ -669,10 +629,9 @@ static void MX_FSMC_Init(void)
  * @retval None
  */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
-    if (htim->Instance == TIM6) { // Timer 6 for control loop (10ms period)
-        // DÜZƏLİŞ: Birbaşa Step() çağırın - Timer 6 artıq 10ms tezliyə qurulub
-        // AdvancedPressureControl_TimerCallback() wrapper funksiyası silindi
-        AdvancedPressureControl_Step();
+    if (htim->Instance == TIM6) {
+        /* DÜZƏLİŞ: PID Step deaktiv - sadə mode üçün */
+        /* AdvancedPressureControl_Step(); */
     }
 }
 
