@@ -374,6 +374,39 @@ int main(void)
         ILI9341_UpdatePressureDisplay(pressure);
     }
     
+    /* === ADC DİAQNOSTİKA TESTİ === */
+    /* Bu kod hər 500ms-də bir ADC-ni BİRBAŞA oxuyur və Serial-a yazır */
+    static uint32_t adc_debug_time = 0;
+    if (HAL_GetTick() - adc_debug_time > 500) {
+        adc_debug_time = HAL_GetTick();
+        
+        /* Metod 1: HAL funksiyası ilə birbaşa oxu */
+        uint32_t adc_direct = 0;
+        if (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC) != RESET) {
+            adc_direct = HAL_ADC_GetValue(&hadc3);
+            __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_EOC);
+        }
+        
+        /* Metod 2: Registr-dən birbaşa oxu (bypass HAL) */
+        uint32_t adc_register = ADC3->DR;
+        
+        /* Metod 3: AdvancedPressureControl funksiyası ilə oxu */
+        uint16_t adc_function = AdvancedPressureControl_ReadADC();
+        
+        /* ADC State yoxla */
+        uint32_t adc_state = HAL_ADC_GetState(&hadc3);
+        
+        /* Nəticələri çap et */
+        printf("\r\n=== ADC DEBUG ===\r\n");
+        printf("ADC Direct (HAL): %lu\r\n", adc_direct);
+        printf("ADC Register (DR): %lu\r\n", adc_register);
+        printf("ADC Function: %u\r\n", adc_function);
+        printf("ADC State: 0x%08lX\r\n", adc_state);
+        printf("EOC Flag: %s\r\n", __HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC) ? "SET" : "CLEAR");
+        printf("OVR Flag: %s\r\n", __HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_OVR) ? "SET" : "CLEAR");
+        printf("=================\r\n");
+    }
+    
     HAL_Delay(50); /* Kiçik gecikmə */
     
     }
