@@ -22,9 +22,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "ILI9341_FSMC.h"
-#include "advanced_pressure_control.h"
-#include "pressure_control_config.h"
-#include "adc_diagnostic.h"
+#include "XPT2046.h"
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -118,231 +117,32 @@ int main(void)
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
   
-  /* === LCD TEST === */
-  
-  /* KRİTİK: LCD başlatma - Bank4 (NE4) konfiqurasiyası */
-  /* FSMC ünvanı: 0x6C000000 (Bank4), RS = A10 (0x0800 offset) */
-  
-  /* DÜZƏLİŞ: LCD başlatmadan əvvəl FSMC-nin hazır olduğunu yoxla */
-  HAL_Delay(50);  /* FSMC-nin tam başlatılması üçün gecikmə */
-  
-  /* LCD-ni başlat - ILI9341_Init() daxilində rəng testi də işləyəcək */
+  /* LCD başlat */
+  HAL_Delay(50);
   ILI9341_Init();
   HAL_Delay(100);
   
-  /* DÜZƏLİŞ: LCD test uğurlu oldusa, mesaj göstər */
+  /* TEST EKRANI - v2 */
   ILI9341_FillScreen(ILI9341_COLOR_BLACK);
-  ILI9341_DrawString(50, 100, "LCD TEST OK!", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 3);
-  ILI9341_DrawString(30, 150, "Sistem basladir...", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
-  HAL_Delay(1000);  /* Mesajı görmək üçün gözlə */
+  ILI9341_DrawString(30, 50, "*** YENI KOD ***", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 3);
+  ILI9341_DrawString(30, 100, "Versiya 2.0", ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 2);
+  HAL_Delay(1500);
   
-  /* === ADVANCED PRESSURE CONTROL SYSTEM INIT === */
+  /* PWM başlat */
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
   
-  /* Initialize the configuration system first */
-  /* DÜZƏLİŞ: PressureControlConfig_Init() daxilində PressureControlConfig_LoadCalibrationData() çağırılır
-   * və o, artıq g_calibration strukturuna yazır, ona görə də AdvancedPressureControl_LoadCalibration()
-   * çağırmağa ehtiyac yoxdur. Amma təhlükəsizlik üçün hər ikisini çağıra bilərik.
-   */
-  PressureControlConfig_Init();
-  HAL_Delay(50);
-  
-  /* DÜZƏLİŞ: Advanced sistem kalibrləmə funksiyasını istifadə et */
-  /* Load calibration data from flash memory (if not already loaded by PressureControlConfig_Init) */
-  AdvancedPressureControl_LoadCalibration();
-  
-  /* KRİTİK DÜZƏLİŞ: Kalibrasiya validasiyasını yoxla
-   * Əgər Flash-dan yüklənmiş kalibrasiya validasiyadan keçmirsə, onu default dəyərlərlə əvəz et
-   * və Flash-a qeyd et ki, səhv kalibrasiya istifadə olunmasın */
-  extern CalibrationData_t g_calibration;
-  uint16_t adc_min_check = (uint16_t)(g_calibration.adc_min + 0.5f);
-  uint16_t adc_max_check = (uint16_t)(g_calibration.adc_max + 0.5f);
-  
-  // Validasiya: ADC aralığı voltage divider konfiqurasiyasına uyğun olmalıdır
-#if VOLTAGE_DIVIDER_ENABLED
-  // Voltage divider ilə: ADC 310-3103 aralığı (sensor 0.5V-5V → divider 0.25V-2.5V)
-  uint16_t expected_min_low = 200;    // ADC_MIN tolerans alt hədd
-  uint16_t expected_min_high = 500;   // ADC_MIN tolerans üst hədd
-  uint16_t expected_max_low = 2500;   // ADC_MAX tolerans alt hədd
-  uint16_t expected_max_high = 3500;  // ADC_MAX tolerans üst hədd
-#else
-  // Voltage divider olmadan: ADC 620-4095 aralığı
-  uint16_t expected_min_low = 400;
-  uint16_t expected_min_high = 800;
-  uint16_t expected_max_low = 3500;
-  uint16_t expected_max_high = 4095;
-#endif
-  
-  if (adc_min_check < expected_min_low || adc_min_check > expected_min_high || 
-      adc_max_check < expected_max_low || adc_max_check > expected_max_high ||
-      (adc_max_check - adc_min_check) < 2000) {
-      printf("\n");
-      printf("*****************************************************************\n");
-      printf("*  ⚠ XƏBƏRDARLIQ: KALIBRASIYA SƏHV AŞKAR EDİLDİ!              *\n");
-      printf("*****************************************************************\n");
-      printf("*  Flash-dakı kalibrasiya validasiyadan keçmədi:\n");
-      printf("*    ADC: %u - %u (Gözlənilən: %u - %u)\n", 
-             adc_min_check, adc_max_check, ADC_MIN, ADC_MAX);
-      printf("*    Pressure: %.2f - %.2f bar\n", g_calibration.pressure_min, g_calibration.pressure_max);
-#if VOLTAGE_DIVIDER_ENABLED
-      printf("*\n");
-      printf("*  Voltage Divider aktiv\n");
-      printf("*  Real measured: ADC 500-3500 → Pressure 0-300 bar\n");
-#else
-      printf("*\n");
-      printf("*  Voltage Divider DEAKTİV\n");
-      printf("*  DİQQƏT: 230 bar-dan yuxarı ölçülə bilməz!\n");
-#endif
-      printf("*\n");
-      printf("*  Default kalibrasiya dəyərləri yüklənəcək və Flash-a yazılacaq.\n");
-      printf("*****************************************************************\n\n");
-      HAL_Delay(1000);
-      
-      // Force recalibration with defaults
-      ADC_ForceRecalibration();
-      HAL_Delay(500);
-      
-      // Verify it was applied
-      printf("Yenidən yoxlanır...\n");
-      printf("  ADC Range: %.0f - %.0f\n", g_calibration.adc_min, g_calibration.adc_max);
-      printf("  Pressure Range: %.2f - %.2f bar\n", g_calibration.pressure_min, g_calibration.pressure_max);
-      printf("  Slope: %.6f\n", g_calibration.slope);
-      printf("  Offset: %.2f\n\n", g_calibration.offset);
-  } else {
-      printf("Kalibrasiya validasiyadan keçdi. Flash-dakı dəyərlər istifadə olunur.\n");
-#if VOLTAGE_DIVIDER_ENABLED
-      printf("Voltage Divider aktiv: Sensor 0.5V-5.0V → ADC %u-%u (0-300 bar)\n\n", 
-             adc_min_check, adc_max_check);
-#else
-      printf("Voltage Divider DEAKTİV: ⚠ Maksimum ~230 bar ölçülə bilər!\n\n");
-#endif
-  }
-  
-  /* Initialize the advanced PID-based pressure control system */
-  AdvancedPressureControl_Init();
-  HAL_Delay(100);
-  
-  /* === PID SİSTEMİNİ AKTİVLƏŞDİR === */
-  /* DÜZƏLİŞ: pressure_limit silindi, g_system_status.target_pressure istifadə olunur */
-  /* AdvancedPressureControl_Init() daxilində target_pressure = 70.0f təyin olunur */
-  /* Əgər flash-dan yüklənibsə, o dəyər istifadə olunur */
-  
-  /* KRİTİK DÜZƏLİŞ: PID sistemini aktivləşdir və təsdiq et */
-  /* AdvancedPressureControl_Init() artıq g_control_initialized və control_enabled-ı true edir */
-  SystemStatus_t* pid_status = AdvancedPressureControl_GetStatus();
-  pid_status->control_enabled = true;  // Təsdiq et (Init-də artıq true-dur)
-  
-  // KRİTİK DÜZƏLİŞ: Sistemin aktiv olduğunu təsdiq et
-  if (!pid_status->control_enabled) {
-      printf("ERROR: Failed to enable control system! Re-enabling...\r\n");
-      pid_status->control_enabled = true;  // Yenidən aktivləşdir
-  }
-  
-  // KRİTİK DÜZƏLİŞ: g_control_initialized-ın true olduğunu təsdiq et
-  // (Bu dəyişən static-dir, amma Init() funksiyası onu true edir)
-  printf("Sistem Status: control_enabled=%d\r\n", 
-         pid_status->control_enabled);
-  
-  // KRİTİK DÜZƏLİŞ: target_pressure 0.0 və ya çox kiçik olarsa, default dəyər istifadə et
-  if (pid_status->target_pressure < 0.1f) {
-      AdvancedPressureControl_SetTargetPressure(100.0f);  // Default 100 bar
-      printf("WARNING: target_pressure was %.1f, setting to default 100.0 bar\r\n", pid_status->target_pressure);
-  }
-  
-  printf("PID SİSTEMİ AKTİV: Hədəf təzyiq = %.1f bar, control_enabled = %d\r\n", 
-         pid_status->target_pressure, pid_status->control_enabled);
-  
-  /* === PWM INITIALIZATION === */
-  
-  /* Start PWM channels for motor control */
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);  /* Motor PWM - PC6 */
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);  /* DRV PWM - PA7 */
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);  /* ZME PWM - PC8 */
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);  /* Extra PWM - PB1 */
-  
-  /* Set initial PWM duty cycles (0% - all motors off) */
-  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0);  /* Motor: 0% */
-  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, 0);  /* DRV: 0% */
-  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3, 0);  /* ZME: 0% */
-  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, 0);  /* Extra: 0% */
-  
-  /* Set PWM frequency to 1 kHz for voltage converter module */
-  /* Timer clock: 84MHz, Period = 84000000/1000 - 1 = 83999 */
-  __HAL_TIM_SET_AUTORELOAD(&htim3, 83999);
-  
-  /* === TIMER 6 INITIALIZATION FOR CONTROL LOOP === */
-  
-  /* Start Timer 6 for 10ms control loop */
-  HAL_TIM_Base_Start_IT(&htim6);
-  
-  /* Auto mode initialization - REMOVED (AutoMode deleted) */
-  
-  /* Enable SPI1 clock for XPT2046 */
-  __HAL_RCC_SPI1_CLK_ENABLE();
-  __HAL_RCC_GPIOA_CLK_ENABLE();
-  __HAL_RCC_GPIOB_CLK_ENABLE();
-  __HAL_RCC_GPIOF_CLK_ENABLE();
-
-  /* XPT2046 Touch Screen Init */
+  /* Touch başlat */
   XPT2046_Init();
-  HAL_Delay(100);
   
-  /* Set initial calibration values - these may need adjustment */
-  XPT2046_SetCalibration(200, 3800, 200, 3800);
-  
-  /* Set coordinate transformation mode - try mode 1 first (swap+invert) */
-  XPT2046_SetCoordMode(1);
-  
-  /* Qara ekran - interaktif menu */
+  /* ANA EKRAN */
   ILI9341_FillScreen(ILI9341_COLOR_BLACK);
-  HAL_Delay(500);
-  
-  /* Pressure control system - ana səhifə */
-  ILI9341_ShowPressureControlMain();
-  
-  /* ===  ADC DİAQNOSTİKASI === */
-  /* DÜZƏLİŞ: ADC 632-də qalıb və təzyiq 0.00 göstərir - diaqnostika işə sal */
-  printf("\n\n");
-  printf("*****************************************************************\n");
-  printf("*  ADC DİAQNOSTİKA BAŞLAYIR (632 stuck ADC və 0.00 pressure)  *\n");
-  printf("*****************************************************************\n");
-  HAL_Delay(100);
-  
-  /* 1. İlk olaraq tam diaqnostika işə sal */
-  ADC_RunDiagnostic();
-  HAL_Delay(500);
-  
-  /* 2. Hardware test (birbaşa ADC oxuma) */
-  ADC_TestHardwareDirectly();
-  HAL_Delay(500);
-  
-  /* 3. Əgər problem davam edirsə, recalibration et */
-  printf("Əgər problem hələ də varsa, recalibration tətbiq olunacaq...\n");
-  HAL_Delay(1000);
-  
-  /* Yoxla: ADC dəyəri 632 ətrafındadır və təzyiq 0.00-dır? */
-  SystemStatus_t* status_check = AdvancedPressureControl_GetStatus();
-  uint16_t check_adc = status_check->raw_adc_value;
-  float check_pressure = status_check->current_pressure;
-  
-  if ((check_adc >= 630 && check_adc <= 640) && (check_pressure < 0.5f)) {
-      printf("\n⚠ PROBLEMLİ DİAQNOZ TƏSDİQLƏNDİ: ADC=%u, Pressure=%.2f bar\n", 
-             check_adc, check_pressure);
-      printf("Recalibration tətbiq olunur...\n\n");
-      ADC_ForceRecalibration();
-      HAL_Delay(1000);
-      
-      /* Yenidən yoxla */
-      printf("\nYenidən yoxlama...\n");
-      ADC_RunDiagnostic();
-  } else {
-      printf("\n✓ Sistem normal görünür: ADC=%u, Pressure=%.2f bar\n\n", 
-             check_adc, check_pressure);
-  }
-  
-  printf("*****************************************************************\n");
-  printf("*              ADC DİAQNOSTİKA TAM                             *\n");
-  printf("*****************************************************************\n\n");
-  HAL_Delay(1000);
+  ILI9341_DrawString(25, 10, "HIGH PRESSURE CONTROL", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
+  ILI9341_DrawString(20, 140, "SP: 100 bar", ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 2);
+  ILI9341_DrawString(200, 140, "SAFE", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 2);
+  ILI9341_DrawString(20, 200, "Menu", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
   
   /* USER CODE END 2 */
 
@@ -354,74 +154,27 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     
-  /* Pressure control touch handling */
-  ILI9341_HandlePressureControlTouch();
-  
-  /* Pressure sensor calibration handling */
-  ILI9341_HandleCalibrationTouch();
-  
-  /* Auto mode processing - REMOVED (AutoMode deleted) */
-  
-  /* Pressure control logic - maintains pressure at set limit */
-  ILI9341_PressureControlLogic();
-  
-  /* === ADVANCED PRESSURE CONTROL SYSTEM === */
-  
-  /* DÜZƏLİŞ: Birbaşa Step() çağırın - Timer 6 artıq 10ms tezliyə qurulub */
-  /* AdvancedPressureControl_TimerCallback() wrapper funksiyası silindi */
-  /* Timer interrupt callback-də (HAL_TIM_PeriodElapsedCallback) birbaşa çağırılır */
-    
-    /* KRİTİK DÜZƏLİŞ: Manual ADC oxunması silindi - yalnız PID sistemindən təzyiq götürülür */
-    /* PID sistemi hər 10ms-də bir ADC oxuyur və g_system_status.current_pressure-ı yeniləyir */
-    /* Bu, ADC kanallarının ziddiyyətini və loop qeyri-dəqiqliyini aradan qaldırır */
-    static uint32_t pressure_update_time = 0;
-    if (HAL_GetTick() - pressure_update_time > 100) { // Update display every 100ms
-        pressure_update_time = HAL_GetTick();
-        
-        /* PID sistemindən təzyiq dəyərini götür (artıq ADC oxunub və hesablanıb) */
-        SystemStatus_t* status = AdvancedPressureControl_GetStatus();
-        float pressure = status->current_pressure;
-        
-        /* Update pressure display */
-        ILI9341_UpdatePressureDisplay(pressure);
+    /* ADC oxu */
+    uint16_t adc = 0;
+    if (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC)) {
+        adc = HAL_ADC_GetValue(&hadc3);
     }
     
-    /* === ADC DİAQNOSTİKA TESTİ === */
-    /* Bu kod hər 500ms-də bir ADC-ni BİRBAŞA oxuyur və Serial-a yazır */
-    static uint32_t adc_debug_time = 0;
-    if (HAL_GetTick() - adc_debug_time > 500) {
-        adc_debug_time = HAL_GetTick();
-        
-        /* Metod 1: HAL funksiyası ilə birbaşa oxu */
-        uint32_t adc_direct = 0;
-        if (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC) != RESET) {
-            adc_direct = HAL_ADC_GetValue(&hadc3);
-            __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_EOC);
-        }
-        
-        /* Metod 2: Registr-dən birbaşa oxu (bypass HAL) */
-        uint32_t adc_register = ADC3->DR;
-        
-        /* Metod 3: AdvancedPressureControl funksiyası ilə oxu */
-        uint16_t adc_function = AdvancedPressureControl_ReadADC();
-        
-        /* ADC State yoxla */
-        uint32_t adc_state = HAL_ADC_GetState(&hadc3);
-        
-        /* Nəticələri çap et */
-        printf("\r\n=== ADC DEBUG ===\r\n");
-        printf("ADC Direct (HAL): %lu\r\n", adc_direct);
-        printf("ADC Register (DR): %lu\r\n", adc_register);
-        printf("ADC Function: %u\r\n", adc_function);
-        printf("ADC State: 0x%08lX\r\n", adc_state);
-        printf("EOC Flag: %s\r\n", __HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC) ? "SET" : "CLEAR");
-        printf("OVR Flag: %s\r\n", __HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_OVR) ? "SET" : "CLEAR");
-        printf("=================\r\n");
+    /* Təzyiq hesabla */
+    float p = 0.0f;
+    if (adc > 620) {
+        p = (float)(adc - 620) * 300.0f / 3475.0f;
     }
+    if (p > 300.0f) p = 300.0f;
     
-    HAL_Delay(50); /* Kiçik gecikmə */
+    /* Təzyiq göstər */
+    char buf[20];
+    sprintf(buf, "%.1f BAR   ", p);
+    ILI9341_DrawString(70, 70, buf, ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 3);
     
-    }
+    HAL_Delay(200);
+    
+  }
   /* USER CODE END 3 */
 }
 
@@ -858,10 +611,9 @@ static void MX_FSMC_Init(void)
  * @retval None
  */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
-    if (htim->Instance == TIM6) { // Timer 6 for control loop (10ms period)
-        // DÜZƏLİŞ: Birbaşa Step() çağırın - Timer 6 artıq 10ms tezliyə qurulub
-        // AdvancedPressureControl_TimerCallback() wrapper funksiyası silindi
-        AdvancedPressureControl_Step();
+    if (htim->Instance == TIM6) {
+        /* DÜZƏLİŞ: PID Step deaktiv - sadə mode üçün */
+        /* AdvancedPressureControl_Step(); */
     }
 }
 
