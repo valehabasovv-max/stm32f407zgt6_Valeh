@@ -120,9 +120,21 @@ int main(void)
   
   /* === LCD TEST === */
   
-  /* ILI9341 LCD Test - Bank4 konfiqurasiyası */
+  /* KRİTİK: LCD başlatma - Bank4 (NE4) konfiqurasiyası */
+  /* FSMC ünvanı: 0x6C000000 (Bank4), RS = A10 (0x0800 offset) */
+  
+  /* DÜZƏLİŞ: LCD başlatmadan əvvəl FSMC-nin hazır olduğunu yoxla */
+  HAL_Delay(50);  /* FSMC-nin tam başlatılması üçün gecikmə */
+  
+  /* LCD-ni başlat - ILI9341_Init() daxilində rəng testi də işləyəcək */
   ILI9341_Init();
   HAL_Delay(100);
+  
+  /* DÜZƏLİŞ: LCD test uğurlu oldusa, mesaj göstər */
+  ILI9341_FillScreen(ILI9341_COLOR_BLACK);
+  ILI9341_DrawString(50, 100, "LCD TEST OK!", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 3);
+  ILI9341_DrawString(30, 150, "Sistem basladir...", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
+  HAL_Delay(1000);  /* Mesajı görmək üçün gözlə */
   
   /* === ADVANCED PRESSURE CONTROL SYSTEM INIT === */
   
@@ -788,29 +800,14 @@ static void MX_FSMC_Init(void)
 
   /* USER CODE BEGIN FSMC_Init 1 */
   
-  /* FSMC GPIO pinlərini əl ilə konfiqurasiya et */
-  GPIO_InitTypeDef GPIO_InitStruct = {0};
-  
-  /* FSMC pinləri üçün */
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF12_FSMC;
-  
-  /* GPIOD: FSMC Data və Control pinləri */
-  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_4|GPIO_PIN_5|
-                        GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10|GPIO_PIN_11|
-                        GPIO_PIN_14|GPIO_PIN_15;
-  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
-  
-  /* GPIOE: FSMC Data pinləri */
-  GPIO_InitStruct.Pin = GPIO_PIN_7|GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10|
-                        GPIO_PIN_11|GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15;
-  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
-  
-  /* GPIOG: FSMC Control pinləri - Sizin şəkilə uyğun */
-  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_12; // PG0=A10(RS), PG12=NE4(CS)
-  HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
+  /* DÜZƏLİŞ: FSMC GPIO pinlərini manual konfiqurasiya etməyə ehtiyac yoxdur!
+   * HAL_SRAM_MspInit() funksiyası stm32f4xx_hal_msp.c faylında 
+   * bütün FSMC GPIO pinlərini avtomatik konfiqurasiya edir.
+   * Dublikat konfiqurasiya problemlərə səbəb ola bilər.
+   * 
+   * Əgər manual konfiqurasiya lazımdırsa, yalnız .ioc faylında 
+   * göstərilən pinləri konfiqurasiya edin (PD11 istifadə olunmur!)
+   */
 
   /* USER CODE END FSMC_Init 1 */
 

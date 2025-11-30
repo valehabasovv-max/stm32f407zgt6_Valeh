@@ -18,27 +18,47 @@ extern ADC_HandleTypeDef hadc3;
 
 /* FSMC init funksiyası main.c-də var, burada dublikat yox */
 
-/* Sadə yazma köməkçiləri */
+/* DÜZƏLİŞ: LCD yazma funksiyalarına kiçik gecikmə əlavə edildi */
+/* Bu, FSMC və LCD arasında düzgün sinxronizasiya təmin edir */
+
+/* Kiçik gecikmə - bir neçə NOP əmri */
+static inline void lcd_delay_short(void)
+{
+    __NOP(); __NOP(); __NOP(); __NOP();
+    __NOP(); __NOP(); __NOP(); __NOP();
+}
+
+/* Sadə yazma köməkçiləri - gecikmə ilə */
 static inline void lcd_write_command(uint16_t cmd)
 {
     LCD_REG = cmd;
+    lcd_delay_short();  /* Command yazıldıqdan sonra kiçik gecikmə */
 }
+
 static inline void lcd_write_data(uint16_t data)
 {
     LCD_RAM = data;
+    /* Data yazma üçün gecikmə lazım deyil - FillScreen sürəti üçün */
 }
 
 /* ------------------ ILI9341 INIT ------------------ */
 void ILI9341_Init(void)
 {
-    /* Backlight ON */
-    HAL_GPIO_WritePin(LCD_LIG_GPIO_Port, LCD_LIG_Pin, GPIO_PIN_SET);
-
-    /* HW reset pulse - UZUN RESET */
+    /* DÜZƏLİŞ: Əvvəlcə backlight-ı söndür, sonra yandır - daha etibarlı */
+    HAL_GPIO_WritePin(LCD_LIG_GPIO_Port, LCD_LIG_Pin, GPIO_PIN_RESET);
+    HAL_Delay(10);
+    
+    /* HW reset pulse - TAM RESET DÖVRÜ */
+    /* 1. RST LOW - LCD-ni reset vəziyyətinə sal */
     HAL_GPIO_WritePin(LCD_RST_GPIO_Port, LCD_RST_Pin, GPIO_PIN_RESET);
-    HAL_Delay(50);  /* DÜZƏLİŞ: 10ms-dən 50ms-ə artırıldı */
+    HAL_Delay(100);  /* DÜZƏLİŞ: 50ms-dən 100ms-ə artırıldı - bəzi LCD-lər daha uzun reset tələb edir */
+    
+    /* 2. RST HIGH - LCD-ni aktiv vəziyyətə qaytar */
     HAL_GPIO_WritePin(LCD_RST_GPIO_Port, LCD_RST_Pin, GPIO_PIN_SET);
-    HAL_Delay(150); /* DÜZƏLİŞ: 120ms-dən 150ms-ə artırıldı */
+    HAL_Delay(200); /* DÜZƏLİŞ: 150ms-dən 200ms-ə artırıldı - LCD tam başlayana qədər gözlə */
+    
+    /* 3. Backlight ON - yalnız reset tamamlandıqdan sonra */
+    HAL_GPIO_WritePin(LCD_LIG_GPIO_Port, LCD_LIG_Pin, GPIO_PIN_SET);
 
     /* ============================================
      * TAM ILI9341 BAŞLATMA ARDICILLIĞI
@@ -196,6 +216,64 @@ void ILI9341_Init(void)
     
     /* Memory Write - RAM-a yazmağa hazırla */
     lcd_write_command(0x2C);
+    
+    /* === LCD TEST - DÜZƏLİŞ: Başlatma uğurlu olduğunu yoxla === */
+    /* Qırmızı, Yaşıl, Mavi rənglərlə test et */
+    ILI9341_ColorTest();
+}
+
+/* LCD rəng testi - başlatma uğurlu olduğunu yoxlamaq üçün */
+void ILI9341_ColorTest(void)
+{
+    /* DÜZƏLİŞ: Backlight həm HIGH həm də LOW vəziyyətdə test edilir */
+    /* Bəzi LCD modulları inverted backlight istifadə edir */
+    
+    /* Test 1: Qırmızı ekran - backlight HIGH */
+    HAL_GPIO_WritePin(LCD_LIG_GPIO_Port, LCD_LIG_Pin, GPIO_PIN_SET);
+    ILI9341_FillScreen(ILI9341_COLOR_RED);
+    HAL_Delay(300);
+    
+    /* Test 2: Yaşıl ekran */
+    ILI9341_FillScreen(ILI9341_COLOR_GREEN);
+    HAL_Delay(300);
+    
+    /* Test 3: Mavi ekran */
+    ILI9341_FillScreen(ILI9341_COLOR_BLUE);
+    HAL_Delay(300);
+    
+    /* Test 4: Ağ ekran */
+    ILI9341_FillScreen(ILI9341_COLOR_WHITE);
+    HAL_Delay(300);
+    
+    /* Test 5: Backlight LOW (inverted polarity test) */
+    /* Əgər ekran bu anda yanırsa, backlight inverted-dir */
+    HAL_GPIO_WritePin(LCD_LIG_GPIO_Port, LCD_LIG_Pin, GPIO_PIN_RESET);
+    ILI9341_FillScreen(ILI9341_COLOR_YELLOW);
+    HAL_Delay(500);
+    
+    /* DÜZƏLİŞ: Backlight yenidən HIGH-a qaytar */
+    /* Əgər ekran sarı (YELLOW) göstərirsə, backlight normal (HIGH aktiv) */
+    /* Əgər ekran sarı göstərmirsə amma HIGH-da göstərirdisə, backlight inverted */
+    HAL_GPIO_WritePin(LCD_LIG_GPIO_Port, LCD_LIG_Pin, GPIO_PIN_SET);
+    
+    /* Son: Qara ekran */
+    ILI9341_FillScreen(ILI9341_COLOR_BLACK);
+}
+
+/* Backlight-ı invert etmək üçün funksiya */
+void ILI9341_SetBacklight(uint8_t on)
+{
+    /* on = 1: Backlight ON, on = 0: Backlight OFF */
+    /* DÜZƏLİŞ: Əgər LCD-də backlight inverted-dirsə, bu funksiyanı dəyişdirin */
+    /* Normal: HIGH = ON, LOW = OFF */
+    /* Inverted: HIGH = OFF, LOW = ON */
+    #define BACKLIGHT_INVERTED 0  /* DÜZƏLİŞ: Əgər ekran yanmırsa, bu dəyəri 1-ə dəyişin */
+    
+    #if BACKLIGHT_INVERTED
+        HAL_GPIO_WritePin(LCD_LIG_GPIO_Port, LCD_LIG_Pin, on ? GPIO_PIN_RESET : GPIO_PIN_SET);
+    #else
+        HAL_GPIO_WritePin(LCD_LIG_GPIO_Port, LCD_LIG_Pin, on ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    #endif
 }
 
 /* ------------------ Ekranı rənglə doldur ------------------ */
