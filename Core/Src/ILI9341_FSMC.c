@@ -267,7 +267,7 @@ void ILI9341_SetBacklight(uint8_t on)
     /* DÜZƏLİŞ: Əgər LCD-də backlight inverted-dirsə, bu funksiyanı dəyişdirin */
     /* Normal: HIGH = ON, LOW = OFF */
     /* Inverted: HIGH = OFF, LOW = ON */
-    #define BACKLIGHT_INVERTED 0  /* 1: inverted, 0: normal */
+    #define BACKLIGHT_INVERTED 0  /* DÜZƏLİŞ: Əgər ekran yanmırsa, bu dəyəri 1-ə dəyişin */
     
     #if BACKLIGHT_INVERTED
         HAL_GPIO_WritePin(LCD_LIG_GPIO_Port, LCD_LIG_Pin, on ? GPIO_PIN_RESET : GPIO_PIN_SET);
