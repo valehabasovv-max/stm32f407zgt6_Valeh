@@ -28,6 +28,8 @@
 
 /* İctimai funksiyalar */
 void ILI9341_Init(void);
+void ILI9341_ColorTest(void);  /* LCD rəng testi - başlatma yoxlaması */
+void ILI9341_SetBacklight(uint8_t on);  /* Backlight idarəetməsi (0=OFF, 1=ON) */
 void ILI9341_FillScreen(uint16_t color);
 void ILI9341_DrawPixel(uint16_t x, uint16_t y, uint16_t color);
 void ILI9341_DrawRectangle(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color);
