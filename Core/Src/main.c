@@ -333,8 +333,13 @@ void Screen_DrawMain(void) {
         
         /* Başlıq paneli */
         ILI9341_FillRect(0, 0, 320, 22, COLOR_ACCENT_BLUE);
-        ILI9341_DrawString(10, 5, "VALEH HIGH PRESSURE CONTROL", 
+        ILI9341_DrawString(10, 5, "VALEH HPC", 
                           COLOR_TEXT_WHITE, COLOR_ACCENT_BLUE, 1);
+        
+        /* Koordinat mode göstəricisi - sağ üst küncdə */
+        char mode_info[16];
+        sprintf(mode_info, "M%d", XPT2046_GetCoordMode());
+        ILI9341_DrawString(300, 5, mode_info, ILI9341_COLOR_YELLOW, COLOR_ACCENT_BLUE, 1);
         
         /* Sol panel - Preset düymələri */
         UI_DrawPanel(5, 25, 105, 95, "PRESET");
@@ -634,27 +639,43 @@ void Screen_Update(void) {
 
 /**
  * @brief Touch işləmə
+ * @note Debug rejimi HƏMİŞƏ aktiv - koordinatları ekranda göstərir
  */
 void Touch_Process(void) {
     uint16_t tx, ty;
+    uint16_t raw_x, raw_y;
     
     if (XPT2046_IsTouched()) {
         /* Debounce - daha qısa vaxt */
         uint32_t now = HAL_GetTick();
-        if (g_touch_was_pressed || (now - g_last_touch_time < 150)) {  /* 200ms -> 150ms */
+        if (g_touch_was_pressed || (now - g_last_touch_time < 100)) {  /* 150ms -> 100ms */
             return;
         }
         
-        if (XPT2046_GetScreenCoordinates(&tx, &ty)) {
+        /* Əvvəlcə raw koordinatları oxu */
+        if (XPT2046_GetCoordinates(&raw_x, &raw_y)) {
+            /* Screen koordinatlarına çevir */
+            XPT2046_ConvertToScreen(raw_x, raw_y, &tx, &ty);
+            
             g_last_touch_time = now;
             g_touch_was_pressed = 1;
             
-            /* Debug: Touch koordinatlarını ekranda göstər - yalnız debug üçün */
-            #ifdef TOUCH_DEBUG
-            char debug_str[32];
-            sprintf(debug_str, "T:%d,%d  ", tx, ty);
-            ILI9341_DrawString(250, 5, debug_str, ILI9341_COLOR_YELLOW, COLOR_ACCENT_BLUE, 1);
-            #endif
+            /* HƏMİŞƏ: Touch koordinatlarını ekranda göstər - debug üçün */
+            char debug_str[40];
+            sprintf(debug_str, "R:%d,%d S:%d,%d  ", raw_x, raw_y, tx, ty);
+            ILI9341_FillRect(180, 5, 140, 12, COLOR_ACCENT_BLUE);
+            ILI9341_DrawString(180, 5, debug_str, ILI9341_COLOR_YELLOW, COLOR_ACCENT_BLUE, 1);
+            
+            /* Touch nöqtəsini qırmızı dairə ilə göstər */
+            for (int dx = -3; dx <= 3; dx++) {
+                for (int dy = -3; dy <= 3; dy++) {
+                    if (dx*dx + dy*dy <= 9) {
+                        if (tx + dx >= 0 && tx + dx < 320 && ty + dy >= 0 && ty + dy < 240) {
+                            ILI9341_DrawPixel(tx + dx, ty + dy, COLOR_ACCENT_RED);
+                        }
+                    }
+                }
+            }
             
             /* Səhifəyə görə touch işlə */
             switch (g_current_page) {
@@ -684,7 +705,8 @@ void Touch_Process(void) {
 
 /**
  * @brief Əsas ekran touch
- * @note Buton sahələri genişləndirildi - daha yaxşı toxunma həssaslığı üçün
+ * @note Buton sahələri DAHA DA genişləndirildi - daha yaxşı toxunma həssaslığı üçün
+ * @note Hər buton üçün visual feedback əlavə edildi
  */
 void Touch_HandleMain(uint16_t x, uint16_t y) {
     SystemStatus_t* status = AdvancedPressureControl_GetStatus();
@@ -692,13 +714,36 @@ void Touch_HandleMain(uint16_t x, uint16_t y) {
     /* Debug: Touch koordinatlarını serial portdan göstər */
     printf("Touch Main: x=%d, y=%d\r\n", x, y);
     
-    /* Preset düymələri - genişləndirilmiş sahə (0-115, 35-125) */
-    if (y >= 35 && y <= 125 && x >= 0 && x <= 115) {
-        int col = (x < 38) ? 0 : ((x < 72) ? 1 : 2);
-        int row = (y < 80) ? 0 : 1;
+    /* ============================================
+     * DÜYMƏ ZONALARI - EKRAN BÖLGÜLƏRƏ AYRILDI
+     * Ekran: 320x240, Landscape
+     * 
+     * Sol üst (0-120, 25-130): Preset düymələri
+     * Orta (115-210, 25-130): Təzyiq göstəricisi
+     * Sağ üst (205-320, 25-130): Status paneli
+     * Alt (0-320, 185-240): Kontrol düymələri
+     * ============================================ */
+    
+    /* Preset düymələri - SOL ÜST hissə (0-120, 25-130) */
+    if (x <= 120 && y >= 25 && y <= 130) {
+        /* 3x2 grid - hər düymə təxminən 40x50 piksel */
+        int col = x / 40;           /* 0, 1, 2 */
+        int row = (y - 25) / 50;    /* 0, 1 */
+        
+        /* Sərhədləri yoxla */
+        if (col > 2) col = 2;
+        if (row > 1) row = 1;
+        
         int idx = row * 3 + col;
         if (idx >= 0 && idx < 6) {
-            printf("Preset %d selected\r\n", idx);
+            printf(">>> PRESET %d selected (%.0f bar)\r\n", idx, g_presets[idx]);
+            
+            /* Visual feedback - qısa flash */
+            uint16_t btn_x = 8 + (idx % 3) * 34;
+            uint16_t btn_y = 42 + (idx / 3) * 38;
+            ILI9341_FillRect(btn_x, btn_y, 32, 35, ILI9341_COLOR_WHITE);
+            HAL_Delay(50);
+            
             g_current_preset = idx;
             AdvancedPressureControl_SetTargetPressure(g_presets[idx]);
             g_needs_redraw = 1;
@@ -706,76 +751,145 @@ void Touch_HandleMain(uint16_t x, uint16_t y) {
         return;
     }
     
-    /* Alt kontrol düymələri - genişləndirilmiş sahə (y >= 195) */
-    if (y >= 195) {
-        /* START/STOP düyməsi - genişləndirilmiş (0-90, 195-240) */
-        if (x >= 0 && x <= 90) {
-            printf("START/STOP pressed\r\n");
+    /* Alt kontrol düymələri - ALT hissə (y >= 185) */
+    if (y >= 185) {
+        /* START/STOP düyməsi (0-85, 185-240) */
+        if (x <= 85) {
+            printf(">>> START/STOP pressed\r\n");
+            
+            /* Visual feedback */
+            ILI9341_FillRect(10, 208, 70, 25, ILI9341_COLOR_WHITE);
+            HAL_Delay(50);
+            
             g_system_running = !g_system_running;
             status->control_enabled = g_system_running;
             g_needs_redraw = 1;
             return;
         }
         
-        /* MENU düyməsi - genişləndirilmiş (80-165, 195-240) */
-        if (x >= 80 && x <= 165) {
-            printf("MENU pressed\r\n");
+        /* MENU düyməsi (75-165, 185-240) */
+        if (x >= 75 && x <= 165) {
+            printf(">>> MENU pressed\r\n");
+            
+            /* Visual feedback */
+            ILI9341_FillRect(85, 208, 70, 25, ILI9341_COLOR_WHITE);
+            HAL_Delay(50);
+            
             g_current_page = PAGE_MENU;
             g_needs_redraw = 1;
             return;
         }
         
-        /* SP- düyməsi - genişləndirilmiş (155-205, 195-240) */
-        if (x >= 155 && x <= 205) {
-            printf("SP- pressed\r\n");
+        /* SP- düyməsi (150-200, 185-240) */
+        if (x >= 150 && x <= 200) {
+            printf(">>> SP- pressed\r\n");
+            
+            /* Visual feedback */
+            ILI9341_FillRect(160, 208, 35, 25, ILI9341_COLOR_WHITE);
+            HAL_Delay(50);
+            
             float new_sp = status->target_pressure - 10.0f;
             if (new_sp < 0.0f) new_sp = 0.0f;
             AdvancedPressureControl_SetTargetPressure(new_sp);
+            g_needs_redraw = 1;
             return;
         }
         
-        /* SP+ düyməsi - genişləndirilmiş (195-250, 195-240) */
-        if (x >= 195 && x <= 250) {
-            printf("SP+ pressed\r\n");
+        /* SP+ düyməsi (190-250, 185-240) */
+        if (x >= 190 && x <= 250) {
+            printf(">>> SP+ pressed\r\n");
+            
+            /* Visual feedback */
+            ILI9341_FillRect(200, 208, 35, 25, ILI9341_COLOR_WHITE);
+            HAL_Delay(50);
+            
             float new_sp = status->target_pressure + 10.0f;
             if (new_sp > 300.0f) new_sp = 300.0f;
             AdvancedPressureControl_SetTargetPressure(new_sp);
+            g_needs_redraw = 1;
             return;
         }
+        
+        /* Heç bir düymə basılmadı - debug */
+        printf("Touch in control area but no button: x=%d, y=%d\r\n", x, y);
+    }
+    
+    /* Ekranın digər sahələrində - debug */
+    if (y < 185 && x > 120) {
+        printf("Touch in non-button area: x=%d, y=%d\r\n", x, y);
+    }
+    
+    /* ============================================
+     * GIZLI KOORDINAT MODE DƏYIŞDIRMƏ
+     * Sağ üst küncdə toxunsan mode dəyişir (290-320, 0-30)
+     * Bu, kalibrasiya problemini həll etmək üçündür
+     * ============================================ */
+    if (x >= 280 && y <= 30) {
+        uint8_t current_mode = XPT2046_GetCoordMode();
+        uint8_t new_mode = (current_mode + 1) % 4;
+        XPT2046_SetCoordMode(new_mode);
+        
+        printf(">>> COORD MODE CHANGED: %d -> %d\r\n", current_mode, new_mode);
+        
+        /* Ekranda mode göstər */
+        char mode_str[32];
+        sprintf(mode_str, "MODE: %d", new_mode);
+        ILI9341_FillRect(120, 100, 80, 30, COLOR_ACCENT_BLUE);
+        ILI9341_DrawString(125, 108, mode_str, ILI9341_COLOR_YELLOW, COLOR_ACCENT_BLUE, 2);
+        HAL_Delay(500);
+        g_needs_redraw = 1;
     }
 }
 
 /**
  * @brief Menyu ekranı touch
- * @note Buton sahələri genişləndirildi
+ * @note Buton sahələri genişləndirildi, visual feedback əlavə edildi
  */
 void Touch_HandleMenu(uint16_t x, uint16_t y) {
     printf("Touch Menu: x=%d, y=%d\r\n", x, y);
     
-    /* SETPOINT (0-320, 35-90) - genişləndirilmiş */
-    if (y >= 35 && y <= 90) {
-        printf("SETPOINT pressed\r\n");
+    /* Bütün düymələr tam ekran genişliyindədir (40-280 x) */
+    /* Yalnız x məhdudiyyəti əlavə et - düymələr 40-280 arasındadır */
+    if (x < 30 || x > 290) {
+        printf("Touch outside button area\r\n");
+        return;
+    }
+    
+    /* SETPOINT düyməsi (y: 35-85) */
+    if (y >= 35 && y <= 85) {
+        printf(">>> SETPOINT pressed\r\n");
+        ILI9341_FillRect(40, 45, 240, 35, ILI9341_COLOR_WHITE);
+        HAL_Delay(50);
         g_current_page = PAGE_SETPOINT;
         g_needs_redraw = 1;
         return;
     }
-    /* PID TUNE (0-320, 80-135) - genişləndirilmiş */
-    if (y >= 80 && y <= 135) {
-        printf("PID TUNE pressed\r\n");
+    
+    /* PID TUNE düyməsi (y: 80-130) */
+    if (y >= 80 && y <= 130) {
+        printf(">>> PID TUNE pressed\r\n");
+        ILI9341_FillRect(40, 90, 240, 35, ILI9341_COLOR_WHITE);
+        HAL_Delay(50);
         g_current_page = PAGE_PID_TUNE;
         g_needs_redraw = 1;
         return;
     }
-    /* CALIBRATION (0-320, 125-180) - genişləndirilmiş */
-    if (y >= 125 && y <= 180) {
-        printf("CALIBRATION pressed\r\n");
+    
+    /* CALIBRATION düyməsi (y: 125-175) */
+    if (y >= 125 && y <= 175) {
+        printf(">>> CALIBRATION pressed\r\n");
+        ILI9341_FillRect(40, 135, 240, 35, ILI9341_COLOR_WHITE);
+        HAL_Delay(50);
         g_current_page = PAGE_CALIBRATION;
         g_needs_redraw = 1;
         return;
     }
-    /* BACK (0-320, 170-240) - genişləndirilmiş */
-    if (y >= 170 && y <= 240) {
-        printf("BACK pressed\r\n");
+    
+    /* BACK düyməsi (y: 170-220) */
+    if (y >= 170) {
+        printf(">>> BACK pressed\r\n");
+        ILI9341_FillRect(40, 180, 240, 35, ILI9341_COLOR_WHITE);
+        HAL_Delay(50);
         g_current_page = PAGE_MAIN;
         g_needs_redraw = 1;
         return;

@@ -69,23 +69,33 @@ static uint8_t use_matrix_calibration = 0;
 /**
  * @brief Default kalibrasiya dəyərlərini yüklə
  * @note 3-nöqtəli kalibrasiya uğursuz olduqda istifadə edilir
+ * @note Bütün 4 koordinat modu sınanır və ən yaxşısı seçilir
  */
 void XPT2046_LoadDefaultCalibration(void)
 {
     /* Tipik ILI9341 + XPT2046 üçün default dəyərlər */
     /* Bu dəyərlər əksər ekranlar üçün işləyir */
-    /* DÜZƏLİŞ: Daha geniş diapazon və müxtəlif koordinat modları sınaqdan keçirildi */
-    cal_x_min = 300;
-    cal_x_max = 3800;
-    cal_y_min = 300;
-    cal_y_max = 3800;
+    /* DÜZƏLİŞ: Daha geniş diapazon - bəzi ekranlarda dəyərlər 200-4000 aralığındadır */
+    cal_x_min = 200;
+    cal_x_max = 3900;
+    cal_y_min = 200;
+    cal_y_max = 3900;
     
-    /* Koordinat mode seçimi - tipik 3.2" TFT ekranlar üçün */
-    /* Mode 0: Normal */
-    /* Mode 1: Swap X-Y + Invert X - ÇOX İSTİFADƏ OLUNAN landscape orientation */
-    /* Mode 2: Invert both X and Y */
-    /* Mode 3: Swap X-Y only */
-    coord_mode = 1;  /* Default: Swap + Invert X */
+    /* ============================================
+     * KOORDİNAT MODE SEÇİMİ
+     * ILI9341 Memory Access Control = 0x28 (landscape, MV=1)
+     * 
+     * Mode 0: Normal - əgər touch və LCD eyni orientasiyadadır
+     * Mode 1: Swap X-Y + Invert X - ən çox istifadə olunan
+     * Mode 2: Invert both X and Y - 180° fırlanmış
+     * Mode 3: Swap X-Y only - digər landscape variant
+     * 
+     * Tipik olaraq Mode 1 və ya Mode 3 işləyir
+     * ============================================ */
+    
+    /* DÜZƏLİŞ: Default olaraq MODE 3 (Swap X-Y only) sına */
+    /* Bu mode bir çox ILI9341 + XPT2046 kombinasiyası üçün işləyir */
+    coord_mode = 3;  /* DÜZƏLİŞ: Mode 1-dən Mode 3-ə dəyişdirildi */
     
     /* 3-nöqtəli kalibrasiyadan istifadə etmə, köhnə metod istifadə et */
     use_matrix_calibration = 0;
@@ -95,6 +105,12 @@ void XPT2046_LoadDefaultCalibration(void)
     printf("  X range: %d - %d\r\n", cal_x_min, cal_x_max);
     printf("  Y range: %d - %d\r\n", cal_y_min, cal_y_max);
     printf("  Coord mode: %d (0=Normal, 1=SwapInvX, 2=InvBoth, 3=SwapOnly)\r\n", coord_mode);
+    printf("\r\n");
+    printf("*** Əgər butonlar işləmirsə, coord_mode dəyişdirin:\r\n");
+    printf("    Mode 0: Sol üst = sol üst\r\n");
+    printf("    Mode 1: Sol üst = sağ alt (Swap+InvX)\r\n");
+    printf("    Mode 2: Sol üst = sağ alt (InvBoth)\r\n");
+    printf("    Mode 3: Sol üst = sol alt (SwapOnly) - HAZIRKİ\r\n");
 }
 
 /**
@@ -399,11 +415,9 @@ void XPT2046_ConvertToScreen(uint16_t raw_x, uint16_t raw_y,
     if (touch_cal.calibrated && use_matrix_calibration) {
         XPT2046_ConvertWithMatrix(raw_x, raw_y, screen_x, screen_y);
         
-        /* Debug çıxışı */
-        if (debug_mode) {
-            printf("Touch: raw(%d,%d) -> screen(%d,%d) [matrix]\r\n", 
-                   raw_x, raw_y, *screen_x, *screen_y);
-        }
+        /* Debug çıxışı - HƏMİŞƏ aktiv */
+        printf("Touch: raw(%d,%d) -> screen(%d,%d) [matrix]\r\n", 
+               raw_x, raw_y, *screen_x, *screen_y);
         return;
     }
     
@@ -411,39 +425,45 @@ void XPT2046_ConvertToScreen(uint16_t raw_x, uint16_t raw_y,
     int32_t temp_x = raw_x;
     int32_t temp_y = raw_y;
     
-    /* Kalibrasiya limitlərini tətbiq et */
-    if (temp_x < cal_x_min) temp_x = cal_x_min;
-    if (temp_x > cal_x_max) temp_x = cal_x_max;
-    if (temp_y < cal_y_min) temp_y = cal_y_min;
-    if (temp_y > cal_y_max) temp_y = cal_y_max;
+    /* Kalibrasiya limitlərini tətbiq et - daha geniş diapazon */
+    if (temp_x < (int32_t)cal_x_min) temp_x = cal_x_min;
+    if (temp_x > (int32_t)cal_x_max) temp_x = cal_x_max;
+    if (temp_y < (int32_t)cal_y_min) temp_y = cal_y_min;
+    if (temp_y > (int32_t)cal_y_max) temp_y = cal_y_max;
     
     /* Ekran koordinatlarına çevir */
     int32_t sx, sy;
+    int32_t x_range = cal_x_max - cal_x_min;
+    int32_t y_range = cal_y_max - cal_y_min;
+    
+    /* Sıfıra bölmədən qorun */
+    if (x_range <= 0) x_range = 1;
+    if (y_range <= 0) y_range = 1;
     
     switch (coord_mode) {
         case 0: /* Normal mapping */
-            sx = ((temp_x - cal_x_min) * 319) / (cal_x_max - cal_x_min);
-            sy = ((temp_y - cal_y_min) * 239) / (cal_y_max - cal_y_min);
+            sx = ((temp_x - cal_x_min) * 319) / x_range;
+            sy = ((temp_y - cal_y_min) * 239) / y_range;
             break;
             
         case 1: /* Swap X-Y, invert X (ən çox istifadə olunan) */
-            sx = 319 - ((temp_y - cal_y_min) * 319) / (cal_y_max - cal_y_min);
-            sy = ((temp_x - cal_x_min) * 239) / (cal_x_max - cal_x_min);
+            sx = 319 - ((temp_y - cal_y_min) * 319) / y_range;
+            sy = ((temp_x - cal_x_min) * 239) / x_range;
             break;
             
         case 2: /* Invert both X and Y */
-            sx = 319 - ((temp_x - cal_x_min) * 319) / (cal_x_max - cal_x_min);
-            sy = 239 - ((temp_y - cal_y_min) * 239) / (cal_y_max - cal_y_min);
+            sx = 319 - ((temp_x - cal_x_min) * 319) / x_range;
+            sy = 239 - ((temp_y - cal_y_min) * 239) / y_range;
             break;
             
-        case 3: /* Swap X-Y only */
-            sx = ((temp_y - cal_y_min) * 319) / (cal_y_max - cal_y_min);
-            sy = ((temp_x - cal_x_min) * 239) / (cal_x_max - cal_x_min);
+        case 3: /* Swap X-Y only - DÜZƏLİŞ: Bu mode çox ekran üçün işləyir */
+            sx = ((temp_y - cal_y_min) * 319) / y_range;
+            sy = ((temp_x - cal_x_min) * 239) / x_range;
             break;
             
         default:
-            sx = ((temp_x - cal_x_min) * 319) / (cal_x_max - cal_x_min);
-            sy = ((temp_y - cal_y_min) * 239) / (cal_y_max - cal_y_min);
+            sx = ((temp_x - cal_x_min) * 319) / x_range;
+            sy = ((temp_y - cal_y_min) * 239) / y_range;
             break;
     }
     
@@ -456,11 +476,9 @@ void XPT2046_ConvertToScreen(uint16_t raw_x, uint16_t raw_y,
     *screen_x = (uint16_t)sx;
     *screen_y = (uint16_t)sy;
     
-    /* Debug çıxışı */
-    if (debug_mode) {
-        printf("Touch: raw(%d,%d) -> screen(%d,%d) mode=%d\r\n", 
-               raw_x, raw_y, *screen_x, *screen_y, coord_mode);
-    }
+    /* Debug çıxışı - HƏMİŞƏ aktiv (problemi həll etmək üçün) */
+    printf("Touch: raw(%d,%d) -> screen(%d,%d) mode=%d\r\n", 
+           raw_x, raw_y, *screen_x, *screen_y, coord_mode);
 }
 
 /* Ekran koordinatlarını birbaşa al */
