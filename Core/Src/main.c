@@ -952,8 +952,15 @@ int main(void)
   ILI9341_Init();
   HAL_Delay(100);
   
-  /* Açılış ekranı */
-  Screen_DrawSplash();
+  /* Touch başlat - LCD-dən sonra, kalibrasiyadan əvvəl */
+  XPT2046_Init();
+  HAL_Delay(50);
+  
+  /* ============================================
+   * 3-NÖQTƏLİ TOUCH KALİBRASİYA
+   * Ekran açılmadan əvvəl touch koordinatlarını kalibrasiya et
+   * ============================================ */
+  ILI9341_RunTouchCalibration();
   
   /* PWM başlat */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
@@ -961,8 +968,8 @@ int main(void)
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
   
-  /* Touch başlat */
-  XPT2046_Init();
+  /* Açılış ekranı - kalibrasiyadan sonra */
+  Screen_DrawSplash();
   
   /* Kalibrasiya yüklə */
   AdvancedPressureControl_LoadCalibration();

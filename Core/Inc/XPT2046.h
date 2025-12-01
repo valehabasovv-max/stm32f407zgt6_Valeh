@@ -52,6 +52,41 @@ extern "C" {
 #define XPT2046_Y_MAX           3900
 #define XPT2046_Z_THRESHOLD     50
 
+/* =============== 3-NÖQTƏLİ KALİBRASİYA =============== */
+/* Ekran ölçüləri */
+#define TOUCH_SCREEN_WIDTH      320
+#define TOUCH_SCREEN_HEIGHT     240
+
+/* Kalibrasiya nöqtələri mövqeyi (piksel) */
+#define CAL_POINT1_X            30      /* Sol üst */
+#define CAL_POINT1_Y            30
+#define CAL_POINT2_X            290     /* Sağ üst */
+#define CAL_POINT2_Y            30
+#define CAL_POINT3_X            160     /* Mərkəz alt */
+#define CAL_POINT3_Y            210
+
+/* Kalibrasiya nöqtə ölçüsü */
+#define CAL_TARGET_SIZE         10
+#define CAL_TARGET_COLOR        0xF800  /* Qırmızı */
+
+/* Kalibrasiya strukturu */
+typedef struct {
+    /* 3 kalibrasiya nöqtəsinin raw dəyərləri */
+    uint16_t raw_x[3];
+    uint16_t raw_y[3];
+    
+    /* Ekran koordinatları (hədəf) */
+    uint16_t screen_x[3];
+    uint16_t screen_y[3];
+    
+    /* Kalibrasiya matrisi əmsalları */
+    float a, b, c;  /* X üçün: screen_x = a*raw_x + b*raw_y + c */
+    float d, e, f;  /* Y üçün: screen_y = d*raw_x + e*raw_y + f */
+    
+    /* Kalibrasiya bayrağı */
+    uint8_t calibrated;
+} TouchCalibration_t;
+
 /* =============== FUNKSİYA PROTOTİPLƏRİ =============== */
 
 /* Başlatma */
@@ -76,6 +111,16 @@ void XPT2046_SetCalibration(uint16_t x_min, uint16_t x_max,
                             uint16_t y_min, uint16_t y_max);
 void XPT2046_GetCalibration(uint16_t *x_min, uint16_t *x_max, 
                             uint16_t *y_min, uint16_t *y_max);
+
+/* 3-nöqtəli kalibrasiya */
+uint8_t XPT2046_Calibrate3Point(void);                      /* 3 nöqtəli kalibrasiya başlat */
+void XPT2046_SetCalibrationMatrix(TouchCalibration_t* cal); /* Kalibrasiya matrisini təyin et */
+TouchCalibration_t* XPT2046_GetCalibrationData(void);       /* Kalibrasiya məlumatlarını al */
+uint8_t XPT2046_IsCalibrated(void);                         /* Kalibrasiya olunubmu? */
+void XPT2046_ConvertWithMatrix(uint16_t raw_x, uint16_t raw_y,
+                               uint16_t *screen_x, uint16_t *screen_y); /* Matris ilə çevir */
+void XPT2046_SetCalibrationPoint(uint8_t point_idx, uint16_t raw_x, uint16_t raw_y); /* Kalibrasiya nöqtəsi təyin et */
+void XPT2046_FinishCalibration(void);                       /* Kalibrasiya tamamla */
 
 /* Koordinat rejimi */
 void XPT2046_SetCoordMode(uint8_t mode);

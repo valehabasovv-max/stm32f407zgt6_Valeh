@@ -86,6 +86,10 @@ void ILI9341_ShowCalibrationPage(void);
 void ILI9341_ShowPressureCalibrationPage(void);
 void ILI9341_ShowPIDTuningPage(void);
 void ILI9341_HandleCalibrationTouch(void);
+
+/* 3-Nöqtəli Touch Kalibrasiya */
+uint8_t ILI9341_RunTouchCalibration(void);  /* Başlanğıcda 3-nöqtəli kalibrasiya */
+void ILI9341_DrawCalibrationTarget(uint16_t x, uint16_t y, uint16_t color);  /* Kalibrasiya nişanı çək */
 /* 
  * REMOVED: PressureSensor_* funksiyaları silindi
  * 

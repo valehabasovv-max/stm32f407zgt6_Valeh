@@ -52,6 +52,20 @@ static uint32_t last_touch_time = 0;
 /* Debug mode */
 static uint8_t debug_mode = 0;
 
+/* =============== 3-NÖQTƏLİ KALİBRASİYA DƏYİŞƏNLƏRİ =============== */
+static TouchCalibration_t touch_cal = {
+    .raw_x = {0, 0, 0},
+    .raw_y = {0, 0, 0},
+    .screen_x = {CAL_POINT1_X, CAL_POINT2_X, CAL_POINT3_X},
+    .screen_y = {CAL_POINT1_Y, CAL_POINT2_Y, CAL_POINT3_Y},
+    .a = 0.0f, .b = 0.0f, .c = 0.0f,
+    .d = 0.0f, .e = 0.0f, .f = 0.0f,
+    .calibrated = 0
+};
+
+/* 3-nöqtəli kalibrasiya bayrağı - bu aktiv olduqda matris istifadə edilir */
+static uint8_t use_matrix_calibration = 0;
+
 /* =============== AŞAĞI SƏVİYYƏLİ FUNKSİYALAR =============== */
 
 /* Kiçik gecikmə - SCK üçün stabil kənar */
@@ -248,6 +262,19 @@ void XPT2046_ConvertToScreen(uint16_t raw_x, uint16_t raw_y,
 {
     if (!screen_x || !screen_y) return;
     
+    /* 3-nöqtəli kalibrasiya aktiv olduqda matris istifadə et */
+    if (touch_cal.calibrated && use_matrix_calibration) {
+        XPT2046_ConvertWithMatrix(raw_x, raw_y, screen_x, screen_y);
+        
+        /* Debug çıxışı */
+        if (debug_mode) {
+            printf("Touch: raw(%d,%d) -> screen(%d,%d) [matrix]\r\n", 
+                   raw_x, raw_y, *screen_x, *screen_y);
+        }
+        return;
+    }
+    
+    /* Köhnə kalibrasiya metodu (fallback) */
     int32_t temp_x = raw_x;
     int32_t temp_y = raw_y;
     
@@ -403,4 +430,161 @@ uint8_t XPT2046_GetTouchDebounced(uint16_t *screen_x, uint16_t *screen_y,
     }
     
     return 0;
+}
+
+/* =============== 3-NÖQTƏLİ KALİBRASİYA FUNKSİYALARI =============== */
+
+/**
+ * @brief Kalibrasiya matrisini 3 nöqtədən hesabla
+ * @note Affine transformasiya: screen = A * raw + offset
+ *       | screen_x |   | a  b | | raw_x |   | c |
+ *       | screen_y | = | d  e | | raw_y | + | f |
+ */
+static void CalculateCalibrationMatrix(void)
+{
+    /* 3 nöqtənin raw və screen koordinatları */
+    float rx[3], ry[3], sx[3], sy[3];
+    
+    for (int i = 0; i < 3; i++) {
+        rx[i] = (float)touch_cal.raw_x[i];
+        ry[i] = (float)touch_cal.raw_y[i];
+        sx[i] = (float)touch_cal.screen_x[i];
+        sy[i] = (float)touch_cal.screen_y[i];
+    }
+    
+    /* Determinant hesabla */
+    float div = (rx[0] - rx[2]) * (ry[1] - ry[2]) - (rx[1] - rx[2]) * (ry[0] - ry[2]);
+    
+    if (div == 0.0f) {
+        printf("Calibration error: determinant is zero!\r\n");
+        touch_cal.calibrated = 0;
+        return;
+    }
+    
+    /* Affine matris əmsallarını hesabla - X üçün */
+    touch_cal.a = ((sx[0] - sx[2]) * (ry[1] - ry[2]) - (sx[1] - sx[2]) * (ry[0] - ry[2])) / div;
+    touch_cal.b = ((rx[0] - rx[2]) * (sx[1] - sx[2]) - (rx[1] - rx[2]) * (sx[0] - sx[2])) / div;
+    touch_cal.c = (sx[0] * (rx[1] * ry[2] - rx[2] * ry[1]) - 
+                   sx[1] * (rx[0] * ry[2] - rx[2] * ry[0]) + 
+                   sx[2] * (rx[0] * ry[1] - rx[1] * ry[0])) / div;
+    
+    /* Affine matris əmsallarını hesabla - Y üçün */
+    touch_cal.d = ((sy[0] - sy[2]) * (ry[1] - ry[2]) - (sy[1] - sy[2]) * (ry[0] - ry[2])) / div;
+    touch_cal.e = ((rx[0] - rx[2]) * (sy[1] - sy[2]) - (rx[1] - rx[2]) * (sy[0] - sy[2])) / div;
+    touch_cal.f = (sy[0] * (rx[1] * ry[2] - rx[2] * ry[1]) - 
+                   sy[1] * (rx[0] * ry[2] - rx[2] * ry[0]) + 
+                   sy[2] * (rx[0] * ry[1] - rx[1] * ry[0])) / div;
+    
+    touch_cal.calibrated = 1;
+    use_matrix_calibration = 1;
+    
+    printf("Calibration complete!\r\n");
+    printf("Matrix: a=%.4f, b=%.4f, c=%.4f\r\n", touch_cal.a, touch_cal.b, touch_cal.c);
+    printf("Matrix: d=%.4f, e=%.4f, f=%.4f\r\n", touch_cal.d, touch_cal.e, touch_cal.f);
+}
+
+/**
+ * @brief Matris ilə raw koordinatları ekran koordinatlarına çevir
+ */
+void XPT2046_ConvertWithMatrix(uint16_t raw_x, uint16_t raw_y,
+                               uint16_t *screen_x, uint16_t *screen_y)
+{
+    if (!screen_x || !screen_y) return;
+    
+    if (!touch_cal.calibrated || !use_matrix_calibration) {
+        /* Kalibrasiya yoxdursa, köhnə üsulla çevir */
+        XPT2046_ConvertToScreen(raw_x, raw_y, screen_x, screen_y);
+        return;
+    }
+    
+    /* Affine transformasiya tətbiq et */
+    float fx = (float)raw_x;
+    float fy = (float)raw_y;
+    
+    float sx = touch_cal.a * fx + touch_cal.b * fy + touch_cal.c;
+    float sy = touch_cal.d * fx + touch_cal.e * fy + touch_cal.f;
+    
+    /* Ekran sərhədləri içində saxla */
+    if (sx < 0.0f) sx = 0.0f;
+    if (sx > (TOUCH_SCREEN_WIDTH - 1)) sx = TOUCH_SCREEN_WIDTH - 1;
+    if (sy < 0.0f) sy = 0.0f;
+    if (sy > (TOUCH_SCREEN_HEIGHT - 1)) sy = TOUCH_SCREEN_HEIGHT - 1;
+    
+    *screen_x = (uint16_t)(sx + 0.5f);
+    *screen_y = (uint16_t)(sy + 0.5f);
+}
+
+/**
+ * @brief Kalibrasiya olunubmu yoxla
+ */
+uint8_t XPT2046_IsCalibrated(void)
+{
+    return touch_cal.calibrated && use_matrix_calibration;
+}
+
+/**
+ * @brief Kalibrasiya məlumatlarını al
+ */
+TouchCalibration_t* XPT2046_GetCalibrationData(void)
+{
+    return &touch_cal;
+}
+
+/**
+ * @brief Kalibrasiya matrisini xaricdən təyin et
+ */
+void XPT2046_SetCalibrationMatrix(TouchCalibration_t* cal)
+{
+    if (!cal) return;
+    
+    touch_cal.a = cal->a;
+    touch_cal.b = cal->b;
+    touch_cal.c = cal->c;
+    touch_cal.d = cal->d;
+    touch_cal.e = cal->e;
+    touch_cal.f = cal->f;
+    touch_cal.calibrated = cal->calibrated;
+    
+    if (cal->calibrated) {
+        use_matrix_calibration = 1;
+    }
+}
+
+/**
+ * @brief 3-nöqtəli touch kalibrasiyası
+ * @note Bu funksiya LCD funksiyalarını çağırır - ILI9341_FSMC.h include olunmalıdır
+ * @return 1 uğurlu, 0 ləğv edildi
+ */
+uint8_t XPT2046_Calibrate3Point(void)
+{
+    /* Bu funksiya main.c-dən çağırılır və LCD istifadə edir */
+    /* İmplementasiya ILI9341_FSMC.c-də olacaq çünki LCD funksiyaları lazımdır */
+    printf("3-Point Calibration started...\r\n");
+    printf("Please use XPT2046_RunCalibration() from ILI9341_FSMC module\r\n");
+    return 0;
+}
+
+/**
+ * @brief Kalibrasiya nöqtəsinin raw dəyərini təyin et
+ * @param point_idx: 0, 1 və ya 2 (3 nöqtə)
+ * @param raw_x, raw_y: Raw touch koordinatları
+ */
+void XPT2046_SetCalibrationPoint(uint8_t point_idx, uint16_t raw_x, uint16_t raw_y)
+{
+    if (point_idx >= 3) return;
+    
+    touch_cal.raw_x[point_idx] = raw_x;
+    touch_cal.raw_y[point_idx] = raw_y;
+    
+    printf("Calibration point %d: raw(%d, %d) -> screen(%d, %d)\r\n",
+           point_idx, raw_x, raw_y, 
+           touch_cal.screen_x[point_idx], touch_cal.screen_y[point_idx]);
+}
+
+/**
+ * @brief Bütün nöqtələr alındıqdan sonra matrisi hesabla
+ */
+void XPT2046_FinishCalibration(void)
+{
+    CalculateCalibrationMatrix();
 }
