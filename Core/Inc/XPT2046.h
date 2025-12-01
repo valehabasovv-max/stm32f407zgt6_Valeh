@@ -17,11 +17,28 @@ extern "C" {
 #include "stm32f4xx_hal.h"
 
 /* =============== GPIO PIN TƏRİFLƏRİ =============== */
-/* Bu pinləri öz hardware-ınıza görə dəyişdirin */
+/* 
+ * Bu pinləri öz hardware-ınıza görə dəyişdirin
+ * 
+ * ŞÜHÜNDİ PIN XƏYYANMASI:
+ *   Touch CS   -> PB12 (Chip Select)
+ *   Touch SCK  -> PF11 (Serial Clock) - DƏYİŞDİRİLDİ! (əvvəl PB1 idi)
+ *   Touch MISO -> PF8  (Master In Slave Out)
+ *   Touch MOSI -> PF9  (Master Out Slave In)
+ *   Touch IRQ  -> PF10 (Interrupt Request)
+ *
+ * QEYD: SCK pini PB1-dən PF11-ə köçürüldü çünki
+ * PB1 TIM3_CH4 (PWM çıxışı) ilə konflikt yaradırdı.
+ * 
+ * Hardware-da tel dəyişikliyi lazımdır:
+ *   Touch moduldakı CLK/SCK pinini PB1-dən ayırıb PF11-ə bağlayın
+ */
 #define XPT2046_CS_PIN          GPIO_PIN_12
 #define XPT2046_CS_PORT         GPIOB
 #define XPT2046_IRQ_PIN         GPIO_PIN_10
 #define XPT2046_IRQ_PORT        GPIOF
+#define XPT2046_SCK_PIN         GPIO_PIN_11
+#define XPT2046_SCK_PORT        GPIOF
 
 /* =============== XPT2046 KOMANDLARI =============== */
 #define XPT2046_CMD_READ_X      0xD0  /* X mövqeyini oxu */

@@ -30,12 +30,23 @@ static uint8_t coord_mode = 1;  /* Standart: swap + invert X */
 static uint32_t last_touch_time = 0;
 
 /* Pin tərifləri */
+/* 
+ * QEYD: SCK pini PB1-dən PF11-ə köçürüldü!
+ * Səbəb: PB1 TIM3_CH4 (PWM) ilə konflikt yaradırdı.
+ * 
+ * Hardware qoşulması:
+ *   Touch CS   -> PB12
+ *   Touch SCK  -> PF11 (əvvəl PB1 idi, DƏYİŞDİRİLDİ!)
+ *   Touch MISO -> PF8
+ *   Touch MOSI -> PF9
+ *   Touch IRQ  -> PF10
+ */
 #define TP_CS_GPIO_Port    XPT2046_CS_PORT
 #define TP_CS_Pin          XPT2046_CS_PIN
 #define TP_IRQ_GPIO_Port   XPT2046_IRQ_PORT
 #define TP_IRQ_Pin         XPT2046_IRQ_PIN
-#define TP_SCK_GPIO_Port   GPIOB
-#define TP_SCK_Pin         GPIO_PIN_1
+#define TP_SCK_GPIO_Port   GPIOF
+#define TP_SCK_Pin         GPIO_PIN_11
 #define TP_MISO_GPIO_Port  GPIOF
 #define TP_MISO_Pin        GPIO_PIN_8
 #define TP_MOSI_GPIO_Port  GPIOF
