@@ -66,11 +66,36 @@ static TouchCalibration_t touch_cal = {
 /* 3-nöqtəli kalibrasiya bayrağı - bu aktiv olduqda matris istifadə edilir */
 static uint8_t use_matrix_calibration = 0;
 
+/**
+ * @brief Default kalibrasiya dəyərlərini yüklə
+ * @note 3-nöqtəli kalibrasiya uğursuz olduqda istifadə edilir
+ */
+void XPT2046_LoadDefaultCalibration(void)
+{
+    /* Tipik ILI9341 + XPT2046 üçün default dəyərlər */
+    /* Bu dəyərlər əksər ekranlar üçün işləyir */
+    cal_x_min = 200;
+    cal_x_max = 3900;
+    cal_y_min = 200;
+    cal_y_max = 3900;
+    coord_mode = 1;  /* Swap + Invert X - ən çox istifadə olunan */
+    
+    /* 3-nöqtəli kalibrasiyadan istifadə etmə, köhnə metod istifadə et */
+    use_matrix_calibration = 0;
+    touch_cal.calibrated = 0;
+    
+    printf("XPT2046: Default calibration loaded (fallback)\r\n");
+    printf("  X range: %d - %d\r\n", cal_x_min, cal_x_max);
+    printf("  Y range: %d - %d\r\n", cal_y_min, cal_y_max);
+    printf("  Coord mode: %d\r\n", coord_mode);
+}
+
 /* =============== AŞAĞI SƏVİYYƏLİ FUNKSİYALAR =============== */
 
 /* Kiçik gecikmə - SCK üçün stabil kənar */
+/* STM32F407 168MHz-də təxminən 1us gecikmə */
 static inline void tp_delay(void) { 
-    for(volatile int i = 0; i < 50; i++) __NOP(); 
+    for(volatile int i = 0; i < 100; i++) __NOP(); 
 }
 
 /* Bit-bang SPI transfer (MSB-first) */
@@ -113,34 +138,77 @@ static uint16_t tp_read12(uint8_t cmd)
 /* =============== GPIO BAŞLATMA =============== */
 void XPT2046_Init(void)
 {
+    printf("\r\n=== XPT2046 Touch Controller Init ===\r\n");
+    
     /* GPIO saatlarını aktivləşdir */
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
     __HAL_RCC_GPIOF_CLK_ENABLE();
-
+    
+    /* ============================================
+     * KRİTİK: SPI1 Hardware-ni TAMAMILƏ deaktiv et!
+     * MX_SPI1_Init() bu pinləri hardware SPI rejiminə qoyub.
+     * Biz bit-bang SPI istifadə etdiyimiz üçün GPIO rejiminə keçirməliyik.
+     * ============================================ */
+    printf("Disabling SPI1 hardware peripheral...\r\n");
+    
+    /* SPI1 periferalını deaktiv et */
+    __HAL_RCC_SPI1_CLK_ENABLE();  /* Əvvəlcə clock aktiv olmalıdır */
+    
+    /* SPI1-i tamamilə sıfırla */
+    SPI1->CR1 = 0;   /* Control register 1 sıfırla */
+    SPI1->CR2 = 0;   /* Control register 2 sıfırla */
+    
+    __HAL_RCC_SPI1_FORCE_RESET();    /* SPI1-i force reset et */
+    __HAL_RCC_SPI1_RELEASE_RESET();  /* Reset-i burax */
+    __HAL_RCC_SPI1_CLK_DISABLE();    /* SPI1 clock-u söndür */
+    
+    /* GPIO Alternate Function-u sıfırla */
+    /* PA5, PA6 üçün MODER registrini birbaşa dəyişdir */
+    GPIOA->MODER &= ~(GPIO_MODER_MODER5 | GPIO_MODER_MODER6);  /* Input mode */
+    GPIOA->AFR[0] &= ~(0xFFU << 20);  /* PA5 və PA6 üçün AF sıfırla */
+    
+    /* PB5 üçün MODER registrini dəyişdir */
+    GPIOB->MODER &= ~GPIO_MODER_MODER5;  /* Input mode */
+    GPIOB->AFR[0] &= ~(0xFU << 20);  /* PB5 üçün AF sıfırla */
+    
+    /* Əvvəlcə pinləri resetlə */
+    HAL_GPIO_DeInit(GPIOA, GPIO_PIN_5);  /* PA5 - SCK */
+    HAL_GPIO_DeInit(GPIOA, GPIO_PIN_6);  /* PA6 - MISO */
+    HAL_GPIO_DeInit(GPIOB, GPIO_PIN_5);  /* PB5 - MOSI */
+    
+    HAL_Delay(5);  /* Stabilləşmə üçün kiçik gecikmə */
+    
     GPIO_InitTypeDef g = {0};
 
-    /* CS, SCK, MOSI: çıxış */
+    /* CS: çıxış (PB12) */
     g.Mode  = GPIO_MODE_OUTPUT_PP;
     g.Pull  = GPIO_NOPULL;
     g.Speed = GPIO_SPEED_FREQ_HIGH;
-
     g.Pin = TP_CS_Pin;   
     HAL_GPIO_Init(TP_CS_GPIO_Port, &g);
     
+    /* SCK: çıxış (PA5) */
+    g.Mode  = GPIO_MODE_OUTPUT_PP;
+    g.Pull  = GPIO_NOPULL;
+    g.Speed = GPIO_SPEED_FREQ_HIGH;
     g.Pin = TP_SCK_Pin;  
     HAL_GPIO_Init(TP_SCK_GPIO_Port, &g);
     
+    /* MOSI: çıxış (PB5) */
+    g.Mode  = GPIO_MODE_OUTPUT_PP;
+    g.Pull  = GPIO_NOPULL;
+    g.Speed = GPIO_SPEED_FREQ_HIGH;
     g.Pin = TP_MOSI_Pin; 
     HAL_GPIO_Init(TP_MOSI_GPIO_Port, &g);
 
-    /* MISO: giriş */
+    /* MISO: giriş (PA6) - pull-up ilə */
     g.Mode = GPIO_MODE_INPUT;
-    g.Pull = GPIO_NOPULL;
+    g.Pull = GPIO_PULLUP;
     g.Pin  = TP_MISO_Pin;
     HAL_GPIO_Init(TP_MISO_GPIO_Port, &g);
 
-    /* IRQ: giriş-pullup (modulda açıq kollektor olur) */
+    /* IRQ: giriş-pullup (PF10) - modulda açıq kollektor olur */
     g.Mode = GPIO_MODE_INPUT;
     g.Pull = GPIO_PULLUP;
     g.Pin  = TP_IRQ_Pin;
@@ -151,9 +219,26 @@ void XPT2046_Init(void)
     HAL_GPIO_WritePin(TP_SCK_GPIO_Port, TP_SCK_Pin, GPIO_PIN_RESET); /* SCK=LOW */
     HAL_GPIO_WritePin(TP_MOSI_GPIO_Port, TP_MOSI_Pin, GPIO_PIN_RESET);
     
+    /* Test communication with XPT2046 */
+    HAL_Delay(10);
+    
+    /* Bir neçə dummy oxuma - XPT2046-nı oyanmaq üçün */
+    HAL_GPIO_WritePin(TP_CS_GPIO_Port, TP_CS_Pin, GPIO_PIN_RESET);
+    tp_delay();
+    tp_xfer(0x00);  /* Dummy command */
+    tp_xfer(0x00);
+    HAL_GPIO_WritePin(TP_CS_GPIO_Port, TP_CS_Pin, GPIO_PIN_SET);
+    tp_delay();
+    
+    /* Touch-un işlədiyini yoxla */
+    uint8_t irq_state = HAL_GPIO_ReadPin(TP_IRQ_GPIO_Port, TP_IRQ_Pin);
+    
     printf("XPT2046 Touch Controller initialized\r\n");
+    printf("Pin config: CS=PB12, SCK=PA5, MISO=PA6, MOSI=PB5, IRQ=PF10\r\n");
     printf("Calibration: X[%d-%d], Y[%d-%d], Mode=%d\r\n", 
            cal_x_min, cal_x_max, cal_y_min, cal_y_max, coord_mode);
+    printf("IRQ Pin (PF10) state: %s\r\n", irq_state ? "HIGH (ready)" : "LOW (touched or problem)");
+    printf("=== XPT2046 Init Complete ===\r\n\r\n");
 }
 
 /* =============== TOXUNUŞ ALGILAMA =============== */
@@ -171,7 +256,6 @@ uint8_t XPT2046_ReadRaw(uint16_t *x, uint16_t *y)
     if (!x || !y) return 0;
     if (!XPT2046_IsTouched()) return 0;
 
-    uint32_t x_sum = 0, y_sum = 0;
     uint16_t x_samples[TOUCH_SAMPLES];
     uint16_t y_samples[TOUCH_SAMPLES];
     uint8_t valid_samples = 0;
@@ -193,16 +277,20 @@ uint8_t XPT2046_ReadRaw(uint16_t *x, uint16_t *y)
         HAL_GPIO_WritePin(TP_CS_GPIO_Port, TP_CS_Pin, GPIO_PIN_SET);
         tp_delay();
         
-        /* Yalnız etibarlı dəyərləri qəbul et */
-        if (rx > 100 && rx < 4000 && ry > 100 && ry < 4000) {
+        /* Daha geniş diapazon qəbul et (50-4050 arası) */
+        /* Ekran kənarlarında dəyərlər daha aşağı/yüksək ola bilər */
+        if (rx > 50 && rx < 4050 && ry > 50 && ry < 4050) {
             x_samples[valid_samples] = rx;
             y_samples[valid_samples] = ry;
             valid_samples++;
         }
     }
     
-    /* Ən azı 4 etibarlı nümunə olmalıdır */
-    if (valid_samples < 4) {
+    /* Ən azı 2 etibarlı nümunə kifayətdir (daha az sərt) */
+    if (valid_samples < 2) {
+        if (debug_mode) {
+            printf("XPT2046: Not enough valid samples (%d)\r\n", valid_samples);
+        }
         return 0;
     }
     

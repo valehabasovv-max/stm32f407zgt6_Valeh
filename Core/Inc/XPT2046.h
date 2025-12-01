@@ -121,6 +121,7 @@ void XPT2046_ConvertWithMatrix(uint16_t raw_x, uint16_t raw_y,
                                uint16_t *screen_x, uint16_t *screen_y); /* Matris ilə çevir */
 void XPT2046_SetCalibrationPoint(uint8_t point_idx, uint16_t raw_x, uint16_t raw_y); /* Kalibrasiya nöqtəsi təyin et */
 void XPT2046_FinishCalibration(void);                       /* Kalibrasiya tamamla */
+void XPT2046_LoadDefaultCalibration(void);                  /* Default kalibrasiya yüklə */
 
 /* Koordinat rejimi */
 void XPT2046_SetCoordMode(uint8_t mode);
