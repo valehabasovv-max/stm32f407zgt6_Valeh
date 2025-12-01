@@ -217,9 +217,9 @@ void ILI9341_Init(void)
     /* Memory Write - RAM-a yazmağa hazırla */
     lcd_write_command(0x2C);
     
-    /* === LCD TEST - DÜZƏLİŞ: Başlatma uğurlu olduğunu yoxla === */
-    /* Qırmızı, Yaşıl, Mavi rənglərlə test et */
-    ILI9341_ColorTest();
+    /* DÜZƏLİŞ: ColorTest silindi - birbaşa əsas ekrana keç */
+    /* Ekranı qara rənglə təmizlə */
+    ILI9341_FillScreen(ILI9341_COLOR_BLACK);
 }
 
 /* LCD rəng testi - başlatma uğurlu olduğunu yoxlamaq üçün */
@@ -315,43 +315,113 @@ void ILI9341_DrawPixel(uint16_t x, uint16_t y, uint16_t color)
     LCD_RAM = color;
 }
 
-/* ------------------ Düzbucaqlı çək (dolu) ------------------ */
+/* ------------------ Düzbucaqlı çək (dolu) - OPTİMAL ------------------ */
 void ILI9341_DrawRectangle(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color)
 {
-    for (uint16_t i = 0; i < height; i++) {
-        for (uint16_t j = 0; j < width; j++) {
-            ILI9341_DrawPixel(x + j, y + i, color);
-        }
+    /* FillRect ilə eynidir - optimal versiya istifadə et */
+    ILI9341_FillRect(x, y, width, height, color);
+}
+
+/* ------------------ Dolu düzbucaqlı (FillRect) - OPTİMAL ------------------ */
+void ILI9341_FillRect(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color)
+{
+    /* Sərhədləri yoxla */
+    if (x >= 320 || y >= 240) return;
+    if (x + width > 320) width = 320 - x;
+    if (y + height > 240) height = 240 - y;
+    if (width == 0 || height == 0) return;
+    
+    uint16_t x_end = x + width - 1;
+    uint16_t y_end = y + height - 1;
+    
+    /* Pəncərə təyin et */
+    lcd_write_command(0x2A);  /* Column Address Set */
+    lcd_write_data(x >> 8);
+    lcd_write_data(x & 0xFF);
+    lcd_write_data(x_end >> 8);
+    lcd_write_data(x_end & 0xFF);
+    
+    lcd_write_command(0x2B);  /* Row Address Set */
+    lcd_write_data(y >> 8);
+    lcd_write_data(y & 0xFF);
+    lcd_write_data(y_end >> 8);
+    lcd_write_data(y_end & 0xFF);
+    
+    lcd_write_command(0x2C);  /* Memory Write */
+    
+    /* Bütün pikselləri yaz */
+    uint32_t total_pixels = (uint32_t)width * (uint32_t)height;
+    while (total_pixels--) {
+        LCD_RAM = color;
     }
 }
 
-/* ------------------ Dolu düzbucaqlı (FillRect) ------------------ */
-void ILI9341_FillRect(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color)
+/* ------------------ Horizontal xətt - OPTİMAL ------------------ */
+void ILI9341_DrawHLine(uint16_t x, uint16_t y, uint16_t width, uint16_t color)
 {
-    /* FillRect = DrawRectangle (dolu düzbucaqlı) */
-    ILI9341_DrawRectangle(x, y, width, height, color);
+    if (y >= 240 || x >= 320) return;
+    if (x + width > 320) width = 320 - x;
+    if (width == 0) return;
+    
+    uint16_t x_end = x + width - 1;
+    
+    lcd_write_command(0x2A);
+    lcd_write_data(x >> 8);
+    lcd_write_data(x & 0xFF);
+    lcd_write_data(x_end >> 8);
+    lcd_write_data(x_end & 0xFF);
+    
+    lcd_write_command(0x2B);
+    lcd_write_data(y >> 8);
+    lcd_write_data(y & 0xFF);
+    lcd_write_data(y >> 8);
+    lcd_write_data(y & 0xFF);
+    
+    lcd_write_command(0x2C);
+    for (uint16_t i = 0; i < width; i++) {
+        LCD_RAM = color;
+    }
 }
 
-/* ------------------ Çərçivə düzbucaqlı (DrawRect) ------------------ */
+/* ------------------ Vertical xətt - OPTİMAL ------------------ */
+void ILI9341_DrawVLine(uint16_t x, uint16_t y, uint16_t height, uint16_t color)
+{
+    if (x >= 320 || y >= 240) return;
+    if (y + height > 240) height = 240 - y;
+    if (height == 0) return;
+    
+    uint16_t y_end = y + height - 1;
+    
+    lcd_write_command(0x2A);
+    lcd_write_data(x >> 8);
+    lcd_write_data(x & 0xFF);
+    lcd_write_data(x >> 8);
+    lcd_write_data(x & 0xFF);
+    
+    lcd_write_command(0x2B);
+    lcd_write_data(y >> 8);
+    lcd_write_data(y & 0xFF);
+    lcd_write_data(y_end >> 8);
+    lcd_write_data(y_end & 0xFF);
+    
+    lcd_write_command(0x2C);
+    for (uint16_t i = 0; i < height; i++) {
+        LCD_RAM = color;
+    }
+}
+
+/* ------------------ Çərçivə düzbucaqlı (DrawRect) - OPTİMAL ------------------ */
 void ILI9341_DrawRect(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color)
 {
     /* Yalnız çərçivə - 4 xətt */
-    /* Üst xətt */
-    for (uint16_t i = 0; i < width; i++) {
-        ILI9341_DrawPixel(x + i, y, color);
-    }
-    /* Alt xətt */
-    for (uint16_t i = 0; i < width; i++) {
-        ILI9341_DrawPixel(x + i, y + height - 1, color);
-    }
-    /* Sol xətt */
-    for (uint16_t i = 0; i < height; i++) {
-        ILI9341_DrawPixel(x, y + i, color);
-    }
-    /* Sağ xətt */
-    for (uint16_t i = 0; i < height; i++) {
-        ILI9341_DrawPixel(x + width - 1, y + i, color);
-    }
+    /* Üst xətt - horizontal */
+    ILI9341_DrawHLine(x, y, width, color);
+    /* Alt xətt - horizontal */
+    ILI9341_DrawHLine(x, y + height - 1, width, color);
+    /* Sol xətt - vertical */
+    ILI9341_DrawVLine(x, y, height, color);
+    /* Sağ xətt - vertical */
+    ILI9341_DrawVLine(x + width - 1, y, height, color);
 }
 
 /* ------------------ Xətt çək ------------------ */
