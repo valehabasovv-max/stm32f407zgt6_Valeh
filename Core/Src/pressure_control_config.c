@@ -93,17 +93,13 @@ Safety_Config_t g_safety_config = {
  * @brief Initialize configuration system
  */
 void PressureControlConfig_Init(void) {
-    printf("Pressure Control Configuration - Initializing...\r\n");
-    
     // Load configuration from flash
     PressureControlConfig_LoadFromFlash();
     
-    // Load PID parameters and SP from flash (important - must be called early)
+    // Load PID parameters and SP from flash
     PressureControlConfig_LoadPIDParams();
     
     // Apply PID tuning parameters to AdvancedPressureControl system
-    // This ensures that g_pid_zme_tuning and g_pid_drv_tuning values are applied
-    // even if flash loading didn't happen or returned early
     PressureControlConfig_SetPIDTuning(&g_pid_zme_tuning, 
                                        g_pid_zme_tuning.kp, 
                                        g_pid_zme_tuning.ki, 
@@ -113,41 +109,27 @@ void PressureControlConfig_Init(void) {
                                        g_pid_drv_tuning.ki, 
                                        g_pid_drv_tuning.kd);
     
-    // KRİTİK DÜZƏLİŞ: Slope və offset HƏMİŞƏ hesablanmalıdır!
-    // Əvvəlki kod yalnız calibrated=true olduqda hesablayırdı, bu da
-    // Flash-da data olmadıqda slope=0 qalması və təzyiqin həmişə 0 göstərməsinə səbəb olurdu.
-    // 
-    // Yeni məntiq: Slope və offset həmişə hesablanır, əgər ADC aralığı valid-dirsə
+    // Slope və offset hesabla
     if (g_calibration_data.adc_max > g_calibration_data.adc_min) {
         g_calibration_data.slope = (g_calibration_data.pressure_max - g_calibration_data.pressure_min) / 
                                   (g_calibration_data.adc_max - g_calibration_data.adc_min);
         g_calibration_data.offset = g_calibration_data.pressure_min - 
                                    (g_calibration_data.slope * g_calibration_data.adc_min);
         g_calibration_data.calibrated = true;
-        
-        printf("Config: Calibration slope calculated: %.6f bar/ADC, offset: %.2f bar\r\n",
-               g_calibration_data.slope, g_calibration_data.offset);
     } else {
         // ADC aralığı invalid - default dəyərləri istifadə et
-        printf("ERROR: Invalid ADC range (min=%.0f, max=%.0f), using defaults\r\n",
-               g_calibration_data.adc_min, g_calibration_data.adc_max);
         g_calibration_data.adc_min = (float)CONFIG_PRESSURE_SENSOR_ADC_MIN;
         g_calibration_data.adc_max = (float)CONFIG_PRESSURE_SENSOR_ADC_MAX;
         g_calibration_data.slope = CONFIG_PRESSURE_SLOPE;
         g_calibration_data.offset = CONFIG_PRESSURE_OFFSET;
         g_calibration_data.calibrated = true;
     }
-    
-    printf("Configuration initialized successfully\r\n");
-    PressureControlConfig_PrintSystemInfo();
 }
 
 /**
  * @brief Load default configuration
  */
 void PressureControlConfig_LoadDefaults(void) {
-    printf("Loading default configuration...\r\n");
-    
     // Reset all configurations to defaults
     g_pid_zme_tuning.kp = CONFIG_PID_ZME_KP_DEFAULT;
     g_pid_zme_tuning.ki = CONFIG_PID_ZME_KI_DEFAULT;
@@ -174,34 +156,24 @@ void PressureControlConfig_LoadDefaults(void) {
     g_valve_config.zme_pwm_min = CONFIG_ZME_PWM_MIN;
     g_valve_config.zme_pwm_max = CONFIG_ZME_PWM_MAX;
     g_valve_config.zme_cutoff_pwm = CONFIG_ZME_CUTOFF_PWM;
-    
-    printf("Default configuration loaded\r\n");
 }
 
 /**
  * @brief Save configuration to flash memory
  */
 void PressureControlConfig_SaveToFlash(void) {
-    printf("Saving system configuration to flash...\r\n");
-    
     // Save all configuration data
     PressureControlConfig_SavePIDParams();
     PressureControlConfig_SaveCalibrationData();
-    
-    printf("System configuration saved to flash memory\r\n");
 }
 
 /**
  * @brief Load configuration from flash memory
  */
 void PressureControlConfig_LoadFromFlash(void) {
-    printf("Loading system configuration from flash...\r\n");
-    
     // Load all configuration data
     PressureControlConfig_LoadPIDParams();
     PressureControlConfig_LoadCalibrationData();
-    
-    printf("System configuration loaded from flash memory\r\n");
 }
 
 /* =========================================================================
@@ -223,10 +195,6 @@ void PressureControlConfig_SetPIDTuning(PID_Tuning_t* tuning, float kp, float ki
         } else if (tuning == &g_pid_drv_tuning) {
             AdvancedPressureControl_SetPIDParams(&g_pid_drv, kp, ki, kd);
         }
-        
-        printf("PID tuning updated: Kp=%.3f, Ki=%.3f, Kd=%.3f\r\n", kp, ki, kd);
-    } else {
-        printf("Invalid PID parameters: Kp=%.3f, Ki=%.3f, Kd=%.3f\r\n", kp, ki, kd);
     }
 }
 
@@ -235,7 +203,6 @@ void PressureControlConfig_SetPIDTuning(PID_Tuning_t* tuning, float kp, float ki
  */
 void PressureControlConfig_EnableAutoTune(PID_Tuning_t* tuning, bool enable) {
     tuning->auto_tune_enabled = enable;
-    printf("Auto-tuning %s for PID controller\r\n", enable ? "enabled" : "disabled");
 }
 
 /**
@@ -243,7 +210,6 @@ void PressureControlConfig_EnableAutoTune(PID_Tuning_t* tuning, bool enable) {
  */
 void PressureControlConfig_SetTuningAggressiveness(PID_Tuning_t* tuning, float aggressiveness) {
     tuning->tuning_aggressiveness = fmaxf(0.1f, fminf(2.0f, aggressiveness));
-    printf("Tuning aggressiveness set to %.2f\r\n", tuning->tuning_aggressiveness);
 }
 
 /**
@@ -262,8 +228,6 @@ void PressureControlConfig_ResetPIDTuning(PID_Tuning_t* tuning) {
     
     // Apply reset values to AdvancedPressureControl system
     PressureControlConfig_SetPIDTuning(tuning, tuning->kp, tuning->ki, tuning->kd);
-    
-    printf("PID tuning reset to defaults\r\n");
 }
 
 /* =========================================================================
@@ -274,9 +238,6 @@ void PressureControlConfig_ResetPIDTuning(PID_Tuning_t* tuning) {
  * @brief Start calibration process
  */
 void PressureControlConfig_StartCalibration(void) {
-    printf("Starting pressure sensor calibration...\r\n");
-    printf("Please ensure pressure sensor is at 0 bar (atmospheric pressure)\r\n");
-    
     g_calibration_data.calibrated = false;
     g_calibration_data.calibration_date = HAL_GetTick();
 }
@@ -285,8 +246,6 @@ void PressureControlConfig_StartCalibration(void) {
  * @brief Add calibration point
  */
 void PressureControlConfig_AddCalibrationPoint(float adc_value, float pressure_value) {
-    printf("Calibration point added: ADC=%.0f, Pressure=%.2f bar\r\n", adc_value, pressure_value);
-    
     // Update calibration data
     if (pressure_value == 0.0f) {
         g_calibration_data.adc_min = adc_value;
@@ -307,8 +266,8 @@ void PressureControlConfig_CompleteCalibration(void) {
     // ADC aralığı validasiyası
     float adc_range = g_calibration_data.adc_max - g_calibration_data.adc_min;
     
-    // Minimum aralıq yoxlaması - slope çox kiçik olmamalıdır
-    const float MIN_ADC_RANGE = 1500.0f;  // Minimum 1500 ADC count fərq olmalıdır
+    // Minimum aralıq yoxlaması
+    const float MIN_ADC_RANGE = 1500.0f;
     
     if (g_calibration_data.adc_max > g_calibration_data.adc_min && adc_range >= MIN_ADC_RANGE) {
         // Calculate slope and offset
@@ -317,14 +276,6 @@ void PressureControlConfig_CompleteCalibration(void) {
                                    (g_calibration_data.slope * g_calibration_data.adc_min);
         g_calibration_data.calibrated = true;
         g_calibration_data.calibration_date = HAL_GetTick();
-        
-        printf("Calibration completed successfully\r\n");
-        printf("  ADC Range: %.0f - %.0f (range: %.0f)\r\n", 
-               g_calibration_data.adc_min, g_calibration_data.adc_max, adc_range);
-        printf("  Pressure Range: %.2f - %.2f bar\r\n",
-               g_calibration_data.pressure_min, g_calibration_data.pressure_max);
-        printf("  Slope: %.6f bar/ADC\r\n", g_calibration_data.slope);
-        printf("  Offset: %.2f bar\r\n", g_calibration_data.offset);
         
         // Advanced sistemdəki kalibrasiya strukturunu da yenilə
         extern CalibrationData_t g_calibration;
@@ -336,17 +287,9 @@ void PressureControlConfig_CompleteCalibration(void) {
         g_calibration.offset = g_calibration_data.offset;
         g_calibration.calibrated = true;
         
-        PressureControlConfig_PrintCalibrationData();
-        
         // Save calibration data to both systems
         PressureControlConfig_SaveCalibrationData();
         AdvancedPressureControl_SaveCalibration();
-    } else {
-        printf("Calibration FAILED: Invalid data points\r\n");
-        printf("  ADC Min: %.0f\r\n", g_calibration_data.adc_min);
-        printf("  ADC Max: %.0f\r\n", g_calibration_data.adc_max);
-        printf("  ADC Range: %.0f (minimum %.0f required)\r\n", adc_range, MIN_ADC_RANGE);
-        printf("  Calibration NOT saved!\r\n");
     }
 }
 
@@ -377,11 +320,6 @@ void PressureControlConfig_ResetCalibration(void) {
     g_calibration.offset = g_calibration_data.offset;
     g_calibration.calibrated = true;
     
-    printf("Calibration data reset to defaults:\r\n");
-    printf("  ADC Range: %.0f - %.0f\r\n", g_calibration_data.adc_min, g_calibration_data.adc_max);
-    printf("  Pressure Range: %.2f - %.2f bar\r\n", g_calibration_data.pressure_min, g_calibration_data.pressure_max);
-    printf("  Slope: %.6f bar/ADC\r\n", g_calibration_data.slope);
-    printf("  Offset: %.2f bar\r\n", g_calibration_data.offset);
 }
 
 /**
@@ -395,15 +333,7 @@ bool PressureControlConfig_IsCalibrated(void) {
  * @brief Print calibration data
  */
 void PressureControlConfig_PrintCalibrationData(void) {
-    printf("\n=== Calibration Data ===\r\n");
-    printf("ADC Min: %.0f\r\n", g_calibration_data.adc_min);
-    printf("ADC Max: %.0f\r\n", g_calibration_data.adc_max);
-    printf("Pressure Min: %.2f bar\r\n", g_calibration_data.pressure_min);
-    printf("Pressure Max: %.2f bar\r\n", g_calibration_data.pressure_max);
-    printf("Slope: %.6f bar/ADC\r\n", g_calibration_data.slope);
-    printf("Offset: %.2f bar\r\n", g_calibration_data.offset);
-    printf("Calibrated: %s\r\n", g_calibration_data.calibrated ? "Yes" : "No");
-    printf("=======================\r\n\n");
+    // No-op - silenced for performance
 }
 
 /* =========================================================================
@@ -415,7 +345,6 @@ void PressureControlConfig_PrintCalibrationData(void) {
  */
 void PressureControlConfig_SetValveLimits(Valve_Config_t* config) {
     g_valve_config = *config;
-    printf("Valve limits updated\r\n");
 }
 
 /**
@@ -425,7 +354,6 @@ void PressureControlConfig_SetZMELimits(float pwm_min, float pwm_max, float cuto
     g_valve_config.zme_pwm_min = pwm_min;
     g_valve_config.zme_pwm_max = pwm_max;
     g_valve_config.zme_cutoff_pwm = cutoff_pwm;
-    printf("ZME limits: Min=%.1f%%, Max=%.1f%%, Cutoff=%.1f%%\r\n", pwm_min, pwm_max, cutoff_pwm);
 }
 
 /**
@@ -434,7 +362,6 @@ void PressureControlConfig_SetZMELimits(float pwm_min, float pwm_max, float cuto
 void PressureControlConfig_SetDRVLimits(float pwm_min, float pwm_max) {
     g_valve_config.drv_pwm_min = pwm_min;
     g_valve_config.drv_pwm_max = pwm_max;
-    printf("DRV limits: Min=%.1f%%, Max=%.1f%%\r\n", pwm_min, pwm_max);
 }
 
 /**
@@ -443,7 +370,6 @@ void PressureControlConfig_SetDRVLimits(float pwm_min, float pwm_max) {
 void PressureControlConfig_SetMotorLimits(float pwm_min, float pwm_max) {
     g_valve_config.motor_pwm_min = pwm_min;
     g_valve_config.motor_pwm_max = pwm_max;
-    printf("Motor limits: Min=%.1f%%, Max=%.1f%%\r\n", pwm_min, pwm_max);
 }
 
 /* =========================================================================
@@ -457,8 +383,6 @@ void PressureControlConfig_SetSafetyLimits(float max_pressure, float over_limit_
     g_safety_config.max_pressure = max_pressure;
     g_safety_config.over_limit_margin = over_limit_margin;
     g_safety_config.emergency_threshold = emergency_threshold;
-    printf("Safety limits: Max=%.1f bar, Over-limit=%.1f bar, Emergency=%.1f bar\r\n", 
-           max_pressure, over_limit_margin, emergency_threshold);
 }
 
 /**
@@ -466,7 +390,6 @@ void PressureControlConfig_SetSafetyLimits(float max_pressure, float over_limit_
  */
 void PressureControlConfig_EnableSafety(bool enable) {
     g_safety_config.safety_enabled = enable;
-    printf("Safety system %s\r\n", enable ? "enabled" : "disabled");
 }
 
 /* =========================================================================
@@ -478,20 +401,13 @@ void PressureControlConfig_EnableSafety(bool enable) {
  */
 void PressureControlConfig_SetDebugMode(bool enable) {
     g_system_config.debug_enabled = enable;
-    printf("Debug mode %s\r\n", enable ? "enabled" : "disabled");
 }
 
 /**
  * @brief Print system information
  */
 void PressureControlConfig_PrintSystemInfo(void) {
-    printf("\n=== System Information ===\r\n");
-    printf("System: %s\r\n", g_system_config.system_name);
-    printf("Version: %s\r\n", g_system_config.version);
-    printf("Build Date: %s\r\n", g_system_config.build_date);
-    printf("Debug Mode: %s\r\n", g_system_config.debug_enabled ? "Enabled" : "Disabled");
-    printf("Safety System: %s\r\n", g_system_config.safety_enabled ? "Enabled" : "Disabled");
-    printf("==========================\r\n\n");
+    // No-op - silenced for performance
 }
 
 /* =========================================================================
@@ -578,46 +494,21 @@ void PressureControlConfig_AdjustTargetPressure(float delta) {
  * @brief Print current configuration
  */
 void PressureControlConfig_PrintCurrentConfig(void) {
-    printf("\n=== Current Configuration ===\r\n");
-    printf("ZME PID: Kp=%.3f, Ki=%.3f, Kd=%.3f\r\n", 
-           g_pid_zme_tuning.kp, g_pid_zme_tuning.ki, g_pid_zme_tuning.kd);
-    printf("DRV PID: Kp=%.3f, Ki=%.3f, Kd=%.3f\r\n", 
-           g_pid_drv_tuning.kp, g_pid_drv_tuning.ki, g_pid_drv_tuning.kd);
-    printf("Safety: Max=%.1f bar, Over-limit=%.1f bar\r\n", 
-           g_safety_config.max_pressure, g_safety_config.over_limit_margin);
-    printf("ZME Limits: %.1f%% - %.1f%%, Cutoff=%.1f%%\r\n", 
-           g_valve_config.zme_pwm_min, g_valve_config.zme_pwm_max, g_valve_config.zme_cutoff_pwm);
-    printf("DRV Limits: %.1f%% - %.1f%%\r\n", 
-           g_valve_config.drv_pwm_min, g_valve_config.drv_pwm_max);
-    printf("Motor Limits: %.1f%% - %.1f%%\r\n", 
-           g_valve_config.motor_pwm_min, g_valve_config.motor_pwm_max);
-    printf("=============================\r\n\n");
+    // No-op - silenced for performance
 }
 
 /**
  * @brief Print tuning status
  */
 void PressureControlConfig_PrintTuningStatus(void) {
-    printf("\n=== PID Tuning Status ===\r\n");
-    printf("ZME Auto-tune: %s\r\n", g_pid_zme_tuning.auto_tune_enabled ? "Active" : "Inactive");
-    printf("DRV Auto-tune: %s\r\n", g_pid_drv_tuning.auto_tune_enabled ? "Active" : "Inactive");
-    printf("ZME Aggressiveness: %.2f\r\n", g_pid_zme_tuning.tuning_aggressiveness);
-    printf("DRV Aggressiveness: %.2f\r\n", g_pid_drv_tuning.tuning_aggressiveness);
-    printf("=========================\r\n\n");
+    // No-op - silenced for performance
 }
 
 /**
  * @brief Print calibration status
  */
 void PressureControlConfig_PrintCalibrationStatus(void) {
-    printf("\n=== Calibration Status ===\r\n");
-    printf("Calibrated: %s\r\n", g_calibration_data.calibrated ? "Yes" : "No");
-    if (g_calibration_data.calibrated) {
-        printf("ADC Range: %.0f - %.0f\r\n", g_calibration_data.adc_min, g_calibration_data.adc_max);
-        printf("Pressure Range: %.2f - %.2f bar\r\n", g_calibration_data.pressure_min, g_calibration_data.pressure_max);
-        printf("Slope: %.6f bar/ADC\r\n", g_calibration_data.slope);
-    }
-    printf("==========================\r\n\n");
+    // No-op - silenced for performance
 }
 
 /* =========================================================================
@@ -653,8 +544,6 @@ static uint32_t CalculateChecksum(float kp, float ki, float kd, float sp) {
  * @brief Save PID parameters and SP to flash
  */
 void PressureControlConfig_SavePIDParams(void) {
-    printf("Saving PID parameters to flash...\r\n");
-    
     // Prepare data structure
     Flash_Config_Data_t config_data;
     config_data.magic = FLASH_CONFIG_MAGIC;
@@ -694,18 +583,11 @@ void PressureControlConfig_SavePIDParams(void) {
  * Config sistemi yalnız Advanced sistemin setter funksiyalarını çağırmalıdır.
  */
 void PressureControlConfig_LoadPIDParams(void) {
-    printf("Loading PID parameters from flash (Config system, offset 0x200)...\r\n");
-    
     // Read data from flash
     Flash_Config_Data_t *config_data = (Flash_Config_Data_t*)FLASH_CONFIG_ADDRESS;
     
-    printf("Flash address: 0x%08lX\r\n", (uint32_t)FLASH_CONFIG_ADDRESS);
-    printf("Read magic: 0x%08lX (expected: 0x%08lX)\r\n", 
-           config_data->magic, FLASH_CONFIG_MAGIC);
-    
     // Verify magic number
     if (config_data->magic != FLASH_CONFIG_MAGIC) {
-        printf("No valid configuration found in flash, using defaults\r\n");
         // Apply default PID tuning values to AdvancedPressureControl system
         PressureControlConfig_SetPIDTuning(&g_pid_zme_tuning, 
                                            g_pid_zme_tuning.kp, 
@@ -723,11 +605,7 @@ void PressureControlConfig_LoadPIDParams(void) {
         config_data->pid_kp, config_data->pid_ki,
         config_data->pid_kd, config_data->setpoint);
     
-    printf("Read checksum: 0x%08lX, Calculated: 0x%08lX\r\n",
-           config_data->checksum, calculated_checksum);
-    
     if (calculated_checksum != config_data->checksum) {
-        printf("Checksum mismatch, using defaults\r\n");
         // Apply default PID tuning values to AdvancedPressureControl system
         PressureControlConfig_SetPIDTuning(&g_pid_zme_tuning, 
                                            g_pid_zme_tuning.kp, 
@@ -753,8 +631,6 @@ void PressureControlConfig_LoadPIDParams(void) {
                             (fabsf(config_data->pid_kd - 0.0f) < 0.01f);
     
     if (is_old_default_1 || is_old_default_2) {
-        printf("Old default PID values detected in flash (Kp=%.3f, Ki=%.4f, Kd=%.3f), updating to new defaults\r\n",
-               config_data->pid_kp, config_data->pid_ki, config_data->pid_kd);
         g_pid_zme_tuning.kp = CONFIG_PID_ZME_KP_DEFAULT;
         g_pid_zme_tuning.ki = CONFIG_PID_ZME_KI_DEFAULT;
         g_pid_zme_tuning.kd = CONFIG_PID_ZME_KD_DEFAULT;
@@ -784,21 +660,10 @@ void PressureControlConfig_LoadPIDParams(void) {
                                          g_pid_drv_tuning.ki, 
                                          g_pid_drv_tuning.kd);
     
-    // Load and set SetPoint - DÜZƏLİŞ: Advanced sistem istifadə et
+    // Load and set SetPoint
     if (config_data->setpoint > 0.1f && config_data->setpoint <= 300.0f) {
         AdvancedPressureControl_SetTargetPressure(config_data->setpoint);
-        // REMOVED: pressure_limit sinxronizasiyası - artıq pressure_limit yoxdur
-        printf("TARGET PRESSURE FLASH-DAN YÜKLƏNDİ: %.1f bar\r\n", config_data->setpoint);
-    } else {
-        // Flash-da etibarlı dəyər yoxdursa, default dəyəri istifadə et
-        SystemStatus_t* status = AdvancedPressureControl_GetStatus();
-        printf("FLASH-DA ETİBARLI TARGET PRESSURE YOXDUR, DEFAULT DƏYƏR İSTİFADƏ OLUNUR: %.1f bar\r\n", 
-               status->target_pressure);
     }
-    
-    printf("PID parameters loaded: Kp=%.3f, Ki=%.3f, Kd=%.3f, SP=%.1f\r\n",
-           config_data->pid_kp, config_data->pid_ki,
-           config_data->pid_kd, config_data->setpoint);
 }
 
 /**
@@ -808,8 +673,6 @@ void PressureControlConfig_LoadPIDParams(void) {
  * Bütün əl ilə bərpa məntiqi silindi.
  */
 void PressureControlConfig_SaveCalibrationData(void) {
-    printf("Saving calibration data to flash...\r\n");
-    
     // Prepare calibration data structure
     typedef struct {
         uint32_t magic;           /* Magic number: 0x12345678 */
@@ -847,18 +710,7 @@ void PressureControlConfig_SaveCalibrationData(void) {
         sizeof(calibration_data_t)
     );
     
-    if (status == HAL_OK) {
-        // Verify data was written correctly by reading it back
-        calibration_data_t *verify_data = (calibration_data_t*)(0x080E0000 + 0x100);
-        if (verify_data->magic == 0x12345678 && verify_data->checksum == cal_data.checksum) {
-            printf("Calibration data saved and verified: ADC %d-%d, Pressure %.2f-%.2f bar\r\n",
-                   cal_data.adc_min, cal_data.adc_max, cal_data.min_pressure, cal_data.max_pressure);
-        } else {
-            printf("ERROR: Calibration write verification failed!\r\n");
-        }
-    } else {
-        printf("ERROR: Failed to save calibration data to flash!\r\n");
-    }
+    (void)status; // Unused after silencing printf
 }
 
 /**
@@ -868,14 +720,11 @@ void PressureControlConfig_SaveCalibrationData(void) {
  * Köhnə strukturlar (ADC 500-3500) silindi və AdvancedPressureControl_LoadCalibration() çağırılır.
  */
 void PressureControlConfig_LoadCalibrationData(void) {
-    printf("Loading calibration data from flash...\r\n");
-    
-    // KRİTİK DÜZƏLİŞ: Advanced sistemin vahid strukturundan istifadə et
-    // Bu, köhnə strukturlar (ADC 500-3500) ilə yeni strukturlar (ADC 410-4095) arasında ziddiyyəti aradan qaldırır
+    // Advanced sistemin vahid strukturundan istifadə et
     AdvancedPressureControl_LoadCalibration();
     
     // Advanced sistemdən yüklənən kalibrasiya məlumatlarını g_calibration_data strukturuna köçür
-    extern CalibrationData_t g_calibration;  // advanced_pressure_control.c-dən (CalibrationData_t tipi)
+    extern CalibrationData_t g_calibration;
     
     if (g_calibration.calibrated) {
         g_calibration_data.adc_min = g_calibration.adc_min;
@@ -885,15 +734,7 @@ void PressureControlConfig_LoadCalibrationData(void) {
         g_calibration_data.slope = g_calibration.slope;
         g_calibration_data.offset = g_calibration.offset;
         g_calibration_data.calibrated = true;
-        
-        printf("PressureControlConfig: Calibration loaded from Advanced system - ADC: %.0f-%.0f, Pressure: %.2f-%.2f bar\r\n",
-               g_calibration_data.adc_min, g_calibration_data.adc_max, 
-               g_calibration_data.pressure_min, g_calibration_data.pressure_max);
-    } else {
-        printf("No valid calibration data found, using defaults\r\n");
     }
-    
-    // Köhnə kod silindi - artıq Advanced sistemin vahid strukturundan istifadə edirik
 }
 
 /* =========================================================================
@@ -904,50 +745,37 @@ void PressureControlConfig_LoadCalibrationData(void) {
  * @brief Backup configuration
  */
 void PressureControlConfig_BackupConfiguration(void) {
-    printf("Configuration backup - Starting...\r\n");
-    
     // Save all configuration to flash
     PressureControlConfig_SaveToFlash();
     PressureControlConfig_SavePIDParams();
     PressureControlConfig_SaveCalibrationData();
-    
-    printf("Configuration backup - Complete\r\n");
 }
 
 /**
  * @brief Restore configuration
  */
 void PressureControlConfig_RestoreConfiguration(void) {
-    printf("Configuration restore - Starting...\r\n");
-    
     // Load all configuration from flash
     PressureControlConfig_LoadFromFlash();
     PressureControlConfig_LoadPIDParams();
     PressureControlConfig_LoadCalibrationData();
-    
-    printf("Configuration restore - Complete\r\n");
 }
 
 /**
  * @brief Reset to defaults
  */
 void PressureControlConfig_ResetToDefaults(void) {
-    printf("Configuration reset to defaults - Starting...\r\n");
-    
     // Load default configuration
     PressureControlConfig_LoadDefaults();
     
     // Reset calibration
     PressureControlConfig_ResetCalibration();
-    
-    printf("Configuration reset to defaults - Complete\r\n");
 }
 
 /**
  * @brief Start auto-tuning
  */
 void PressureControlConfig_StartAutoTuning(void) {
-    printf("Auto-tuning started for ZME controller\r\n");
     g_pid_zme_tuning.auto_tune_enabled = true;
 }
 
@@ -955,7 +783,6 @@ void PressureControlConfig_StartAutoTuning(void) {
  * @brief Stop auto-tuning
  */
 void PressureControlConfig_StopAutoTuning(void) {
-    printf("Auto-tuning stopped for ZME controller\r\n");
     g_pid_zme_tuning.auto_tune_enabled = false;
 }
 
@@ -970,10 +797,7 @@ bool PressureControlConfig_IsAutoTuningActive(void) {
  * @brief Optimize PID parameters
  */
 void PressureControlConfig_OptimizePIDParams(void) {
-    printf("PID parameter optimization - Starting...\r\n");
-    
     // Simple optimization algorithm
-    // This is a placeholder - real optimization would be more complex
     
     // Adjust Kp based on system response
     if (g_pid_zme_tuning.kp < 1.0f) {
@@ -988,10 +812,6 @@ void PressureControlConfig_OptimizePIDParams(void) {
     } else if (g_pid_zme_tuning.ki > 0.01f) {
         g_pid_zme_tuning.ki -= 0.0001f;
     }
-    
-    printf("PID parameter optimization - Complete\r\n");
-    printf("New ZME PID: Kp=%.3f, Ki=%.3f, Kd=%.3f\r\n", 
-           g_pid_zme_tuning.kp, g_pid_zme_tuning.ki, g_pid_zme_tuning.kd);
 }
 
 /**
@@ -1001,7 +821,6 @@ void PressureControlConfig_OptimizePIDParams(void) {
  */
 void PressureControlConfig_UpdateCalibrationCache(const CalibrationData_t* source) {
     if (source == NULL) {
-        printf("ERROR: UpdateCalibrationCache called with NULL pointer\r\n");
         return;
     }
     
@@ -1014,8 +833,4 @@ void PressureControlConfig_UpdateCalibrationCache(const CalibrationData_t* sourc
     g_calibration_data.offset = source->offset;
     g_calibration_data.calibrated = source->calibrated;
     g_calibration_data.calibration_date = source->calibration_date;
-    
-    printf("Calibration cache updated: ADC[%.0f-%.0f] -> Pressure[%.1f-%.1f] bar\r\n",
-           g_calibration_data.adc_min, g_calibration_data.adc_max,
-           g_calibration_data.pressure_min, g_calibration_data.pressure_max);
 }
