@@ -31,26 +31,23 @@ static uint32_t last_touch_time = 0;
 
 /* Pin tərifləri */
 /* 
- * QEYD: SCK pini PB1-dən PF11-ə köçürüldü!
- * Səbəb: PB1 TIM3_CH4 (PWM) ilə konflikt yaradırdı.
- * 
  * Hardware qoşulması:
- *   Touch CS   -> PB12
- *   Touch SCK  -> PF11 (əvvəl PB1 idi, DƏYİŞDİRİLDİ!)
- *   Touch MISO -> PF8
- *   Touch MOSI -> PF9
- *   Touch IRQ  -> PF10
+ *   T_CS   (Chip Select)        -> PB12
+ *   T_CLK  (SCK - Serial Clock) -> PA5
+ *   T_DO   (MISO)               -> PA6
+ *   T_DIN  (MOSI)               -> PB5
+ *   T_IRQ  (Interrupt Request)  -> PF10
  */
 #define TP_CS_GPIO_Port    XPT2046_CS_PORT
 #define TP_CS_Pin          XPT2046_CS_PIN
 #define TP_IRQ_GPIO_Port   XPT2046_IRQ_PORT
 #define TP_IRQ_Pin         XPT2046_IRQ_PIN
-#define TP_SCK_GPIO_Port   GPIOF
-#define TP_SCK_Pin         GPIO_PIN_11
-#define TP_MISO_GPIO_Port  GPIOF
-#define TP_MISO_Pin        GPIO_PIN_8
-#define TP_MOSI_GPIO_Port  GPIOF
-#define TP_MOSI_Pin        GPIO_PIN_9
+#define TP_SCK_GPIO_Port   XPT2046_SCK_PORT
+#define TP_SCK_Pin         XPT2046_SCK_PIN
+#define TP_MISO_GPIO_Port  XPT2046_MISO_PORT
+#define TP_MISO_Pin        XPT2046_MISO_PIN
+#define TP_MOSI_GPIO_Port  XPT2046_MOSI_PORT
+#define TP_MOSI_Pin        XPT2046_MOSI_PIN
 
 /* Debug mode */
 static uint8_t debug_mode = 0;
@@ -103,6 +100,7 @@ static uint16_t tp_read12(uint8_t cmd)
 void XPT2046_Init(void)
 {
     /* GPIO saatlarını aktivləşdir */
+    __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
     __HAL_RCC_GPIOF_CLK_ENABLE();
 
