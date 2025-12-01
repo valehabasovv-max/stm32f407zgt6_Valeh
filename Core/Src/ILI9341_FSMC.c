@@ -2075,10 +2075,81 @@ uint8_t ILI9341_RunTouchCalibration(void)
     ILI9341_FillScreen(ILI9341_COLOR_BLACK);
     
     /* Başlıq */
-    ILI9341_DrawString(40, 100, "TOUCH CALIBRATION", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
+    ILI9341_DrawString(40, 80, "TOUCH CALIBRATION", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
+    ILI9341_DrawString(30, 110, "Touch anywhere to test", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
+    ILI9341_DrawString(50, 130, "Waiting for touch...", ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 1);
+    
+    /* ============================================
+     * ÖN-TEST: Touch sensorunun işlədiyini yoxla
+     * ============================================ */
+    printf("Touch sensor test - waiting for any touch...\r\n");
+    
+    uint32_t test_timeout = HAL_GetTick() + 10000;  /* 10 saniyə test */
+    uint8_t touch_detected = 0;
+    uint16_t test_x = 0, test_y = 0;
+    
+    while (!touch_detected && HAL_GetTick() < test_timeout) {
+        if (XPT2046_IsTouched()) {
+            HAL_Delay(30);  /* Debounce */
+            if (XPT2046_IsTouched()) {
+                /* Raw koordinatları oxumağa çalış */
+                if (XPT2046_GetCoordinates(&test_x, &test_y)) {
+                    touch_detected = 1;
+                    printf("Touch detected! Raw: (%d, %d)\r\n", test_x, test_y);
+                    
+                    /* Uğurlu mesaj göstər */
+                    ILI9341_FillScreen(ILI9341_COLOR_BLACK);
+                    ILI9341_DrawString(60, 100, "TOUCH DETECTED!", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 2);
+                    
+                    char coord_msg[32];
+                    sprintf(coord_msg, "Raw: X=%d Y=%d", test_x, test_y);
+                    ILI9341_DrawString(60, 140, coord_msg, ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 1);
+                    
+                    HAL_Delay(1500);
+                    
+                    /* Touch buraxılmasını gözlə */
+                    while (XPT2046_IsTouched()) {
+                        HAL_Delay(10);
+                    }
+                    HAL_Delay(300);
+                } else {
+                    printf("Touch IRQ active but no valid coordinates!\r\n");
+                }
+            }
+        }
+        HAL_Delay(50);
+    }
+    
+    if (!touch_detected) {
+        printf("ERROR: Touch sensor not responding!\r\n");
+        printf("Check hardware connections:\r\n");
+        printf("  T_CS   -> PB12\r\n");
+        printf("  T_CLK  -> PA5\r\n");
+        printf("  T_DO   -> PA6\r\n");
+        printf("  T_DIN  -> PB5\r\n");
+        printf("  T_IRQ  -> PF10\r\n");
+        
+        ILI9341_FillScreen(ILI9341_COLOR_BLACK);
+        ILI9341_DrawString(40, 80, "TOUCH ERROR!", ILI9341_COLOR_RED, ILI9341_COLOR_BLACK, 2);
+        ILI9341_DrawString(20, 120, "Sensor not responding", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
+        ILI9341_DrawString(20, 150, "Using default calibration", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 1);
+        
+        /* Default kalibrasiya dəyərləri yüklə */
+        XPT2046_LoadDefaultCalibration();
+        
+        HAL_Delay(3000);
+        
+        return 0;
+    }
+    
+    /* ============================================
+     * 3-NÖQTƏLİ KALİBRASİYA
+     * ============================================ */
+    ILI9341_FillScreen(ILI9341_COLOR_BLACK);
+    ILI9341_DrawString(40, 100, "CALIBRATION START", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
     ILI9341_DrawString(50, 130, "Touch the 3 points", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
     
-    HAL_Delay(1500);  /* 1.5 saniyə gözlə */
+    HAL_Delay(1500);
     
     /* Hər nöqtə üçün */
     for (int point = 0; point < 3; point++) {
@@ -2102,7 +2173,8 @@ uint8_t ILI9341_RunTouchCalibration(void)
         uint32_t timeout = HAL_GetTick() + 30000;  /* 30 saniyə timeout */
         
         /* Əvvəlcə touch buraxılmasını gözlə */
-        while (XPT2046_IsTouched() && HAL_GetTick() < timeout) {
+        uint32_t release_timeout = HAL_GetTick() + 2000;
+        while (XPT2046_IsTouched() && HAL_GetTick() < release_timeout) {
             HAL_Delay(10);
         }
         HAL_Delay(200);  /* Debounce */
@@ -2133,6 +2205,7 @@ uint8_t ILI9341_RunTouchCalibration(void)
         
         if (!touched) {
             /* Timeout - kalibrasiya ləğv edildi */
+            printf("Calibration timeout at point %d\r\n", point + 1);
             ILI9341_FillScreen(ILI9341_COLOR_BLACK);
             ILI9341_DrawString(80, 110, "CALIBRATION", ILI9341_COLOR_RED, ILI9341_COLOR_BLACK, 2);
             ILI9341_DrawString(80, 140, "TIMEOUT!", ILI9341_COLOR_RED, ILI9341_COLOR_BLACK, 2);
