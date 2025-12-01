@@ -310,16 +310,16 @@ void Screen_DrawSplash(void) {
     /* Versiya */
     ILI9341_DrawString(140, 145, "v4.0", COLOR_ACCENT_YELLOW, COLOR_BG_DARK, 2);
     
-    /* Yükləmə animasiyası */
+    /* Yükləmə animasiyası - daha sürətli */
     ILI9341_DrawRect(60, 180, 200, 20, COLOR_BORDER);
-    for (int i = 0; i <= 100; i += 5) {
+    for (int i = 0; i <= 100; i += 10) {
         ILI9341_FillRect(62, 182, i * 2 - 4, 16, COLOR_ACCENT_GREEN);
-        HAL_Delay(30);
+        HAL_Delay(20);  /* 30ms-dən 20ms-ə azaldıldı */
     }
     
     /* Mesaj */
     ILI9341_DrawString(100, 210, "Sistem hazir!", COLOR_ACCENT_GREEN, COLOR_BG_DARK, 1);
-    HAL_Delay(500);
+    HAL_Delay(300);  /* 500ms-dən 300ms-ə azaldıldı */
 }
 
 /**
@@ -973,16 +973,19 @@ int main(void)
   /* İlkin setpoint */
   AdvancedPressureControl_SetTargetPressure(g_presets[g_current_preset]);
   
-  /* Timer 6 başlat (PID loop) */
-  HAL_TIM_Base_Start_IT(&htim6);
-  
-  /* Əsas ekrana keç */
+  /* KRİTİK: Əsas ekranı ÇƏK - Timer başlamadan ƏVVƏL */
   g_current_page = PAGE_MAIN;
   g_needs_redraw = 1;
   
-  /* Sistemi başlat */
+  /* Sistemi başlat - Timer-dən ƏVVƏL */
   g_system_running = 1;
   g_system_status.control_enabled = true;
+  
+  /* İlk ekran yeniləməsini et - Timer-dən ƏVVƏL */
+  Screen_DrawMain();
+  
+  /* Timer 6 başlat (PID loop) - Ekran çəkildikdən SONRA */
+  HAL_TIM_Base_Start_IT(&htim6);
   
   printf("=== VALEH High Pressure Control v4.0 ===\r\n");
   printf("Touch Screen Interface Ready\r\n");

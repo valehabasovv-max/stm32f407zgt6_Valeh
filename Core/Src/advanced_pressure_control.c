@@ -184,13 +184,10 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
      * 4. Növbəti konversiyanın başlaması üçün qısa gözlə (continuous mode avtomatik başlayır)
      */
     
-    // Overrun baş veribsə flaqı təmizlə ki, növbəti konversiya bloklanmasın
+    // Overrun baş veribsə flaqı təmizlə
     if (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_OVR) != RESET) {
         __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_OVR);
         error_count++;
-        if (error_count < 10 || (error_count % 100 == 0)) {
-            printf("WARNING[%lu]: ADC Overrun detected and cleared\r\n", debug_count);
-        }
     }
 
     /* KRİTİK DÜZƏLİŞ: Continuous mode-da yeni konversiyanın tamamlanmasını gözlə
@@ -207,33 +204,19 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
             // ADC-nin işlədiyini yoxla
             if ((adc_state & HAL_ADC_STATE_REG_BUSY) == 0U) {
                 // ADC dayanıb - yenidən başlat
-                if (error_count < 10 || (error_count % 100 == 0)) {
-                    printf("ERROR[%lu]: ADC stopped (state=0x%08lX), restarting...\r\n", 
-                           debug_count, adc_state);
-                }
                 HAL_ADC_Stop(&hadc3);
                 HAL_Delay(5);
                 if (HAL_ADC_Start(&hadc3) != HAL_OK) {
-                    if (error_count < 10 || (error_count % 100 == 0)) {
-                        printf("ERROR[%lu]: ADC Start failed after timeout\r\n", debug_count);
-                    }
                     return last_valid_adc;
                 }
-                // İlk konversiyanın başlaması üçün gözlə
                 HAL_Delay(10);
-                // Yenidən yoxla
                 start_time = HAL_GetTick();
                 continue;
-            }
-            
-            if (error_count < 10 || (error_count % 100 == 0)) {
-                printf("ERROR[%lu]: ADC EOC timeout (waited %lu ms), state=0x%08lX\r\n", 
-                       debug_count, timeout_ms, adc_state);
             }
             return last_valid_adc;
         }
         // CPU-nu bloklamamaq üçün qısa gecikmə
-        for(volatile uint32_t i = 0; i < 1000; i++);  // ~1-2μs delay
+        for(volatile uint32_t i = 0; i < 1000; i++);
     }
 
     /* EOC flag qalxıb - dəyəri oxu və flag-i təmizlə */
@@ -246,67 +229,35 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
     // DÜZƏLİŞ: 100-dən 1000-ə artırıldı - ADC-nin yeni konversiyaya başlaması üçün daha çox vaxt
     for(volatile uint32_t i = 0; i < 1000; i++);  // ~1-2μs delay
     
-    // KRİTİK DÜZƏLİŞ: Eyni dəyərin ardıcıl oxunmasını yoxla
-    // Continuous mode-da düzgün gözləmə ilə bu nadir hallarda baş verməlidir
-    // Amma sensor həqiqətən dəyişmirsə (məsələn, təzyiq sabitdirsə), bu normaldır
+    // Eyni dəyərin ardıcıl oxunmasını yoxla
     if (adc_value == last_read_value && debug_count > 3) {
         same_value_count++;
-        // DÜZƏLİŞ: Həddindən artıq stuck value zamanı ADC-ni restart et
-        if (same_value_count > 500) {  // DÜZƏLİŞ: 100-dən 500-ə artırıldı
-            printf("CRITICAL[%lu]: ADC value %u stuck for %lu reads - RESTARTING ADC!\r\n", 
-                   debug_count, adc_value, same_value_count);
-            // ADC-ni restart et
+        // Həddindən artıq stuck value zamanı ADC-ni restart et
+        if (same_value_count > 500) {
             HAL_ADC_Stop(&hadc3);
             HAL_Delay(10);
-            if (HAL_ADC_Start(&hadc3) == HAL_OK) {
-                printf("INFO[%lu]: ADC restarted successfully\r\n", debug_count);
-            } else {
-                printf("ERROR[%lu]: ADC restart failed!\r\n", debug_count);
-            }
-            HAL_Delay(20);  // ADC-nin hazır olması üçün
-            same_value_count = 0;  // Counter sıfırla
-        } else if (same_value_count == 100 || same_value_count == 200 || same_value_count == 300 || same_value_count == 400) {
-            // Hər 100 oxunuşda bir xəbərdarlıq ver
-            printf("WARNING[%lu]: ADC value %u unchanged for %lu reads (checking if stuck...)\r\n", 
-                   debug_count, adc_value, same_value_count);
+            HAL_ADC_Start(&hadc3);
+            HAL_Delay(20);
+            same_value_count = 0;
         }
     } else {
-        // Dəyər dəyişdi, counter-i sıfırla
-        if (same_value_count > 10) {  // Yalnız əhəmiyyətli dəyişiklik zamanı məlumat ver
-            printf("INFO[%lu]: ADC value changed from %u to %u (was stable for %lu reads)\r\n", 
-                   debug_count, last_read_value, adc_value, same_value_count);
-        }
         same_value_count = 0;
     }
     last_read_value = adc_value;
     
-    /* KRİTİK DÜZƏLİŞ: 12-bit ADC maksimum dəyəri 4095-dir (2^12 - 1)
-     * Bəzən HAL_ADC_GetValue() qeyri-etibarlı dəyərlər qaytara bilər
-     * ADC dəyərini 0-4095 diapazonunda clamp et */
+    // ADC dəyərini 0-4095 diapazonunda clamp et
     if (adc_value > 4095U) {
-        // Debug: Qeyri-etibarlı ADC dəyəri aşkarlandı
         error_count++;
-        if (error_count < 10 || (error_count % 100 == 0)) {
-            printf("WARNING[%lu]: Invalid ADC value detected: %u (> 4095), clamping to 4095\r\n", 
-                   debug_count, adc_value);
-        }
-        adc_value = 4095U;  // Maksimum 12-bit ADC dəyəri
+        adc_value = 4095U;
     }
 
-    /* KRİTİK DÜZƏLİŞ: ADC 0 dəyəri yoxlaması - sensor spesifikasiyasına görə minimum ADC_MIN (620) olmalıdır
-     * Amma əgər ADC həqiqətən 0 oxuyursa, bu hardware problemi ola bilər
-     * Bu halda, yalnız ardıcıl 0 oxunuşları zamanı last_valid_adc istifadə et */
+    // ADC 0 dəyəri yoxlaması
     static uint32_t zero_count = 0;
     if (adc_value == 0U) {
         zero_count++;
         error_count++;
-        if (zero_count < 10 || (zero_count % 100 == 0)) {
-            printf("WARNING[%lu]: ADC reading is 0 (count=%lu, sensor disconnected?), state=0x%08lX, last_valid=%u\r\n", 
-                   debug_count, zero_count, HAL_ADC_GetState(&hadc3), last_valid_adc);
-        }
-        // KRİTİK: Əgər ardıcıl çoxlu 0 oxunuşu varsa, ADC-ni yenidən başlat
+        // Ardıcıl 0 oxunuşları zamanı ADC-ni yenidən başlat
         if (zero_count > 50) {
-            printf("ERROR[%lu]: Too many consecutive 0 readings, restarting ADC\r\n", debug_count);
             HAL_ADC_Stop(&hadc3);
             HAL_Delay(5);
             HAL_ADC_Start(&hadc3);
@@ -314,26 +265,17 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
         }
         return last_valid_adc;
     } else {
-        // Uğurlu oxunuş - zero_count-u sıfırla
-        if (zero_count > 0) {
-            printf("INFO[%lu]: ADC recovered from 0 readings (was stuck for %lu cycles)\r\n", 
-                   debug_count, zero_count);
-        }
         zero_count = 0;
     }
 
-    /* Uğurlu oxunuş - error_count-u sıfırla */
+    // Uğurlu oxunuş - error_count-u sıfırla
     if (adc_value > 0U && adc_value <= 4095U) {
-        if (error_count > 0) {
-            error_count = 0;  // Uğurlu oxunuş - error_count-u sıfırla
-        }
+        error_count = 0;
     }
 
-    // DEBUG: İlk bir neçə oxunuşda və hər 100 oxunuşda bir dəfə göstər (daha tez-tez)
-    // Həmçinin stuck value aşkarlandıqda da göstər
-    if (debug_count <= 20 || (debug_count % 100 == 0) || same_value_count > 0) {
-        printf("DEBUG ADC[%lu]: value=%u, state=0x%08lX, last_valid=%u, same_count=%lu\r\n", 
-               debug_count, adc_value, HAL_ADC_GetState(&hadc3), last_valid_adc, same_value_count);
+    // DEBUG: Yalnız ilk 5 oxunuşda göstər (UART tıxanmasının qarşısını almaq üçün)
+    if (debug_count <= 5) {
+        printf("DEBUG ADC[%lu]: value=%u\r\n", debug_count, adc_value);
     }
 
     last_valid_adc = adc_value;
@@ -393,44 +335,12 @@ float AdvancedPressureControl_ClampValue(float value, float min_val, float max_v
  * @retval Filtrlənmiş təzyiq (bar)
  */
 static float AdvancedPressureControl_ConvertAdcToPressure(uint16_t adc_raw) {
-    // DEBUG: İlk çağırışda kalibrləmə məlumatlarını göstər
+    // İlk çağırışda qısa kalibrasiya məlumatı göstər
     static bool first_call = true;
     if (first_call) {
-        printf("\n");
-        printf("========================================================================\n");
-        printf("  KALIBRASIYA MƏLUMATLARI\n");
-        printf("========================================================================\n");
-        printf("  ADC Range:      %.0f - %.0f\n", g_calibration.adc_min, g_calibration.adc_max);
-        printf("  Pressure Range: %.2f - %.2f bar\n", g_calibration.pressure_min, g_calibration.pressure_max);
-        printf("  Slope:          %.6f bar/ADC\n", g_calibration.slope);
-        printf("  Offset:         %.2f bar\n", g_calibration.offset);
-        printf("  Formula:        Pressure = %.2f + (ADC * %.6f)\n", g_calibration.offset, g_calibration.slope);
-        printf("========================================================================\n");
-        
-        // KRİTİK DİAGNOSTİK: Kalibrasiya dəyərlərini yoxla
-        // Əgər ADC aralığı çox dar və ya pressure aralığı çox kiçikdirsə, xəbərdarlıq ver
-        float adc_range = g_calibration.adc_max - g_calibration.adc_min;
-        float pressure_range = g_calibration.pressure_max - g_calibration.pressure_min;
-        
-        if (adc_range < 2000.0f) {
-            printf("  ⚠ WARNING: ADC range (%.0f) is too narrow! Expected > 2000\n", adc_range);
-            printf("  ⚠ This will cause incorrect pressure readings!\n");
-            printf("  ⚠ Expected: ADC Min ~620, ADC Max ~4095\n");
-        }
-        
-        if (pressure_range < 50.0f) {
-            printf("  ⚠ WARNING: Pressure range (%.2f bar) is too narrow!\n", pressure_range);
-            printf("  ⚠ Expected: Pressure Min ~0.0 bar, Pressure Max ~300.0 bar\n");
-        }
-        
-        // KRİTİK: Slope çox kiçik olarsa, ADC dəyişiklikləri təzyiqə təsir etməyəcək
-        if (g_calibration.slope < 0.01f) {
-            printf("  ⚠ WARNING: Slope (%.6f) is too small!\n", g_calibration.slope);
-            printf("  ⚠ Expected slope: ~%.6f bar/ADC\n", PRESSURE_SLOPE);
-            printf("  ⚠ ADC changes will have minimal effect on pressure reading!\n");
-        }
-        
-        printf("========================================================================\n\n");
+        printf("CAL: ADC %.0f-%.0f, P %.0f-%.0f bar\r\n", 
+               g_calibration.adc_min, g_calibration.adc_max,
+               g_calibration.pressure_min, g_calibration.pressure_max);
         first_call = false;
     }
 
@@ -467,37 +377,22 @@ static float AdvancedPressureControl_ConvertAdcToPressure(uint16_t adc_raw) {
     // Filtrlənmiş dəyəri istifadə et
     pressure = filtered_pressure;
 
-    // DEBUG: Hər 100 çağırışda bir dəfə debug məlumatı göstər
+    // DEBUG: Yalnız ilk 3 çağırışda göstər (UART tıxanmasının qarşısını almaq üçün)
     static uint32_t call_count = 0;
     call_count++;
-    if (call_count <= 20 || (call_count % 100U == 0U)) {
-        printf("DEBUG Convert[%lu]: ADC=%u, RawPressure=%.2f, FilteredPressure=%.2f bar (Offset=%.2f, Slope=%.6f)\r\n",
-               call_count, adc_raw, pressure_history[history_index], filtered_pressure, 
-               g_calibration.offset, g_calibration.slope);
+    if (call_count <= 3) {
+        printf("Convert[%lu]: ADC=%u, P=%.2f bar\r\n", call_count, adc_raw, filtered_pressure);
     }
 
     // DÜZƏLİŞ: Həm minimum, həm də maksimum limit clamp edilir
     // Minimum clamp: mənfi təzyiqin qarşısını alır
     float min_pressure_clamp = (g_calibration.pressure_min < 0.0f) ? 0.0f : g_calibration.pressure_min;
     if (pressure < min_pressure_clamp) {
-        // KRİTİK DÜZƏLİŞ: Mənfi təzyiq clamp olunur - debug məlumatı
-        static uint32_t clamp_count = 0;
-        clamp_count++;
-        if (clamp_count <= 10 || (clamp_count % 100 == 0)) {
-            printf("WARNING Convert[%lu]: Pressure clamped from %.2f to %.2f bar (ADC=%u)\r\n",
-                   call_count, pressure, min_pressure_clamp, adc_raw);
-        }
         pressure = min_pressure_clamp;
     }
     
-    // Maksimum clamp: sensor diapazonunu aşan dəyərlərin qarşısını alır
+    // Maksimum clamp
     if (pressure > g_calibration.pressure_max) {
-        static uint32_t max_clamp_count = 0;
-        max_clamp_count++;
-        if (max_clamp_count <= 10 || (max_clamp_count % 100 == 0)) {
-            printf("WARNING Convert[%lu]: Pressure clamped from %.2f to %.2f bar (ADC=%u)\r\n",
-                   call_count, pressure, g_calibration.pressure_max, adc_raw);
-        }
         pressure = g_calibration.pressure_max;
     }
 
@@ -530,14 +425,6 @@ static float AdvancedPressureControl_ConvertAdcToPressure(uint16_t adc_raw) {
 float AdvancedPressureControl_ReadPressure(void) {
     uint16_t adc_raw = AdvancedPressureControl_ReadADC();
     
-    // DEBUG: ADC dəyərini göstər (problem aşkarlamaq üçün)
-    static uint32_t read_debug_count = 0;
-    read_debug_count++;
-    if (read_debug_count <= 20 || (read_debug_count % 200 == 0)) {
-        printf("DEBUG ReadPressure[%lu]: ADC_raw=%u, ADC_MIN=%u, ADC_MAX=%u\r\n",
-               read_debug_count, adc_raw, ADC_MIN, ADC_MAX);
-    }
-    
     // KRİTİK DÜZƏLİŞ: ADC dəyərini clamp ETMƏYİN!
     // Əvvəlki kod bu idi:
     //   if (adc_raw < ADC_MIN) adc_raw = ADC_MIN;  // BU PROBLEM İDİ!
@@ -548,7 +435,6 @@ float AdvancedPressureControl_ReadPressure(void) {
     
     // Yalnız ADC > 4095 halında clamp et (bu, hardware xətası deməkdir)
     if (adc_raw > 4095U) {
-        printf("WARNING ReadPressure: ADC value %u > 4095, clamping to 4095\r\n", adc_raw);
         adc_raw = 4095U;
     }
     
@@ -572,50 +458,15 @@ void AdvancedPressureControl_ControlMotorSpeed(void) {
     const float M_MIN = 5.0f;      // Motorun Minimum işləmə sürəti
     const float M_MAX = 25.0f;     // Motorun Maksimum işləmə sürəti
     
-    // KRİTİK YOXLAMA: Motorun 0% olmasının səbəblərini təhlil et
+    // Motor debug sayacı
     static uint32_t debug_count = 0;
     debug_count++;
     
-    // KRİTİK DÜZƏLİŞ: Safety vəziyyətində motor 0% təyin olunmalıdır
+    // Safety vəziyyətində motor 0% təyin olunmalıdır
     if (g_system_status.safety_triggered) {
         g_system_status.motor_pwm_percent = 0.0f;
         AdvancedPressureControl_SetMotor_PWM(0.0f);
-        if (debug_count <= 20 || debug_count % 50 == 0) {
-            printf("MOTOR STOPPED[%lu]: safety_triggered=%d\r\n",
-                   debug_count, g_system_status.safety_triggered);
-        }
         return;  // Safety vəziyyətində motor işləməsin
-    }
-    
-    // Əgər motor 0% və ya çox kiçikdirsə, səbəbini tap
-    if (g_system_status.motor_pwm_percent < 0.1f) {
-        if (debug_count <= 20 || debug_count % 50 == 0) {
-            printf("MOTOR 0%% DIAGNOSTIC[%lu]:\r\n", debug_count);
-            printf("  -> control_enabled = %d\r\n", g_system_status.control_enabled);
-            printf("  -> g_control_initialized = %d\r\n", g_control_initialized);
-            printf("  -> target_pressure = %.2f bar\r\n", g_system_status.target_pressure);
-            printf("  -> current_pressure = %.2f bar\r\n", g_system_status.current_pressure);
-            printf("  -> safety_triggered = %d\r\n", g_system_status.safety_triggered);
-            
-            // Səbəb təhlili
-            if (!g_control_initialized) {
-                printf("  *** SƏBƏB: g_control_initialized = false (Init() çağırılmamış)\r\n");
-            } else if (!g_system_status.control_enabled) {
-                printf("  *** SƏBƏB: control_enabled = false (Nəzarət deaktivdir)\r\n");
-            } else if (g_system_status.target_pressure <= 0.1f) {
-                printf("  *** SƏBƏB: target_pressure = %.2f bar (çox kiçik, minimum 5%% istifadə olunmalıdır)\r\n", 
-                       g_system_status.target_pressure);
-            } else {
-                printf("  *** SƏBƏB: Naməlum (funksiya çağırılmır və ya başqa səbəb)\r\n");
-            }
-        }
-    }
-    
-    // DEBUG: Target pressure dəyərini yoxla (hər çağırışda - problem aşkarlamaq üçün)
-    if (debug_count <= 20 || debug_count % 50 == 0) {  // İlk 20 çağırışda və hər 50 çağırışda
-        printf("DEBUG MotorSpeed[%lu]: target=%.2f bar, enabled=%d, motor_pwm=%.2f%%\r\n",
-               debug_count, g_system_status.target_pressure, g_system_status.control_enabled,
-               g_system_status.motor_pwm_percent);
     }
     
     // KRİTİK DÜZƏLİŞ: Motor sürəti hesablaması - Feedforward Xəritəsi (Lookup Table)
@@ -640,15 +491,7 @@ void AdvancedPressureControl_ControlMotorSpeed(void) {
     };
     const uint8_t map_size = sizeof(motor_map) / sizeof(motor_map[0]);
     
-    // DÜZƏLİŞ: target_pressure 0.0-dan böyük olmalıdır, amma PRESSURE_MIN (0.0) də ola bilər
-    // KRİTİK DÜZƏLİŞ: Əgər target_pressure 0.0 və ya çox kiçikdirsə, minimum motor sürətini istifadə et
-    // DEBUG: target_pressure dəyərini yoxla
-    if (debug_count <= 20) {
-        printf("DEBUG MotorSpeed[%lu]: Checking target_pressure=%.2f bar, condition=%s\r\n", 
-               debug_count, g_system_status.target_pressure,
-               (g_system_status.target_pressure > 0.1f) ? ">0.1" : "<=0.1");
-    }
-    
+    // Motor sürəti hesablaması
     if (g_system_status.target_pressure > 0.1f) {
         float effective_pressure = g_system_status.target_pressure;
         if (effective_pressure < PRESSURE_MIN) {
@@ -693,25 +536,10 @@ void AdvancedPressureControl_ControlMotorSpeed(void) {
             motor_pwm, M_MIN, M_MAX);
         
         AdvancedPressureControl_SetMotor_PWM(g_system_status.motor_pwm_percent);
-        
-        // DEBUG: Motor sürəti təyin olunduqda
-        if (debug_count <= 20 || debug_count % 50 == 0) {
-            printf("DEBUG MotorSpeed[%lu]: Motor PWM set to %.2f%% (target=%.2f bar, Feedforward map)\r\n",
-                   debug_count, g_system_status.motor_pwm_percent, g_system_status.target_pressure);
-        }
     } else {
-        // MÜVƏQQƏTİ HƏLL: target_pressure < 0.1 bar olduqda motor minimum sürətdə işləyir
-        // Bu, problemin target_pressure dəyərinin düzgün yüklənməməsi ilə bağlı olduğunu təsdiqləyir
-        // Əgər motor 5% sürətlə işləyirsə, bu, target_pressure dəyərinin düzgün yüklənmədiyini göstərir
-        // QEYD: M_MIN artıq funksiyanın əvvəlində təyin olunub (sətir 256)
-        g_system_status.motor_pwm_percent = M_MIN;  // 5.0% minimuma təyin et
+        // target_pressure çox kiçik - minimum motor sürəti istifadə et
+        g_system_status.motor_pwm_percent = M_MIN;
         AdvancedPressureControl_SetMotor_PWM(M_MIN);
-        
-        // DEBUG: Motor minimum sürətdə işləyir
-        if (debug_count <= 20 || debug_count % 50 == 0) {
-            printf("DEBUG MotorSpeed[%lu]: Target too low (%.2f bar <= 0.1), using MIN PWM=%.1f%%\r\n",
-                   debug_count, g_system_status.target_pressure, M_MIN);
-        }
     }
 }
 
@@ -897,10 +725,8 @@ float AdvancedPressureControl_CalculatePID(PID_Controller_t* pid, float error, f
     // Yekun PID Çıxışı
     float pid_output = P_term + I_term + D_term;
     
-    // DÜZƏLİŞ: PID çıxışını yoxla
+    // PID çıxışını yoxla
     if (isnan(pid_output) || isinf(pid_output)) {
-        printf("PID ERROR: Invalid PID output: %.2f (P=%.2f, I=%.2f, D=%.2f)\r\n", 
-               pid_output, P_term, I_term, D_term);
         pid_output = 0.0f;
     }
     
@@ -980,35 +806,14 @@ bool AdvancedPressureControl_SafetyCheck(void) {
         return true;
     }
     
-    // DEBUG: Təhlükəsizlik yoxlaması (motor 0.00% problemi üçün)
-    static uint32_t safety_debug_count = 0;
-    safety_debug_count++;
-    bool safety_ok = true;
-    const char* failure_reason = NULL;
-    
     // Təzyiq çox yüksək olduqda təhlükəsizlik tədbiri
     if (g_system_status.current_pressure > 
         (g_system_status.target_pressure + g_safety_limits.over_limit_margin)) {
-        failure_reason = "Over limit";
-        safety_ok = false;
+        return false;
     }
     
     // Maksimum təhlükəsizlik limiti
     if (g_system_status.current_pressure > g_safety_limits.max_pressure) {
-        failure_reason = "Max pressure exceeded";
-        safety_ok = false;
-    }
-    
-    
-    // DEBUG: Təhlükəsizlik yoxlaması uğursuz olduqda
-    if (!safety_ok && (safety_debug_count <= 20 || safety_debug_count % 100 == 0)) {
-        printf("SAFETY CHECK[%lu]: %s (current=%.2f bar, target=%.2f bar, margin=%.2f, max=%.2f)\r\n",
-               safety_debug_count, failure_reason, g_system_status.current_pressure,
-               g_system_status.target_pressure, g_safety_limits.over_limit_margin,
-               g_safety_limits.max_pressure);
-    }
-    
-    if (!safety_ok) {
         return false;
     }
     
@@ -1019,11 +824,6 @@ bool AdvancedPressureControl_SafetyCheck(void) {
  * @brief Təhlükəsizlik pozuntusunu idarə et
  */
 void AdvancedPressureControl_HandleSafetyViolation(void) {
-    printf("TƏHLÜKƏSİZLİK REJİMİ: Təzyiq çox yüksək! P=%.1f > SP+%.1f=%.1f\r\n", 
-           g_system_status.current_pressure, 
-           g_safety_limits.over_limit_margin,
-           g_system_status.target_pressure + g_safety_limits.over_limit_margin);
-    
     // PID-ni sıfırla
     g_pid_zme.integral_sum = 0.0f;
     g_pid_zme.previous_error = 0.0f;
@@ -1077,41 +877,25 @@ void AdvancedPressureControl_Step(void) {
     step_debug_count++;
     
     if (!g_control_initialized) {
-        // DEBUG: İlk 20 çağırışda hər dəfə göstər (problemin səbəbini tapmaq üçün)
-        if (step_debug_count <= 20 || step_debug_count % 100 == 0) {
-            printf("PID ERROR[%lu]: g_control_initialized = false\r\n", step_debug_count);
-            printf("  -> Call AdvancedPressureControl_Init() first!\r\n");
-        }
-        // KRİTİK: Sistem başlanmayıbsa, PWM-ləri sıfırla və çıx
+        // Sistem başlanmayıb - PWM-ləri sıfırla və çıx
         AdvancedPressureControl_SetZME_PWM(0.0f);
         AdvancedPressureControl_SetDRV_PWM(0.0f);
         AdvancedPressureControl_SetMotor_PWM(0.0f);
         return;
     }
     if (!g_system_status.control_enabled) {
-        // DEBUG: İlk 20 çağırışda hər dəfə göstər (problemin səbəbini tapmaq üçün)
-        if (step_debug_count <= 20 || step_debug_count % 100 == 0) {
-            printf("PID WARNING[%lu]: control_enabled = false (target=%.2f bar, current=%.2f bar)\r\n",
-                   step_debug_count, g_system_status.target_pressure, g_system_status.current_pressure);
-            printf("  -> Enable control: pid_status->control_enabled = true\r\n");
-        }
-        // KRİTİK DÜZƏLİŞ: Nəzarət disabled-dirsə, motor sürətini təyin et (target_pressure-a görə)
-        // Amma PID hesablamalarını atla (klapanlar və PID işləməsin)
-        // Motor həmişə target_pressure-a görə işləməlidir, nəzarət disabled olsa belə
+        // Nəzarət deaktiv - motor sürətini təyin et, PID-ni atla
         AdvancedPressureControl_ControlMotorSpeed();
-        // Klapanları təhlükəsiz vəziyyətə gətir
         AdvancedPressureControl_SetZME_PWM(ZME_PWM_MAX);  // ZME bağlı
         AdvancedPressureControl_SetDRV_PWM(DRV_PWM_MIN);  // DRV açıq
-        return;  // PID hesablamalarını atla
+        return;
     }
     
-    // DEBUG: İlk bir neçə çağırışda status göstər
+    // DEBUG: Yalnız ilk 3 çağırışda status göstər (UART tıxanmasının qarşısını almaq üçün)
     static uint32_t step_count = 0;
     step_count++;
-    if (step_count <= 5 || step_count % 1000 == 0) {
-        printf("PID Step #%lu: target=%.1f, current=%.1f, error=%.1f, enabled=%d\r\n",
-               step_count, g_system_status.target_pressure, g_system_status.current_pressure,
-               g_system_status.error, g_system_status.control_enabled);
+    if (step_count <= 3) {
+        printf("PID Step #%lu: target=%.1f bar\r\n", step_count, g_system_status.target_pressure);
     }
     
     
@@ -1123,39 +907,20 @@ void AdvancedPressureControl_Step(void) {
     // DÜZƏLİŞ: ReadPressure() istifadə et ki, ADC clamp və filtrləmə düzgün işləsin
     g_system_status.current_pressure = AdvancedPressureControl_ReadPressure();
     
-    // Validate pressure reading without hiding genuine over-pressure conditions
+    // Validate pressure reading
     if (!isfinite(g_system_status.current_pressure) || g_system_status.current_pressure < 0.0f) {
-        printf("PID ERROR: Invalid pressure reading: %.2f bar\r\n", g_system_status.current_pressure);
         g_system_status.current_pressure = 0.0f;
     } else {
-        if (g_system_status.current_pressure > g_safety_limits.max_pressure) {
-            static uint32_t over_limit_log_count = 0;
-            if (over_limit_log_count < 10U || (over_limit_log_count % 50U) == 0U) {
-                printf("PID WARNING: Pressure %.2f bar exceeds configured max %.1f bar\r\n",
-                       g_system_status.current_pressure, g_safety_limits.max_pressure);
-            }
-            over_limit_log_count++;
-        }
         float sensor_fault_limit = g_safety_limits.max_pressure + 50.0f;
         if (g_system_status.current_pressure > sensor_fault_limit) {
-            float fault_value = g_system_status.current_pressure;
             g_system_status.current_pressure = sensor_fault_limit;
-            printf("PID WARNING: Pressure reading %.2f bar exceeds sensor range, clamping to %.1f bar\r\n",
-                   fault_value, sensor_fault_limit);
         }
     }
     
-    // 1. TƏHLÜKƏSİZLİK MÜDAXİLƏSİ (Motor təyin olunmadan ƏVVƏL)
-    // KRİTİK DÜZƏLİŞ: Safety yoxlaması motor təyin olunmadan əvvəl aparılmalıdır
-    // Çünki safety uğursuz olarsa, motor 0% təyin olunur və return edilir
+    // 1. TƏHLÜKƏSİZLİK MÜDAXİLƏSİ
     if (!AdvancedPressureControl_SafetyCheck()) {
-        // DEBUG: Təhlükəsizlik yoxlaması uğursuz olduqda (motor 0.0f-ə təyin olunur)
-        if (step_debug_count <= 20 || step_debug_count % 100 == 0) {
-            printf("PID SAFETY[%lu]: Safety check FAILED (current=%.2f bar, target=%.2f bar)\r\n",
-                   step_debug_count, g_system_status.current_pressure, g_system_status.target_pressure);
-        }
         AdvancedPressureControl_HandleSafetyViolation();
-        return; // Normal PID-yə keçmə
+        return;
     }
     
     // 2. SP-yə görə ZME və DRV baza dəyərlərini yenilə (YENİ MƏNTİQ)
@@ -1164,42 +929,21 @@ void AdvancedPressureControl_Step(void) {
     g_drv_base_pwm = AdvancedPressureControl_CalculateDRVBaseFromSP(g_system_status.target_pressure);
     
     // 3. Motor sürətini tənzimlə (Hədəf təzyiqə görə)
-    // KRİTİK DÜZƏLİŞ: Safety yoxlaması keçdikdən sonra motor sürəti təyin olunur
-    // Bu, motorun safety vəziyyətində 0% qalmasını təmin edir
-    if (step_debug_count <= 10) {
-        printf("STEP[%lu]: Calling ControlMotorSpeed() - target=%.2f bar\r\n", 
-               step_debug_count, g_system_status.target_pressure);
-    }
     AdvancedPressureControl_ControlMotorSpeed();
-    if (step_debug_count <= 10) {
-        printf("STEP[%lu]: After ControlMotorSpeed() - motor_pwm=%.2f%%\r\n", 
-               step_debug_count, g_system_status.motor_pwm_percent);
-    }
     
     // 4. Xətanı Hesabla
     g_system_status.error = g_system_status.target_pressure - g_system_status.current_pressure;
     
-    // DÜZƏLİŞ: Xəta dəyərini yoxla
+    // Xəta dəyərini yoxla
     if (isnan(g_system_status.error) || isinf(g_system_status.error)) {
-        printf("PID ERROR: Invalid error value: %.2f\r\n", g_system_status.error);
         g_system_status.error = 0.0f;
     }
     
     // Təhlükəsizlik rejimindən çıx
-    // KRİTİK DÜZƏLİŞ: Safety vəziyyətindən çıxmaq üçün təzyiq target-dan aşağı olmalıdır
-    // və safety yoxlaması uğurlu olmalıdır
     if (g_system_status.safety_triggered) {
         if (g_system_status.current_pressure < g_system_status.target_pressure && 
             AdvancedPressureControl_SafetyCheck()) {
             g_system_status.safety_triggered = false;
-            printf("TƏHLÜKƏSİZLİK REJİMİNDƏN ÇIXILDI (current=%.2f bar < target=%.2f bar)\r\n",
-                   g_system_status.current_pressure, g_system_status.target_pressure);
-        } else {
-            // Safety vəziyyəti aktivdir, motor 0% qalmalıdır
-            if (step_debug_count <= 20 || step_debug_count % 100 == 0) {
-                printf("SAFETY ACTIVE[%lu]: current=%.2f bar, target=%.2f bar (motor stopped)\r\n",
-                       step_debug_count, g_system_status.current_pressure, g_system_status.target_pressure);
-            }
         }
     }
     
@@ -1270,13 +1014,10 @@ void AdvancedPressureControl_Step(void) {
     AdvancedPressureControl_ControlDRV(drv_control_output);
     
     // 9. PWM Siqnallarını Tətbiq et
-    // DÜZƏLİŞ: PWM dəyərlərini yoxla
     if (isnan(g_system_status.zme_pwm_percent) || isinf(g_system_status.zme_pwm_percent)) {
-        printf("PID ERROR: Invalid ZME PWM: %.2f%%\r\n", g_system_status.zme_pwm_percent);
         g_system_status.zme_pwm_percent = g_zme_base_pwm;
     }
     if (isnan(g_system_status.drv_pwm_percent) || isinf(g_system_status.drv_pwm_percent)) {
-        printf("PID ERROR: Invalid DRV PWM: %.2f%%\r\n", g_system_status.drv_pwm_percent);
         g_system_status.drv_pwm_percent = g_drv_base_pwm;
     }
     
@@ -1285,16 +1026,14 @@ void AdvancedPressureControl_Step(void) {
     // 10. Status yenilə
     AdvancedPressureControl_UpdateStatus();
     
-    // Debug çıxışı (hər 10 dövrədə bir - çox mesaj olmasın)
+    // Debug çıxışı (hər 100 dövrədə bir - UART tıxanmasının qarşısını almaq üçün)
     static uint16_t debug_counter = 0;
-    if (++debug_counter >= 10) {
+    if (++debug_counter >= 100) {
         debug_counter = 0;
-        printf("SP:%.1f  P:%.1f  ERR:%.2f  Kp:%.3f  Ki:%.4f  ZME_PID:%.2f  DRV_PID:%.2f  ZME:%.1f%%(B:%.1f%%)  DRV:%.1f%%(B:%.1f%%)  MOTOR:%.1f%%\r\n",
+        printf("SP:%.1f P:%.1f ZME:%.1f%% DRV:%.1f%% M:%.1f%%\r\n",
                g_system_status.target_pressure, g_system_status.current_pressure, 
-               g_system_status.error, g_pid_zme.Kp, g_pid_zme.Ki,
-               zme_control_output, drv_control_output,
-               g_system_status.zme_pwm_percent, g_zme_base_pwm,
-               g_system_status.drv_pwm_percent, g_drv_base_pwm,
+               g_system_status.zme_pwm_percent,
+               g_system_status.drv_pwm_percent,
                g_system_status.motor_pwm_percent);
     }
 }
@@ -1307,38 +1046,30 @@ void AdvancedPressureControl_Step(void) {
  * @brief Sistem başlatma
  */
 void AdvancedPressureControl_Init(void) {
-    printf("Advanced Pressure Control System - Initializing...\r\n");
-    
     // Status strukturunu sıfırla
     memset(&g_system_status, 0, sizeof(SystemStatus_t));
     
     // İlkin dəyərlər
-    g_system_status.target_pressure = 70.0f; // İlkin hədəf təzyiq
-    g_system_status.control_enabled = false;  // İlkin olaraq false, sonra true ediləcək
+    g_system_status.target_pressure = 70.0f;
+    g_system_status.control_enabled = false;
     g_system_status.safety_triggered = false;
     
-    // KRİTİK: target_pressure 0.0 və ya çox kiçik olarsa, default dəyər təyin et
     if (g_system_status.target_pressure < 0.1f) {
-        g_system_status.target_pressure = 70.0f;  // Default 70 bar
-        printf("WARNING: target_pressure was too small, setting to default 70.0 bar\r\n");
+        g_system_status.target_pressure = 70.0f;
     }
     
-    // PID nəzarətçilərini başlat (Tənzimlənmiş default dəyərlər)
-    // Kp=0.8, Ki=0.05, Kd=0.01 - Tənzimlənmiş default dəyərlər
+    // PID nəzarətçilərini başlat
     AdvancedPressureControl_InitPID(&g_pid_zme, PID_KP_DEFAULT, PID_KI_DEFAULT, PID_KD_DEFAULT);
-    // DRV də eyni PID parametrlərini istifadə edir (baza mövqe + PID təshisi)
     AdvancedPressureControl_InitPID(&g_pid_drv, PID_KP_DEFAULT, PID_KI_DEFAULT, PID_KD_DEFAULT);
     
     // Baza PWM dəyərlərini təyin et
     g_zme_base_pwm = ZME_BASE_PWM_DEFAULT;
     g_drv_base_pwm = DRV_BASE_PWM_DEFAULT;
     
-    // Load PID parameters and settings from flash memory (load first)
+    // Flash-dan PID parametrlərini yüklə
     AdvancedPressureControl_LoadPIDParamsFromFlash();
     
-    // Apply PID tuning values from pressure_control_config system
-    // This ensures that g_pid_zme_tuning and g_pid_drv_tuning values are applied
-    // even if flash loading happened with old values
+    // Apply PID tuning values
     extern PID_Tuning_t g_pid_zme_tuning;
     extern PID_Tuning_t g_pid_drv_tuning;
     AdvancedPressureControl_SetPIDParams(&g_pid_zme, 
@@ -1350,10 +1081,6 @@ void AdvancedPressureControl_Init(void) {
                                          g_pid_drv_tuning.ki, 
                                          g_pid_drv_tuning.kd);
     
-    // DÜZƏLİŞ: Kalibrasiya məlumatları artıq main.c-də yüklənib
-    // AdvancedPressureControl_LoadCalibration() main.c-də çağırılır, burada təkrar yükləmə lazım deyil
-    // Əgər kalibrasiya yüklənməyibsə, default dəyərlər istifadə olunur
-    
     // Təhlükəsizlik sistemini aktivləşdir
     AdvancedPressureControl_EnableSafety(true);
     
@@ -1361,11 +1088,8 @@ void AdvancedPressureControl_Init(void) {
     g_system_status.control_enabled = true;
     g_control_initialized = true;
     
-    printf("Advanced Pressure Control System - Initialized\r\n");
-    printf("Target Pressure: %.1f bar\r\n", g_system_status.target_pressure);
-    printf("Safety System: %s\r\n", g_safety_limits.safety_enabled ? "Enabled" : "Disabled");
-    printf("PID Parameters: Kp=%.3f, Ki=%.4f, Kd=%.3f\r\n", 
-           g_pid_zme.Kp, g_pid_zme.Ki, g_pid_zme.Kd);
+    printf("PID Init: SP=%.1f bar, Kp=%.3f\r\n", 
+           g_system_status.target_pressure, g_pid_zme.Kp);
 }
 
 /**
@@ -1486,12 +1210,10 @@ float AdvancedPressureControl_CompensateZME_Nonlinearity(float desired_pwm) {
  * @brief Sensor kalibrasiyası
  */
 void AdvancedPressureControl_CalibrateSensor(void) {
-    printf("Pressure Sensor Calibration - Starting...\r\n");
     
     // Kalibrasiya məlumatlarını yadda saxla
     g_calibration.calibrated = true;
     
-    printf("Pressure Sensor Calibration - Complete\r\n");
 }
 
 /**
@@ -1500,27 +1222,22 @@ void AdvancedPressureControl_CalibrateSensor(void) {
  * DÜZƏLİŞ: Bu funksiya artıq flash yaddaşdan birbaşa oxuyur (PressureSensor_LoadCalibration() əvəzinə)
  */
 void AdvancedPressureControl_LoadCalibration(void) {
-    printf("Loading pressure sensor calibration from flash...\r\n");
-    
     // Flash memory address for calibration data (offset 0x100 for calibration)
-    uint32_t flash_address = 0x080E0000 + 0x100;  // Last 128KB sector, offset 0x100
+    uint32_t flash_address = 0x080E0000 + 0x100;
     
     // Read calibration data from flash
     typedef struct {
-        uint32_t magic;           // Magic number: 0x12345678
-        float min_voltage;        // 0.5V
-        float max_voltage;        // 5.0V
-        float min_pressure;       // 0.0 bar
-        float max_pressure;       // 300.0 bar
-        uint16_t adc_min;         // 620 (DÜZƏLİŞ: əvvəl 410 idi)
-        uint16_t adc_max;         // 4095 (DÜZƏLİŞ: 12-bit ADC maksimum dəyəri, 4096 deyil!)
-        uint32_t checksum;        // Data integrity check
+        uint32_t magic;
+        float min_voltage;
+        float max_voltage;
+        float min_pressure;
+        float max_pressure;
+        uint16_t adc_min;
+        uint16_t adc_max;
+        uint32_t checksum;
     } calibration_data_t;
     
     calibration_data_t *cal_data = (calibration_data_t*)flash_address;
-    
-    printf("Flash address: 0x%08lX\r\n", (uint32_t)flash_address);
-    printf("Read magic: 0x%08lX (expected: 0x%08lX)\r\n", cal_data->magic, 0x12345678UL);
     
     // Check if calibration data is valid
     if (cal_data->magic == 0x12345678) {
@@ -1532,9 +1249,6 @@ void AdvancedPressureControl_LoadCalibration(void) {
         uint32_t calculated_checksum = 0x12345678 ^ *min_v_ptr ^ *max_v_ptr ^ 
                                       *min_p_ptr ^ *max_p_ptr ^ 
                                       cal_data->adc_min ^ cal_data->adc_max;
-        
-        printf("Read checksum: 0x%08lX, Calculated: 0x%08lX\r\n",
-               cal_data->checksum, calculated_checksum);
         
         if (calculated_checksum == cal_data->checksum) {
             bool cal_ok = AdvancedPressureControl_IsCalibrationRangeValid(
@@ -1560,21 +1274,9 @@ void AdvancedPressureControl_LoadCalibration(void) {
                 g_calibration.calibrated = true;
                 PressureControlConfig_UpdateCalibrationCache(&g_calibration);
                 
-                printf("AdvancedPressureControl: Calibration loaded - ADC: %.0f-%.0f, Pressure: %.2f-%.2f bar, Slope: %.6f, Offset: %.2f\r\n",
-                       g_calibration.adc_min, g_calibration.adc_max, 
-                       g_calibration.pressure_min, g_calibration.pressure_max,
-                       g_calibration.slope, g_calibration.offset);
                 return;  // Successfully loaded calibration
-            } else {
-                printf("WARNING: Invalid calibration values in flash (ADC: %u-%u, Pressure: %.2f-%.2f), using defaults\r\n",
-                       cal_data->adc_min, cal_data->adc_max,
-                       cal_data->min_pressure, cal_data->max_pressure);
             }
-        } else {
-            printf("Checksum mismatch, using defaults\r\n");
         }
-    } else {
-        printf("No valid calibration data found in flash, using defaults\r\n");
     }
     
     // No valid calibration data found - use defaults
@@ -1587,11 +1289,6 @@ void AdvancedPressureControl_LoadCalibration(void) {
     g_calibration.offset = PRESSURE_MIN - (PRESSURE_SLOPE * (float)ADC_MIN);
     g_calibration.calibrated = true;
     PressureControlConfig_UpdateCalibrationCache(&g_calibration);
-    
-    printf("AdvancedPressureControl: Using default calibration - ADC: %.0f-%.0f, Pressure: %.2f-%.2f bar, Slope: %.6f, Offset: %.2f\r\n",
-           g_calibration.adc_min, g_calibration.adc_max, 
-           g_calibration.pressure_min, g_calibration.pressure_max,
-           g_calibration.slope, g_calibration.offset);
 }
 
 /**
@@ -1600,7 +1297,6 @@ void AdvancedPressureControl_LoadCalibration(void) {
  * DÜZƏLİŞ: Bu funksiya artıq flash yaddaşa birbaşa yazır (PressureSensor_SaveCalibration() əvəzinə)
  */
 void AdvancedPressureControl_SaveCalibration(void) {
-    printf("Saving pressure sensor calibration to flash...\r\n");
     
     // Prepare calibration data structure
     typedef struct {
@@ -1988,26 +1684,15 @@ void AdvancedPressureControl_SavePIDParamsToFlash(void) {
  * @brief Load AdvancedPressureControl PID parameters and settings from flash
  */
 void AdvancedPressureControl_LoadPIDParamsFromFlash(void) {
-    printf("Loading AdvancedPressureControl parameters from flash...\r\n");
-    
     // Read data from flash
     Flash_Adv_Config_Data_t *config_data = (Flash_Adv_Config_Data_t*)FLASH_ADV_CONFIG_ADDRESS;
     
-    printf("Flash address: 0x%08X\r\n", (unsigned int)FLASH_ADV_CONFIG_ADDRESS);
-    printf("Read magic: 0x%08X (expected: 0x%08X)\r\n", 
-           (unsigned int)config_data->magic, (unsigned int)FLASH_ADV_CONFIG_MAGIC);
-    
     // Verify magic number
     if (config_data->magic != FLASH_ADV_CONFIG_MAGIC) {
-        printf("No valid AdvancedPressureControl configuration found in flash, using defaults\r\n");
-        // DÜZƏLİŞ: Flash-dan dəyər yoxdursa, default dəyərləri təyin et (Kp=0.100, Ki=0.0000)
         AdvancedPressureControl_SetPIDParams(&g_pid_zme, PID_KP_DEFAULT, PID_KI_DEFAULT, PID_KD_DEFAULT);
         AdvancedPressureControl_SetPIDParams(&g_pid_drv, PID_KP_DEFAULT, PID_KI_DEFAULT, PID_KD_DEFAULT);
-        // KRİTİK DÜZƏLİŞ: ZME base PWM dəyərini də default-a təyin et (26%)
         g_zme_base_pwm = ZME_BASE_PWM_DEFAULT;
         g_drv_base_pwm = DRV_BASE_PWM_DEFAULT;
-        printf("Default PID parameters set: Kp=%.3f, Ki=%.4f, Kd=%.3f, ZME_BASE=%.1f%%, DRV_BASE=%.1f%%\r\n", 
-               PID_KP_DEFAULT, PID_KI_DEFAULT, PID_KD_DEFAULT, g_zme_base_pwm, g_drv_base_pwm);
         return;
     }
     
@@ -2017,19 +1702,11 @@ void AdvancedPressureControl_LoadPIDParamsFromFlash(void) {
         config_data->pid_kd, config_data->target_pressure,
         config_data->zme_base_pwm, config_data->drv_base_pwm);
     
-    printf("Read checksum: 0x%08lX, Calculated: 0x%08lX\r\n",
-           config_data->checksum, calculated_checksum);
-    
     if (calculated_checksum != config_data->checksum) {
-        printf("Checksum mismatch, using defaults\r\n");
-        // DÜZƏLİŞ: Checksum uyğun gəlmirsə, default dəyərləri təyin et (Kp=0.100, Ki=0.0000)
         AdvancedPressureControl_SetPIDParams(&g_pid_zme, PID_KP_DEFAULT, PID_KI_DEFAULT, PID_KD_DEFAULT);
         AdvancedPressureControl_SetPIDParams(&g_pid_drv, PID_KP_DEFAULT, PID_KI_DEFAULT, PID_KD_DEFAULT);
-        // KRİTİK DÜZƏLİŞ: ZME base PWM dəyərini də default-a təyin et (26%)
         g_zme_base_pwm = ZME_BASE_PWM_DEFAULT;
         g_drv_base_pwm = DRV_BASE_PWM_DEFAULT;
-        printf("Default PID parameters set: Kp=%.3f, Ki=%.4f, Kd=%.3f, ZME_BASE=%.1f%%, DRV_BASE=%.1f%%\r\n", 
-               PID_KP_DEFAULT, PID_KI_DEFAULT, PID_KD_DEFAULT, g_zme_base_pwm, g_drv_base_pwm);
         return;
     }
     
@@ -2046,8 +1723,6 @@ void AdvancedPressureControl_LoadPIDParamsFromFlash(void) {
                             (fabsf(config_data->pid_kd - 0.0f) < 0.01f);
     
     if (is_old_default_1 || is_old_default_2) {
-        printf("Old default PID values detected in flash (Kp=%.3f, Ki=%.4f, Kd=%.3f), updating to new defaults\r\n",
-               config_data->pid_kp, config_data->pid_ki, config_data->pid_kd);
         AdvancedPressureControl_SetPIDParams(&g_pid_zme, PID_KP_DEFAULT, PID_KI_DEFAULT, PID_KD_DEFAULT);
         AdvancedPressureControl_SetPIDParams(&g_pid_drv, PID_KP_DEFAULT, PID_KI_DEFAULT, PID_KD_DEFAULT);
     } else {
@@ -2058,59 +1733,34 @@ void AdvancedPressureControl_LoadPIDParamsFromFlash(void) {
     // Load target pressure
     if (config_data->target_pressure > 0.1f && config_data->target_pressure <= 300.0f) {
         AdvancedPressureControl_SetTargetPressure(config_data->target_pressure);
-        printf("Target pressure loaded from flash: %.1f bar\r\n", config_data->target_pressure);
     } else {
-        // Flash-dan etibarlı dəyər yoxdursa, default dəyəri təyin et
         AdvancedPressureControl_SetTargetPressure(70.0f);
-        printf("WARNING: Invalid target_pressure in flash (%.1f), using default 70.0 bar\r\n", 
-               config_data->target_pressure);
     }
     
     // Load base PWM values
-    // KRİTİK DÜZƏLİŞ: Flash-dan köhnə dəyər (20%) yüklənəndə, yeni default dəyəri (26%) istifadə et
     if (config_data->zme_base_pwm >= 0.0f && config_data->zme_base_pwm <= 30.0f) {
-        // Flash-dan dəyər var, amma köhnə default dəyərdirsə (20%), yeni default dəyəri (26%) istifadə et
         if (fabsf(config_data->zme_base_pwm - 20.0f) < 0.1f) {
-            // Köhnə default dəyərdir (20%), yeni default dəyəri (26%) istifadə et
-            g_zme_base_pwm = ZME_BASE_PWM_DEFAULT;  // 26%
-            printf("ZME base PWM updated from old default (20%%) to new default (%.1f%%)\r\n", g_zme_base_pwm);
+            g_zme_base_pwm = ZME_BASE_PWM_DEFAULT;
         } else {
-            // Flash-dan dəyər etibarlıdır və köhnə default deyil, istifadə et
             g_zme_base_pwm = config_data->zme_base_pwm;
         }
     } else {
-        // Flash-dan dəyər etibarsızdırsa, default dəyəri istifadə et (26%)
         g_zme_base_pwm = ZME_BASE_PWM_DEFAULT;
-        printf("Invalid ZME base PWM in flash (%.1f%%), using default: %.1f%%\r\n", 
-               config_data->zme_base_pwm, g_zme_base_pwm);
     }
-    // KRİTİK DÜZƏLİŞ: Flash-dan köhnə dəyər (20%, 26%, 30%, 35% və ya 40%) yüklənəndə, yeni default dəyəri (15%) istifadə et
+    
     if (config_data->drv_base_pwm >= 0.0f && config_data->drv_base_pwm <= 40.0f) {
-        // Flash-dan dəyər var, amma köhnə default dəyərdirsə (20%, 26%, 30%, 35% və ya 40%), yeni default dəyəri (15%) istifadə et
         if (fabsf(config_data->drv_base_pwm - 20.0f) < 0.1f || 
             fabsf(config_data->drv_base_pwm - 26.0f) < 0.1f || 
             fabsf(config_data->drv_base_pwm - 30.0f) < 0.1f ||
             fabsf(config_data->drv_base_pwm - 35.0f) < 0.1f ||
             fabsf(config_data->drv_base_pwm - 40.0f) < 0.1f) {
-            // Köhnə default dəyərdir (20%, 26%, 30%, 35% və ya 40%), yeni default dəyəri (15%) istifadə et
-            g_drv_base_pwm = DRV_BASE_PWM_DEFAULT;  // 15%
-            printf("DRV base PWM updated from old default (%.1f%%) to new default (%.1f%%)\r\n", 
-                   config_data->drv_base_pwm, g_drv_base_pwm);
+            g_drv_base_pwm = DRV_BASE_PWM_DEFAULT;
         } else {
-            // Flash-dan dəyər etibarlıdır və köhnə default deyil, istifadə et
             g_drv_base_pwm = config_data->drv_base_pwm;
         }
     } else {
-        // Flash-dan dəyər etibarsızdırsa, default dəyəri istifadə et (15%)
         g_drv_base_pwm = DRV_BASE_PWM_DEFAULT;
-        printf("Invalid DRV base PWM in flash (%.1f%%), using default: %.1f%%\r\n", 
-               config_data->drv_base_pwm, g_drv_base_pwm);
     }
-    
-    printf("Parameters loaded: Kp=%.3f, Ki=%.3f, Kd=%.3f, SP=%.1f, ZME_BASE=%.1f, DRV_BASE=%.1f\r\n",
-           config_data->pid_kp, config_data->pid_ki,
-           config_data->pid_kd, config_data->target_pressure,
-           config_data->zme_base_pwm, config_data->drv_base_pwm);
 }
 
 /* =========================================================================
