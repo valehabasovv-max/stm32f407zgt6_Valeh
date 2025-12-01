@@ -14,12 +14,12 @@ static uint16_t cal_y_min = 200;
 static uint16_t cal_y_max = 3900;
 
 /* Koordinat çevirmə rejimi */
-/* 0 = Normal
+/* 0 = Normal - touch və LCD eyni istiqamətdə
  * 1 = X və Y dəyişdir, X-i əks et
  * 2 = X və Y-ni əks et
- * 3 = X və Y dəyişdir
+ * 3 = X və Y dəyişdir (swap only) - ən çox işləyən
  */
-static uint8_t coord_mode = 1;  /* Standart: swap + invert X */
+static uint8_t coord_mode = 0;  /* DÜZƏLİŞ: Mode 0-dan başla, kalibrasiya optimal olanı tapacaq */
 
 /* Touch təsdiqi üçün parametrlər */
 #define TOUCH_SAMPLES 8
@@ -69,64 +69,62 @@ static uint8_t use_matrix_calibration = 0;
 /**
  * @brief Default kalibrasiya dəyərlərini yüklə
  * @note 3-nöqtəli kalibrasiya uğursuz olduqda istifadə edilir
- * @note Bütün 4 koordinat modu sınanır və ən yaxşısı seçilir
+ * @note Mode seçimi avtomatik həll edilir
  */
 void XPT2046_LoadDefaultCalibration(void)
 {
     /* Tipik ILI9341 + XPT2046 üçün default dəyərlər */
     /* Bu dəyərlər əksər ekranlar üçün işləyir */
-    /* DÜZƏLİŞ: Daha geniş diapazon - bəzi ekranlarda dəyərlər 200-4000 aralığındadır */
     cal_x_min = 200;
     cal_x_max = 3900;
     cal_y_min = 200;
     cal_y_max = 3900;
     
     /* ============================================
-     * KOORDİNAT MODE SEÇİMİ
+     * KOORDİNAT MODE SEÇİMİ - AVTOMATİK
      * ILI9341 Memory Access Control = 0x28 (landscape, MV=1)
      * 
-     * Mode 0: Normal - əgər touch və LCD eyni orientasiyadadır
-     * Mode 1: Swap X-Y + Invert X - ən çox istifadə olunan
+     * Mode 0: Normal - touch və LCD eyni istiqamətdə
+     * Mode 1: Swap X-Y + Invert X
      * Mode 2: Invert both X and Y - 180° fırlanmış
      * Mode 3: Swap X-Y only - digər landscape variant
      * 
-     * Tipik olaraq Mode 1 və ya Mode 3 işləyir
+     * Default: Mode 0 (ən sadə), sağ üst küncdə dəyişdirmə imkanı var
      * ============================================ */
     
-    /* DÜZƏLİŞ: Default olaraq MODE 3 (Swap X-Y only) sına */
-    /* Bu mode bir çox ILI9341 + XPT2046 kombinasiyası üçün işləyir */
-    coord_mode = 3;  /* DÜZƏLİŞ: Mode 1-dən Mode 3-ə dəyişdirildi */
+    /* Default olaraq MODE 0 - istifadəçi ekranda dəyişdirə bilər */
+    coord_mode = 0;
     
     /* 3-nöqtəli kalibrasiyadan istifadə etmə, köhnə metod istifadə et */
     use_matrix_calibration = 0;
     touch_cal.calibrated = 0;
     
-    printf("XPT2046: Default calibration loaded (fallback)\r\n");
+    printf("XPT2046: Default calibration loaded\r\n");
     printf("  X range: %d - %d\r\n", cal_x_min, cal_x_max);
     printf("  Y range: %d - %d\r\n", cal_y_min, cal_y_max);
-    printf("  Coord mode: %d (0=Normal, 1=SwapInvX, 2=InvBoth, 3=SwapOnly)\r\n", coord_mode);
+    printf("  Coord mode: %d\r\n", coord_mode);
     printf("\r\n");
-    printf("*** Əgər butonlar işləmirsə, coord_mode dəyişdirin:\r\n");
-    printf("    Mode 0: Sol üst = sol üst\r\n");
-    printf("    Mode 1: Sol üst = sağ alt (Swap+InvX)\r\n");
-    printf("    Mode 2: Sol üst = sağ alt (InvBoth)\r\n");
-    printf("    Mode 3: Sol üst = sol alt (SwapOnly) - HAZIRKİ\r\n");
+    printf("*** Butonlar işləmirsə, sağ üst küncə toxunun (mode dəyişdirmə)\r\n");
 }
 
 /**
  * @brief Bütün koordinat modlarını sınaqdan keçir və ən uyğun olanı seç
  * @param raw_x, raw_y: Test üçün raw koordinatlar
  * @param expected_x, expected_y: Gözlənilən ekran koordinatları
- * @return Ən yaxşı koordinat modu (0-3)
+ * @return Ən yaxşı koordinat modu (0-7)
  */
 uint8_t XPT2046_FindBestCoordMode(uint16_t raw_x, uint16_t raw_y,
                                    uint16_t expected_x, uint16_t expected_y)
 {
-    uint8_t best_mode = 1;  /* Default */
-    int32_t best_error = 100000;
+    uint8_t best_mode = 0;  /* Default */
+    int32_t best_error = 1000000;
+    uint8_t old_mode = coord_mode;
     
-    for (uint8_t mode = 0; mode <= 3; mode++) {
-        uint8_t old_mode = coord_mode;
+    printf("Testing all 8 coord modes for raw(%d,%d) -> expected(%d,%d):\r\n",
+           raw_x, raw_y, expected_x, expected_y);
+    
+    /* Bütün 8 modu sına */
+    for (uint8_t mode = 0; mode < 8; mode++) {
         coord_mode = mode;
         
         uint16_t test_sx, test_sy;
@@ -136,18 +134,17 @@ uint8_t XPT2046_FindBestCoordMode(uint16_t raw_x, uint16_t raw_y,
         int32_t dy = (int32_t)test_sy - (int32_t)expected_y;
         int32_t error = dx * dx + dy * dy;
         
-        printf("  Mode %d: got(%d,%d) expected(%d,%d) error=%ld\r\n",
-               mode, test_sx, test_sy, expected_x, expected_y, error);
+        printf("  M%d: (%d,%d) err=%ld\r\n", mode, test_sx, test_sy, error);
         
         if (error < best_error) {
             best_error = error;
             best_mode = mode;
         }
-        
-        coord_mode = old_mode;
     }
     
-    printf("Best coord mode: %d (error=%ld)\r\n", best_mode, best_error);
+    coord_mode = old_mode;  /* Əvvəlki mode-u bərpa et */
+    
+    printf("==> Best mode: %d (error=%ld)\r\n", best_mode, best_error);
     return best_mode;
 }
 
@@ -441,12 +438,12 @@ void XPT2046_ConvertToScreen(uint16_t raw_x, uint16_t raw_y,
     if (y_range <= 0) y_range = 1;
     
     switch (coord_mode) {
-        case 0: /* Normal mapping */
+        case 0: /* Normal - heç bir dəyişiklik */
             sx = ((temp_x - cal_x_min) * 319) / x_range;
             sy = ((temp_y - cal_y_min) * 239) / y_range;
             break;
             
-        case 1: /* Swap X-Y, invert X (ən çox istifadə olunan) */
+        case 1: /* Swap X-Y + Invert X */
             sx = 319 - ((temp_y - cal_y_min) * 319) / y_range;
             sy = ((temp_x - cal_x_min) * 239) / x_range;
             break;
@@ -456,9 +453,29 @@ void XPT2046_ConvertToScreen(uint16_t raw_x, uint16_t raw_y,
             sy = 239 - ((temp_y - cal_y_min) * 239) / y_range;
             break;
             
-        case 3: /* Swap X-Y only - DÜZƏLİŞ: Bu mode çox ekran üçün işləyir */
+        case 3: /* Swap X-Y only */
             sx = ((temp_y - cal_y_min) * 319) / y_range;
             sy = ((temp_x - cal_x_min) * 239) / x_range;
+            break;
+            
+        case 4: /* Invert X only */
+            sx = 319 - ((temp_x - cal_x_min) * 319) / x_range;
+            sy = ((temp_y - cal_y_min) * 239) / y_range;
+            break;
+            
+        case 5: /* Invert Y only */
+            sx = ((temp_x - cal_x_min) * 319) / x_range;
+            sy = 239 - ((temp_y - cal_y_min) * 239) / y_range;
+            break;
+            
+        case 6: /* Swap X-Y + Invert Y */
+            sx = ((temp_y - cal_y_min) * 319) / y_range;
+            sy = 239 - ((temp_x - cal_x_min) * 239) / x_range;
+            break;
+            
+        case 7: /* Swap X-Y + Invert both */
+            sx = 319 - ((temp_y - cal_y_min) * 319) / y_range;
+            sy = 239 - ((temp_x - cal_x_min) * 239) / x_range;
             break;
             
         default:
@@ -518,7 +535,7 @@ void XPT2046_GetCalibration(uint16_t *x_min, uint16_t *x_max,
 
 void XPT2046_SetCoordMode(uint8_t mode)
 {
-    if (mode <= 3) {
+    if (mode <= 7) {  /* 8 mode var (0-7) */
         coord_mode = mode;
         printf("Touch coordinate mode set to: %d\r\n", mode);
     }
