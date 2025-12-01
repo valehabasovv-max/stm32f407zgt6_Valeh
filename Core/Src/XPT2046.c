@@ -199,43 +199,14 @@ void XPT2046_Init(void)
     printf("\r\n=== XPT2046 Touch Controller Init ===\r\n");
     
     /* GPIO saatlarını aktivləşdir */
-    __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
     __HAL_RCC_GPIOF_CLK_ENABLE();
     
     /* ============================================
-     * KRİTİK: SPI1 Hardware-ni TAMAMILƏ deaktiv et!
-     * MX_SPI1_Init() bu pinləri hardware SPI rejiminə qoyub.
-     * Biz bit-bang SPI istifadə etdiyimiz üçün GPIO rejiminə keçirməliyik.
+     * QEYD: Touch kontroller bit-bang SPI istifadə edir
+     * Pinlər: CS=PB12, SCK=PB1, MISO=PF8, MOSI=PF9, IRQ=PF10
+     * Bu pinlər SPI1-dən fərqlidir, ona görə SPI1 deaktiv etmək lazım deyil
      * ============================================ */
-    printf("Disabling SPI1 hardware peripheral...\r\n");
-    
-    /* SPI1 periferalını deaktiv et */
-    __HAL_RCC_SPI1_CLK_ENABLE();  /* Əvvəlcə clock aktiv olmalıdır */
-    
-    /* SPI1-i tamamilə sıfırla */
-    SPI1->CR1 = 0;   /* Control register 1 sıfırla */
-    SPI1->CR2 = 0;   /* Control register 2 sıfırla */
-    
-    __HAL_RCC_SPI1_FORCE_RESET();    /* SPI1-i force reset et */
-    __HAL_RCC_SPI1_RELEASE_RESET();  /* Reset-i burax */
-    __HAL_RCC_SPI1_CLK_DISABLE();    /* SPI1 clock-u söndür */
-    
-    /* GPIO Alternate Function-u sıfırla */
-    /* PA5, PA6 üçün MODER registrini birbaşa dəyişdir */
-    GPIOA->MODER &= ~(GPIO_MODER_MODER5 | GPIO_MODER_MODER6);  /* Input mode */
-    GPIOA->AFR[0] &= ~(0xFFU << 20);  /* PA5 və PA6 üçün AF sıfırla */
-    
-    /* PB5 üçün MODER registrini dəyişdir */
-    GPIOB->MODER &= ~GPIO_MODER_MODER5;  /* Input mode */
-    GPIOB->AFR[0] &= ~(0xFU << 20);  /* PB5 üçün AF sıfırla */
-    
-    /* Əvvəlcə pinləri resetlə */
-    HAL_GPIO_DeInit(GPIOA, GPIO_PIN_5);  /* PA5 - SCK */
-    HAL_GPIO_DeInit(GPIOA, GPIO_PIN_6);  /* PA6 - MISO */
-    HAL_GPIO_DeInit(GPIOB, GPIO_PIN_5);  /* PB5 - MOSI */
-    
-    HAL_Delay(5);  /* Stabilləşmə üçün kiçik gecikmə */
     
     GPIO_InitTypeDef g = {0};
 
@@ -246,21 +217,21 @@ void XPT2046_Init(void)
     g.Pin = TP_CS_Pin;   
     HAL_GPIO_Init(TP_CS_GPIO_Port, &g);
     
-    /* SCK: çıxış (PA5) */
+    /* SCK: çıxış (PB1) */
     g.Mode  = GPIO_MODE_OUTPUT_PP;
     g.Pull  = GPIO_NOPULL;
     g.Speed = GPIO_SPEED_FREQ_HIGH;
     g.Pin = TP_SCK_Pin;  
     HAL_GPIO_Init(TP_SCK_GPIO_Port, &g);
     
-    /* MOSI: çıxış (PB5) */
+    /* MOSI: çıxış (PF9) */
     g.Mode  = GPIO_MODE_OUTPUT_PP;
     g.Pull  = GPIO_NOPULL;
     g.Speed = GPIO_SPEED_FREQ_HIGH;
     g.Pin = TP_MOSI_Pin; 
     HAL_GPIO_Init(TP_MOSI_GPIO_Port, &g);
 
-    /* MISO: giriş (PA6) - pull-up ilə */
+    /* MISO: giriş (PF8) - pull-up ilə */
     g.Mode = GPIO_MODE_INPUT;
     g.Pull = GPIO_PULLUP;
     g.Pin  = TP_MISO_Pin;
@@ -277,7 +248,7 @@ void XPT2046_Init(void)
     HAL_GPIO_WritePin(TP_SCK_GPIO_Port, TP_SCK_Pin, GPIO_PIN_RESET); /* SCK=LOW */
     HAL_GPIO_WritePin(TP_MOSI_GPIO_Port, TP_MOSI_Pin, GPIO_PIN_RESET);
     
-    /* Test communication with XPT2046 */
+    /* XPT2046 ilə kommunikasiya testi */
     HAL_Delay(10);
     
     /* Bir neçə dummy oxuma - XPT2046-nı oyanmaq üçün */
@@ -292,7 +263,7 @@ void XPT2046_Init(void)
     uint8_t irq_state = HAL_GPIO_ReadPin(TP_IRQ_GPIO_Port, TP_IRQ_Pin);
     
     printf("XPT2046 Touch Controller initialized\r\n");
-    printf("Pin config: CS=PB12, SCK=PA5, MISO=PA6, MOSI=PB5, IRQ=PF10\r\n");
+    printf("Pin config: CS=PB12, SCK=PB1, MISO=PF8, MOSI=PF9, IRQ=PF10\r\n");
     printf("Calibration: X[%d-%d], Y[%d-%d], Mode=%d\r\n", 
            cal_x_min, cal_x_max, cal_y_min, cal_y_max, coord_mode);
     printf("IRQ Pin (PF10) state: %s\r\n", irq_state ? "HIGH (ready)" : "LOW (touched or problem)");
