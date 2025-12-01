@@ -74,11 +74,18 @@ void XPT2046_LoadDefaultCalibration(void)
 {
     /* Tipik ILI9341 + XPT2046 üçün default dəyərlər */
     /* Bu dəyərlər əksər ekranlar üçün işləyir */
-    cal_x_min = 200;
-    cal_x_max = 3900;
-    cal_y_min = 200;
-    cal_y_max = 3900;
-    coord_mode = 1;  /* Swap + Invert X - ən çox istifadə olunan */
+    /* DÜZƏLİŞ: Daha geniş diapazon və müxtəlif koordinat modları sınaqdan keçirildi */
+    cal_x_min = 300;
+    cal_x_max = 3800;
+    cal_y_min = 300;
+    cal_y_max = 3800;
+    
+    /* Koordinat mode seçimi - tipik 3.2" TFT ekranlar üçün */
+    /* Mode 0: Normal */
+    /* Mode 1: Swap X-Y + Invert X - ÇOX İSTİFADƏ OLUNAN landscape orientation */
+    /* Mode 2: Invert both X and Y */
+    /* Mode 3: Swap X-Y only */
+    coord_mode = 1;  /* Default: Swap + Invert X */
     
     /* 3-nöqtəli kalibrasiyadan istifadə etmə, köhnə metod istifadə et */
     use_matrix_calibration = 0;
@@ -87,7 +94,45 @@ void XPT2046_LoadDefaultCalibration(void)
     printf("XPT2046: Default calibration loaded (fallback)\r\n");
     printf("  X range: %d - %d\r\n", cal_x_min, cal_x_max);
     printf("  Y range: %d - %d\r\n", cal_y_min, cal_y_max);
-    printf("  Coord mode: %d\r\n", coord_mode);
+    printf("  Coord mode: %d (0=Normal, 1=SwapInvX, 2=InvBoth, 3=SwapOnly)\r\n", coord_mode);
+}
+
+/**
+ * @brief Bütün koordinat modlarını sınaqdan keçir və ən uyğun olanı seç
+ * @param raw_x, raw_y: Test üçün raw koordinatlar
+ * @param expected_x, expected_y: Gözlənilən ekran koordinatları
+ * @return Ən yaxşı koordinat modu (0-3)
+ */
+uint8_t XPT2046_FindBestCoordMode(uint16_t raw_x, uint16_t raw_y,
+                                   uint16_t expected_x, uint16_t expected_y)
+{
+    uint8_t best_mode = 1;  /* Default */
+    int32_t best_error = 100000;
+    
+    for (uint8_t mode = 0; mode <= 3; mode++) {
+        uint8_t old_mode = coord_mode;
+        coord_mode = mode;
+        
+        uint16_t test_sx, test_sy;
+        XPT2046_ConvertToScreen(raw_x, raw_y, &test_sx, &test_sy);
+        
+        int32_t dx = (int32_t)test_sx - (int32_t)expected_x;
+        int32_t dy = (int32_t)test_sy - (int32_t)expected_y;
+        int32_t error = dx * dx + dy * dy;
+        
+        printf("  Mode %d: got(%d,%d) expected(%d,%d) error=%ld\r\n",
+               mode, test_sx, test_sy, expected_x, expected_y, error);
+        
+        if (error < best_error) {
+            best_error = error;
+            best_mode = mode;
+        }
+        
+        coord_mode = old_mode;
+    }
+    
+    printf("Best coord mode: %d (error=%ld)\r\n", best_mode, best_error);
+    return best_mode;
 }
 
 /* =============== AŞAĞI SƏVİYYƏLİ FUNKSİYALAR =============== */
@@ -670,9 +715,100 @@ void XPT2046_SetCalibrationPoint(uint8_t point_idx, uint16_t raw_x, uint16_t raw
 }
 
 /**
+ * @brief Kalibrasiya matrisini yoxla və doğrula
+ * @return 1 uğurlu, 0 uğursuz
+ */
+static uint8_t VerifyCalibrationMatrix(void)
+{
+    /* Test: Məlum raw dəyərləri üçün screen koordinatlarını hesabla */
+    /* Sol üst künc test (cal point 1) */
+    uint16_t test_sx, test_sy;
+    XPT2046_ConvertWithMatrix(touch_cal.raw_x[0], touch_cal.raw_y[0], &test_sx, &test_sy);
+    
+    /* Gözlənilən koordinatlarla müqayisə - 30 piksel tolerans */
+    int16_t dx1 = (int16_t)test_sx - (int16_t)touch_cal.screen_x[0];
+    int16_t dy1 = (int16_t)test_sy - (int16_t)touch_cal.screen_y[0];
+    
+    if (dx1 < -30 || dx1 > 30 || dy1 < -30 || dy1 > 30) {
+        printf("Calibration verification failed for point 1: expected(%d,%d) got(%d,%d)\r\n",
+               touch_cal.screen_x[0], touch_cal.screen_y[0], test_sx, test_sy);
+        return 0;
+    }
+    
+    /* Sağ üst künc test (cal point 2) */
+    XPT2046_ConvertWithMatrix(touch_cal.raw_x[1], touch_cal.raw_y[1], &test_sx, &test_sy);
+    
+    int16_t dx2 = (int16_t)test_sx - (int16_t)touch_cal.screen_x[1];
+    int16_t dy2 = (int16_t)test_sy - (int16_t)touch_cal.screen_y[1];
+    
+    if (dx2 < -30 || dx2 > 30 || dy2 < -30 || dy2 > 30) {
+        printf("Calibration verification failed for point 2: expected(%d,%d) got(%d,%d)\r\n",
+               touch_cal.screen_x[1], touch_cal.screen_y[1], test_sx, test_sy);
+        return 0;
+    }
+    
+    /* Mərkəz alt künc test (cal point 3) */
+    XPT2046_ConvertWithMatrix(touch_cal.raw_x[2], touch_cal.raw_y[2], &test_sx, &test_sy);
+    
+    int16_t dx3 = (int16_t)test_sx - (int16_t)touch_cal.screen_x[2];
+    int16_t dy3 = (int16_t)test_sy - (int16_t)touch_cal.screen_y[2];
+    
+    if (dx3 < -30 || dx3 > 30 || dy3 < -30 || dy3 > 30) {
+        printf("Calibration verification failed for point 3: expected(%d,%d) got(%d,%d)\r\n",
+               touch_cal.screen_x[2], touch_cal.screen_y[2], test_sx, test_sy);
+        return 0;
+    }
+    
+    printf("Calibration verification PASSED!\r\n");
+    return 1;
+}
+
+/**
  * @brief Bütün nöqtələr alındıqdan sonra matrisi hesabla
  */
 void XPT2046_FinishCalibration(void)
 {
     CalculateCalibrationMatrix();
+    
+    /* Matrisi doğrula */
+    if (touch_cal.calibrated && use_matrix_calibration) {
+        if (!VerifyCalibrationMatrix()) {
+            printf("WARNING: Matrix calibration failed verification! Falling back to simple method.\r\n");
+            
+            /* Raw dəyərlərdən sadə kalibrasiya dəyərlərini hesabla */
+            /* X range: raw_x[0] (sol) və raw_x[1] (sağ) arasında */
+            uint16_t min_raw_x = touch_cal.raw_x[0] < touch_cal.raw_x[1] ? touch_cal.raw_x[0] : touch_cal.raw_x[1];
+            uint16_t max_raw_x = touch_cal.raw_x[0] > touch_cal.raw_x[1] ? touch_cal.raw_x[0] : touch_cal.raw_x[1];
+            uint16_t min_raw_y = touch_cal.raw_y[0] < touch_cal.raw_y[2] ? touch_cal.raw_y[0] : touch_cal.raw_y[2];
+            uint16_t max_raw_y = touch_cal.raw_y[0] > touch_cal.raw_y[2] ? touch_cal.raw_y[0] : touch_cal.raw_y[2];
+            
+            /* 10% margin əlavə et */
+            uint16_t x_range = max_raw_x - min_raw_x;
+            uint16_t y_range = max_raw_y - min_raw_y;
+            
+            cal_x_min = min_raw_x > (x_range / 10) ? min_raw_x - (x_range / 10) : 50;
+            cal_x_max = max_raw_x + (x_range / 10);
+            if (cal_x_max > 4050) cal_x_max = 4050;
+            
+            cal_y_min = min_raw_y > (y_range / 10) ? min_raw_y - (y_range / 10) : 50;
+            cal_y_max = max_raw_y + (y_range / 10);
+            if (cal_y_max > 4050) cal_y_max = 4050;
+            
+            /* Koordinat mode-u avtomatik müəyyən et - bütün modları sınaqdan keçir */
+            printf("Testing all coord modes to find best match...\r\n");
+            
+            /* İlk kalibrasiya nöqtəsi ilə test et */
+            coord_mode = XPT2046_FindBestCoordMode(
+                touch_cal.raw_x[0], touch_cal.raw_y[0],
+                touch_cal.screen_x[0], touch_cal.screen_y[0]
+            );
+            
+            /* Matrisi deaktiv et */
+            use_matrix_calibration = 0;
+            touch_cal.calibrated = 0;
+            
+            printf("Fallback calibration: X[%d-%d], Y[%d-%d], Mode=%d\r\n",
+                   cal_x_min, cal_x_max, cal_y_min, cal_y_max, coord_mode);
+        }
+    }
 }

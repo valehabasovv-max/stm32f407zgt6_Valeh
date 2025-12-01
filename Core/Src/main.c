@@ -639,15 +639,22 @@ void Touch_Process(void) {
     uint16_t tx, ty;
     
     if (XPT2046_IsTouched()) {
-        /* Debounce */
+        /* Debounce - daha qısa vaxt */
         uint32_t now = HAL_GetTick();
-        if (g_touch_was_pressed || (now - g_last_touch_time < TOUCH_DEBOUNCE_MS)) {
+        if (g_touch_was_pressed || (now - g_last_touch_time < 150)) {  /* 200ms -> 150ms */
             return;
         }
         
         if (XPT2046_GetScreenCoordinates(&tx, &ty)) {
             g_last_touch_time = now;
             g_touch_was_pressed = 1;
+            
+            /* Debug: Touch koordinatlarını ekranda göstər - yalnız debug üçün */
+            #ifdef TOUCH_DEBUG
+            char debug_str[32];
+            sprintf(debug_str, "T:%d,%d  ", tx, ty);
+            ILI9341_DrawString(250, 5, debug_str, ILI9341_COLOR_YELLOW, COLOR_ACCENT_BLUE, 1);
+            #endif
             
             /* Səhifəyə görə touch işlə */
             switch (g_current_page) {
@@ -677,73 +684,101 @@ void Touch_Process(void) {
 
 /**
  * @brief Əsas ekran touch
+ * @note Buton sahələri genişləndirildi - daha yaxşı toxunma həssaslığı üçün
  */
 void Touch_HandleMain(uint16_t x, uint16_t y) {
     SystemStatus_t* status = AdvancedPressureControl_GetStatus();
     
-    /* Preset düymələri (8-107, 42-115) */
-    if (y >= 42 && y <= 115 && x >= 8 && x <= 107) {
-        int col = (x - 8) / 34;
-        int row = (y - 42) / 38;
+    /* Debug: Touch koordinatlarını serial portdan göstər */
+    printf("Touch Main: x=%d, y=%d\r\n", x, y);
+    
+    /* Preset düymələri - genişləndirilmiş sahə (0-115, 35-125) */
+    if (y >= 35 && y <= 125 && x >= 0 && x <= 115) {
+        int col = (x < 38) ? 0 : ((x < 72) ? 1 : 2);
+        int row = (y < 80) ? 0 : 1;
         int idx = row * 3 + col;
         if (idx >= 0 && idx < 6) {
+            printf("Preset %d selected\r\n", idx);
             g_current_preset = idx;
             AdvancedPressureControl_SetTargetPressure(g_presets[idx]);
             g_needs_redraw = 1;
         }
+        return;
     }
     
-    /* START/STOP düyməsi (10-80, 208-233) */
-    else if (x >= 10 && x <= 80 && y >= 208 && y <= 233) {
-        g_system_running = !g_system_running;
-        status->control_enabled = g_system_running;
-        g_needs_redraw = 1;
-    }
-    
-    /* MENU düyməsi (85-155, 208-233) */
-    else if (x >= 85 && x <= 155 && y >= 208 && y <= 233) {
-        g_current_page = PAGE_MENU;
-        g_needs_redraw = 1;
-    }
-    
-    /* SP- düyməsi (160-195, 208-233) */
-    else if (x >= 160 && x <= 195 && y >= 208 && y <= 233) {
-        float new_sp = status->target_pressure - 10.0f;
-        if (new_sp < 0.0f) new_sp = 0.0f;
-        AdvancedPressureControl_SetTargetPressure(new_sp);
-    }
-    
-    /* SP+ düyməsi (200-235, 208-233) */
-    else if (x >= 200 && x <= 235 && y >= 208 && y <= 233) {
-        float new_sp = status->target_pressure + 10.0f;
-        if (new_sp > 300.0f) new_sp = 300.0f;
-        AdvancedPressureControl_SetTargetPressure(new_sp);
+    /* Alt kontrol düymələri - genişləndirilmiş sahə (y >= 195) */
+    if (y >= 195) {
+        /* START/STOP düyməsi - genişləndirilmiş (0-90, 195-240) */
+        if (x >= 0 && x <= 90) {
+            printf("START/STOP pressed\r\n");
+            g_system_running = !g_system_running;
+            status->control_enabled = g_system_running;
+            g_needs_redraw = 1;
+            return;
+        }
+        
+        /* MENU düyməsi - genişləndirilmiş (80-165, 195-240) */
+        if (x >= 80 && x <= 165) {
+            printf("MENU pressed\r\n");
+            g_current_page = PAGE_MENU;
+            g_needs_redraw = 1;
+            return;
+        }
+        
+        /* SP- düyməsi - genişləndirilmiş (155-205, 195-240) */
+        if (x >= 155 && x <= 205) {
+            printf("SP- pressed\r\n");
+            float new_sp = status->target_pressure - 10.0f;
+            if (new_sp < 0.0f) new_sp = 0.0f;
+            AdvancedPressureControl_SetTargetPressure(new_sp);
+            return;
+        }
+        
+        /* SP+ düyməsi - genişləndirilmiş (195-250, 195-240) */
+        if (x >= 195 && x <= 250) {
+            printf("SP+ pressed\r\n");
+            float new_sp = status->target_pressure + 10.0f;
+            if (new_sp > 300.0f) new_sp = 300.0f;
+            AdvancedPressureControl_SetTargetPressure(new_sp);
+            return;
+        }
     }
 }
 
 /**
  * @brief Menyu ekranı touch
+ * @note Buton sahələri genişləndirildi
  */
 void Touch_HandleMenu(uint16_t x, uint16_t y) {
-    /* SETPOINT (40-280, 45-80) */
-    if (x >= 40 && x <= 280 && y >= 45 && y <= 80) {
+    printf("Touch Menu: x=%d, y=%d\r\n", x, y);
+    
+    /* SETPOINT (0-320, 35-90) - genişləndirilmiş */
+    if (y >= 35 && y <= 90) {
+        printf("SETPOINT pressed\r\n");
         g_current_page = PAGE_SETPOINT;
         g_needs_redraw = 1;
+        return;
     }
-    /* PID TUNE (40-280, 90-125) */
-    else if (x >= 40 && x <= 280 && y >= 90 && y <= 125) {
+    /* PID TUNE (0-320, 80-135) - genişləndirilmiş */
+    if (y >= 80 && y <= 135) {
+        printf("PID TUNE pressed\r\n");
         g_current_page = PAGE_PID_TUNE;
         g_needs_redraw = 1;
+        return;
     }
-    /* CALIBRATION (40-280, 135-170) */
-    else if (x >= 40 && x <= 280 && y >= 135 && y <= 170) {
+    /* CALIBRATION (0-320, 125-180) - genişləndirilmiş */
+    if (y >= 125 && y <= 180) {
+        printf("CALIBRATION pressed\r\n");
         g_current_page = PAGE_CALIBRATION;
         g_needs_redraw = 1;
+        return;
     }
-    /* BACK (40-280, 180-215) */
-    else if (x >= 40 && x <= 280 && y >= 180 && y <= 215) {
+    /* BACK (0-320, 170-240) - genişləndirilmiş */
+    if (y >= 170 && y <= 240) {
+        printf("BACK pressed\r\n");
         g_current_page = PAGE_MAIN;
         g_needs_redraw = 1;
+        return;
     }
 }
 
