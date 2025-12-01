@@ -2075,20 +2075,39 @@ uint8_t ILI9341_RunTouchCalibration(void)
     ILI9341_FillScreen(ILI9341_COLOR_BLACK);
     
     /* Başlıq */
-    ILI9341_DrawString(40, 80, "TOUCH CALIBRATION", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
-    ILI9341_DrawString(30, 110, "Touch anywhere to test", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
-    ILI9341_DrawString(50, 130, "Waiting for touch...", ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 1);
+    ILI9341_DrawString(40, 60, "TOUCH CALIBRATION", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
+    ILI9341_DrawString(20, 100, "Touch screen to calibrate", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
+    ILI9341_DrawString(20, 120, "or wait 5s to skip", ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 1);
+    
+    /* SKIP düyməsi */
+    ILI9341_FillRect(120, 180, 80, 30, ILI9341_COLOR_RED);
+    ILI9341_DrawString(135, 188, "SKIP", ILI9341_COLOR_WHITE, ILI9341_COLOR_RED, 2);
     
     /* ============================================
      * ÖN-TEST: Touch sensorunun işlədiyini yoxla
+     * 5 saniyə gözlə - toxunulmasa skip et
      * ============================================ */
-    printf("Touch sensor test - waiting for any touch...\r\n");
+    printf("Touch sensor test - waiting for any touch (5s to skip)...\r\n");
     
-    uint32_t test_timeout = HAL_GetTick() + 10000;  /* 10 saniyə test */
+    uint32_t test_timeout = HAL_GetTick() + 5000;  /* 5 saniyə - daha qısa */
     uint8_t touch_detected = 0;
     uint16_t test_x = 0, test_y = 0;
+    uint8_t skip_calibration = 0;
     
-    while (!touch_detected && HAL_GetTick() < test_timeout) {
+    /* Geri sayım göstər */
+    int countdown = 5;
+    
+    while (!touch_detected && !skip_calibration && HAL_GetTick() < test_timeout) {
+        /* Geri sayımı yenilə */
+        uint32_t now = HAL_GetTick();
+        int remaining = (int)((test_timeout - now) / 1000) + 1;
+        if (remaining != countdown && remaining >= 0) {
+            countdown = remaining;
+            char cnt_str[16];
+            sprintf(cnt_str, "Skip in %ds  ", countdown);
+            ILI9341_DrawString(110, 140, cnt_str, ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 1);
+        }
+        
         if (XPT2046_IsTouched()) {
             HAL_Delay(30);  /* Debounce */
             if (XPT2046_IsTouched()) {
@@ -2105,19 +2124,40 @@ uint8_t ILI9341_RunTouchCalibration(void)
                     sprintf(coord_msg, "Raw: X=%d Y=%d", test_x, test_y);
                     ILI9341_DrawString(60, 140, coord_msg, ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 1);
                     
-                    HAL_Delay(1500);
+                    HAL_Delay(1000);  /* 1.5s -> 1s */
                     
                     /* Touch buraxılmasını gözlə */
                     while (XPT2046_IsTouched()) {
                         HAL_Delay(10);
                     }
-                    HAL_Delay(300);
+                    HAL_Delay(200);  /* 300ms -> 200ms */
                 } else {
                     printf("Touch IRQ active but no valid coordinates!\r\n");
                 }
             }
         }
         HAL_Delay(50);
+    }
+    
+    /* Timeout oldu - skip et */
+    if (!touch_detected && HAL_GetTick() >= test_timeout) {
+        skip_calibration = 1;
+        printf("Calibration skipped (timeout)\r\n");
+    }
+    
+    if (skip_calibration) {
+        printf("SKIPPING CALIBRATION - Using default values\r\n");
+        
+        ILI9341_FillScreen(ILI9341_COLOR_BLACK);
+        ILI9341_DrawString(60, 80, "SKIPPING...", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 2);
+        ILI9341_DrawString(30, 120, "Using default calibration", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 1);
+        
+        /* Default kalibrasiya dəyərləri yüklə */
+        XPT2046_LoadDefaultCalibration();
+        
+        HAL_Delay(1500);
+        
+        return 1;  /* Skip uğurlu sayılır */
     }
     
     if (!touch_detected) {
@@ -2137,7 +2177,7 @@ uint8_t ILI9341_RunTouchCalibration(void)
         /* Default kalibrasiya dəyərləri yüklə */
         XPT2046_LoadDefaultCalibration();
         
-        HAL_Delay(3000);
+        HAL_Delay(2000);
         
         return 0;
     }
