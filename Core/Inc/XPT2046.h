@@ -22,21 +22,21 @@ extern "C" {
  * 
  * PIN KONFİQURASİYASI:
  *   T_CS   (Chip Select)        -> PB12
- *   T_CLK  (SCK - Serial Clock) -> PA5
- *   T_DO   (MISO)               -> PA6
- *   T_DIN  (MOSI)               -> PB5
+ *   T_CLK  (SCK - Serial Clock) -> PB1
+ *   T_DO   (MISO)               -> PF8
+ *   T_DIN  (MOSI)               -> PF9
  *   T_IRQ  (Interrupt Request)  -> PF10
  */
 #define XPT2046_CS_PIN          GPIO_PIN_12
 #define XPT2046_CS_PORT         GPIOB
 #define XPT2046_IRQ_PIN         GPIO_PIN_10
 #define XPT2046_IRQ_PORT        GPIOF
-#define XPT2046_SCK_PIN         GPIO_PIN_5
-#define XPT2046_SCK_PORT        GPIOA
-#define XPT2046_MISO_PIN        GPIO_PIN_6
-#define XPT2046_MISO_PORT       GPIOA
-#define XPT2046_MOSI_PIN        GPIO_PIN_5
-#define XPT2046_MOSI_PORT       GPIOB
+#define XPT2046_SCK_PIN         GPIO_PIN_1
+#define XPT2046_SCK_PORT        GPIOB
+#define XPT2046_MISO_PIN        GPIO_PIN_8
+#define XPT2046_MISO_PORT       GPIOF
+#define XPT2046_MOSI_PIN        GPIO_PIN_9
+#define XPT2046_MOSI_PORT       GPIOF
 
 /* =============== XPT2046 KOMANDLARI =============== */
 #define XPT2046_CMD_READ_X      0xD0  /* X mövqeyini oxu */

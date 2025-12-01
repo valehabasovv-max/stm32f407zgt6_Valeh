@@ -33,9 +33,9 @@ static uint32_t last_touch_time = 0;
 /* 
  * Hardware qoşulması:
  *   T_CS   (Chip Select)        -> PB12
- *   T_CLK  (SCK - Serial Clock) -> PA5
- *   T_DO   (MISO)               -> PA6
- *   T_DIN  (MOSI)               -> PB5
+ *   T_CLK  (SCK - Serial Clock) -> PB1
+ *   T_DO   (MISO)               -> PF8
+ *   T_DIN  (MOSI)               -> PF9
  *   T_IRQ  (Interrupt Request)  -> PF10
  */
 #define TP_CS_GPIO_Port    XPT2046_CS_PORT
