@@ -272,18 +272,39 @@ void XPT2046_Init(void)
 
 /* =============== TOXUNUŞ ALGILAMA =============== */
 
-/* IRQ pin-i yoxla - 0=toxunmur, 1=toxunur */
+/**
+ * @brief Touch varmı yoxla - GÜCLƏNDİRİLMİŞ
+ * @return 1 = toxunuş var, 0 = toxunuş yox
+ * @note IRQ pin LOW olduqda touch var
+ * @note İki dəfə yoxlama - daha etibarlı
+ */
 uint8_t XPT2046_IsTouched(void)
 {
-    /* IRQ pin LOW olmalıdır (toxunuşda aşağı çəkilir) */
-    return (HAL_GPIO_ReadPin(TP_IRQ_GPIO_Port, TP_IRQ_Pin) == GPIO_PIN_RESET) ? 1U : 0U;
+    /* İlk yoxlama */
+    if (HAL_GPIO_ReadPin(TP_IRQ_GPIO_Port, TP_IRQ_Pin) != GPIO_PIN_RESET) {
+        return 0;  /* Touch yox */
+    }
+    
+    /* Kiçik gecikmə və ikinci yoxlama - debounce */
+    for (volatile int i = 0; i < 50; i++) __NOP();
+    
+    /* İkinci yoxlama */
+    if (HAL_GPIO_ReadPin(TP_IRQ_GPIO_Port, TP_IRQ_Pin) != GPIO_PIN_RESET) {
+        return 0;  /* Səhv alarm - touch yox */
+    }
+    
+    return 1;  /* Touch var */
 }
 
-/* Çoxlu nümunə ilə raw koordinatları oxu */
+/**
+ * @brief Raw touch koordinatlarını oxu - GÜCLƏNDİRİLMİŞ
+ * @param x, y: Raw koordinatlar üçün pointer
+ * @return 1 = uğurlu, 0 = xəta
+ * @note Median filtrasiya ilə səs-küyü azaldır
+ */
 uint8_t XPT2046_ReadRaw(uint16_t *x, uint16_t *y)
 {
     if (!x || !y) return 0;
-    if (!XPT2046_IsTouched()) return 0;
 
     uint16_t x_samples[TOUCH_SAMPLES];
     uint16_t y_samples[TOUCH_SAMPLES];
@@ -306,21 +327,24 @@ uint8_t XPT2046_ReadRaw(uint16_t *x, uint16_t *y)
         HAL_GPIO_WritePin(TP_CS_GPIO_Port, TP_CS_Pin, GPIO_PIN_SET);
         tp_delay();
         
-        /* Daha geniş diapazon qəbul et (50-4050 arası) */
-        /* Ekran kənarlarında dəyərlər daha aşağı/yüksək ola bilər */
-        if (rx > 50 && rx < 4050 && ry > 50 && ry < 4050) {
+        /* Çox geniş diapazon qəbul et - bütün etibarlı dəyərlər */
+        if (rx > 100 && rx < 4000 && ry > 100 && ry < 4000) {
             x_samples[valid_samples] = rx;
             y_samples[valid_samples] = ry;
             valid_samples++;
         }
     }
     
-    /* Ən azı 2 etibarlı nümunə kifayətdir (daha az sərt) */
-    if (valid_samples < 2) {
-        if (debug_mode) {
-            printf("XPT2046: Not enough valid samples (%d)\r\n", valid_samples);
-        }
+    /* Ən azı 1 etibarlı nümunə kifayətdir */
+    if (valid_samples < 1) {
         return 0;
+    }
+    
+    /* Əgər 1 nümunə varsa, birbaşa istifadə et */
+    if (valid_samples == 1) {
+        *x = x_samples[0];
+        *y = y_samples[0];
+        return 1;
     }
     
     /* Bubble sort ilə median tap */
@@ -374,6 +398,12 @@ uint16_t XPT2046_ReadZ(void)
 
 /* =============== KOORDİNAT ÇEVİRMƏ =============== */
 
+/**
+ * @brief Raw touch koordinatlarını ekran koordinatlarına çevir
+ * @param raw_x, raw_y: Raw touch koordinatları
+ * @param screen_x, screen_y: Ekran koordinatları üçün pointer
+ * @note coord_mode dəyişəninə görə çevirmə aparılır
+ */
 void XPT2046_ConvertToScreen(uint16_t raw_x, uint16_t raw_y, 
                              uint16_t *screen_x, uint16_t *screen_y)
 {
@@ -382,10 +412,6 @@ void XPT2046_ConvertToScreen(uint16_t raw_x, uint16_t raw_y,
     /* 3-nöqtəli kalibrasiya aktiv olduqda matris istifadə et */
     if (touch_cal.calibrated && use_matrix_calibration) {
         XPT2046_ConvertWithMatrix(raw_x, raw_y, screen_x, screen_y);
-        
-        /* Debug çıxışı - HƏMİŞƏ aktiv */
-        printf("Touch: raw(%d,%d) -> screen(%d,%d) [matrix]\r\n", 
-               raw_x, raw_y, *screen_x, *screen_y);
         return;
     }
     
@@ -393,7 +419,7 @@ void XPT2046_ConvertToScreen(uint16_t raw_x, uint16_t raw_y,
     int32_t temp_x = raw_x;
     int32_t temp_y = raw_y;
     
-    /* Kalibrasiya limitlərini tətbiq et - daha geniş diapazon */
+    /* Kalibrasiya limitlərini tətbiq et */
     if (temp_x < (int32_t)cal_x_min) temp_x = cal_x_min;
     if (temp_x > (int32_t)cal_x_max) temp_x = cal_x_max;
     if (temp_y < (int32_t)cal_y_min) temp_y = cal_y_min;
@@ -409,7 +435,7 @@ void XPT2046_ConvertToScreen(uint16_t raw_x, uint16_t raw_y,
     if (y_range <= 0) y_range = 1;
     
     switch (coord_mode) {
-        case 0: /* Normal - heç bir dəyişiklik */
+        case 0: /* Normal */
             sx = ((temp_x - cal_x_min) * 319) / x_range;
             sy = ((temp_y - cal_y_min) * 239) / y_range;
             break;
@@ -463,10 +489,6 @@ void XPT2046_ConvertToScreen(uint16_t raw_x, uint16_t raw_y,
     
     *screen_x = (uint16_t)sx;
     *screen_y = (uint16_t)sy;
-    
-    /* Debug çıxışı - HƏMİŞƏ aktiv (problemi həll etmək üçün) */
-    printf("Touch: raw(%d,%d) -> screen(%d,%d) mode=%d\r\n", 
-           raw_x, raw_y, *screen_x, *screen_y, coord_mode);
 }
 
 /* Ekran koordinatlarını birbaşa al */
