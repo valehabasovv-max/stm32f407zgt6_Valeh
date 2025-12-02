@@ -7,11 +7,11 @@
 #include <stdio.h>
 
 /* =============== KALİBRASİYA DƏYƏRLƏRİ =============== */
-/* Bu dəyərlər ekranınıza görə dəyişdirilməlidir */
+/* İstifadəçinin işləyən kodundan götürülüb */
 static uint16_t cal_x_min = 200;
-static uint16_t cal_x_max = 3900;
+static uint16_t cal_x_max = 3800;
 static uint16_t cal_y_min = 200;
-static uint16_t cal_y_max = 3900;
+static uint16_t cal_y_max = 3800;
 
 /* Koordinat çevirmə rejimi */
 /* 0 = Normal - touch və LCD eyni istiqamətdə
@@ -73,12 +73,11 @@ static uint8_t use_matrix_calibration = 0;
  */
 void XPT2046_LoadDefaultCalibration(void)
 {
-    /* Tipik ILI9341 + XPT2046 üçün default dəyərlər */
-    /* Bu dəyərlər əksər ekranlar üçün işləyir */
+    /* İstifadəçinin işləyən kodundan götürülmüş dəyərlər */
     cal_x_min = 200;
-    cal_x_max = 3900;
+    cal_x_max = 3800;
     cal_y_min = 200;
-    cal_y_max = 3900;
+    cal_y_max = 3800;
     
     /* ============================================
      * KOORDİNAT MODE SEÇİMİ - AVTOMATİK
@@ -151,9 +150,9 @@ uint8_t XPT2046_FindBestCoordMode(uint16_t raw_x, uint16_t raw_y,
 /* =============== AŞAĞI SƏVİYYƏLİ FUNKSİYALAR =============== */
 
 /* Kiçik gecikmə - SCK üçün stabil kənar */
-/* STM32F407 168MHz-də təxminən 1us gecikmə */
+/* İstifadəçinin işləyən kodundan - 30 NOP kifayətdir */
 static inline void tp_delay(void) { 
-    for(volatile int i = 0; i < 100; i++) __NOP(); 
+    for(volatile int i = 0; i < 30; i++) __NOP(); 
 }
 
 /* Bit-bang SPI transfer (MSB-first) */
