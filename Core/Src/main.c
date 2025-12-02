@@ -649,6 +649,11 @@ void Screen_Update(void) {
 
 /* =============== TOUCH İDARƏETMƏSİ =============== */
 
+/* Debug göstərici üçün dəyişənlər */
+static uint16_t g_last_raw_x = 0, g_last_raw_y = 0;
+static uint16_t g_last_screen_x = 0, g_last_screen_y = 0;
+static uint8_t g_show_debug = 1;  /* Debug göstəricisi aktiv */
+
 /**
  * @brief Touch işləmə - SADƏLƏŞDİRİLMİŞ VƏ ETİBARLI VERSİYA
  * @note Butonların düzgün işləməsi üçün optimallaşdırılmış
@@ -682,12 +687,32 @@ void Touch_Process(void) {
     /* Screen koordinatlarına çevir */
     XPT2046_ConvertToScreen(raw_x, raw_y, &tx, &ty);
     
+    /* Debug üçün saxla */
+    g_last_raw_x = raw_x;
+    g_last_raw_y = raw_y;
+    g_last_screen_x = tx;
+    g_last_screen_y = ty;
+    
     /* Touch qeydiyyatı */
     g_last_touch_time = now;
     g_touch_was_pressed = 1;
     
     /* Debug: Koordinatları serial portda göstər */
-    printf("TOUCH: screen(%d,%d) raw(%d,%d) page=%d\r\n", tx, ty, raw_x, raw_y, g_current_page);
+    printf("TOUCH: screen(%d,%d) raw(%d,%d) mode=%d page=%d\r\n", 
+           tx, ty, raw_x, raw_y, XPT2046_GetCoordMode(), g_current_page);
+    
+    /* Vizual debug: Əsas ekranda koordinatları göstər */
+    if (g_current_page == PAGE_MAIN && g_show_debug) {
+        char dbg[40];
+        /* Köhnə yazını sil */
+        ILI9341_FillRect(115, 125, 90, 25, COLOR_BG_DARK);
+        /* Raw koordinatları göstər */
+        sprintf(dbg, "R:%d,%d", raw_x, raw_y);
+        ILI9341_DrawString(115, 125, dbg, COLOR_TEXT_GREY, COLOR_BG_DARK, 1);
+        /* Screen koordinatları göstər */
+        sprintf(dbg, "S:%d,%d M%d", tx, ty, XPT2046_GetCoordMode());
+        ILI9341_DrawString(115, 138, dbg, ILI9341_COLOR_CYAN, COLOR_BG_DARK, 1);
+    }
     
     /* Səhifəyə görə touch işlə */
     switch (g_current_page) {
@@ -721,12 +746,36 @@ void Touch_HandleMain(uint16_t x, uint16_t y) {
     printf("Touch Main: x=%d, y=%d\r\n", x, y);
     
     /* ============================================
-     * ALT PANEL - KONTROL DÜYMƏLƏRİ (y > 190)
-     * Bu zona ən vacibdir - y > 190 pixel
+     * BAŞLIQ PANELI - MODE DƏYİŞDİRMƏ (y < 25)
+     * Sol künc (<) = mode azalt, Sağ künc (>) = mode artır
      * ============================================ */
-    if (y > 190) {
+    if (y < 30) {
+        uint8_t mode = XPT2046_GetCoordMode();
+        
+        if (x < 50) {
+            /* Sol künc - mode azalt */
+            mode = (mode > 0) ? (mode - 1) : 7;
+            XPT2046_SetCoordMode(mode);
+            printf(">>> MODE DOWN: %d\r\n", mode);
+            g_needs_redraw = 1;
+        }
+        else if (x > 270) {
+            /* Sağ künc - mode artır */
+            mode = (mode < 7) ? (mode + 1) : 0;
+            XPT2046_SetCoordMode(mode);
+            printf(">>> MODE UP: %d\r\n", mode);
+            g_needs_redraw = 1;
+        }
+        return;
+    }
+    
+    /* ============================================
+     * ALT PANEL - KONTROL DÜYMƏLƏRİ (y > 195)
+     * Buton mövqeləri: START(10-80), MENU(85-155), SP-(160-195), SP+(200-235)
+     * ============================================ */
+    if (y > 195) {
         /* START/STOP düyməsi (x: 10-80) */
-        if (x < 90) {
+        if (x >= 5 && x < 85) {
             printf(">>> START/STOP\r\n");
             g_system_running = !g_system_running;
             status->control_enabled = g_system_running;
@@ -735,7 +784,7 @@ void Touch_HandleMain(uint16_t x, uint16_t y) {
         }
         
         /* MENU düyməsi (x: 85-155) */
-        if (x >= 70 && x < 170) {
+        if (x >= 85 && x < 160) {
             printf(">>> MENU\r\n");
             g_current_page = PAGE_MENU;
             g_needs_redraw = 1;
@@ -743,7 +792,7 @@ void Touch_HandleMain(uint16_t x, uint16_t y) {
         }
         
         /* SP- düyməsi (x: 160-195) */
-        if (x >= 150 && x < 210) {
+        if (x >= 160 && x < 200) {
             printf(">>> SP-\r\n");
             float new_sp = status->target_pressure - 10.0f;
             if (new_sp < 0.0f) new_sp = 0.0f;
@@ -753,7 +802,7 @@ void Touch_HandleMain(uint16_t x, uint16_t y) {
         }
         
         /* SP+ düyməsi (x: 200-235) */
-        if (x >= 190) {
+        if (x >= 200 && x < 250) {
             printf(">>> SP+\r\n");
             float new_sp = status->target_pressure + 10.0f;
             if (new_sp > 300.0f) new_sp = 300.0f;
@@ -795,6 +844,27 @@ void Touch_HandleMain(uint16_t x, uint16_t y) {
  */
 void Touch_HandleMenu(uint16_t x, uint16_t y) {
     printf("Touch Menu: x=%d, y=%d\r\n", x, y);
+    
+    /* ============================================
+     * BAŞLIQ - MODE DƏYİŞDİRMƏ (y < 35)
+     * ============================================ */
+    if (y < 35) {
+        uint8_t mode = XPT2046_GetCoordMode();
+        
+        if (x < 50) {
+            mode = (mode > 0) ? (mode - 1) : 7;
+            XPT2046_SetCoordMode(mode);
+            printf(">>> MODE DOWN: %d\r\n", mode);
+            g_needs_redraw = 1;
+        }
+        else if (x > 270) {
+            mode = (mode < 7) ? (mode + 1) : 0;
+            XPT2046_SetCoordMode(mode);
+            printf(">>> MODE UP: %d\r\n", mode);
+            g_needs_redraw = 1;
+        }
+        return;
+    }
     
     /* ============================================
      * MENYU DÜYMƏLƏRİ - Y KOORDINATINA GÖRƏ
