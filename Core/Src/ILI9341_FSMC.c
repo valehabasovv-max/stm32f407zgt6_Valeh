@@ -1410,7 +1410,8 @@ void ILI9341_HandlePressureControlTouch(void)
                     /* Clean touch handling - no debug clutter */
                     
                     /* CAL MIN button - larger button */
-                    if (screen_x >= 20 && screen_x <= 110 && screen_y >= 190 && screen_y <= 230) {
+                    /* DÜZƏLİŞ: y koordinatı 190-230 → 200-240 (buton y=200-də çəkilir, hündürlük=40) */
+                    if (screen_x >= 20 && screen_x <= 110 && screen_y >= 200 && screen_y <= 240) {
                         /* KRİTİK DÜZƏLİŞ: ADC oxunması PID sistemindən götürülür - ADC bloklanması yoxdur */
                         /* PID sistemi hər 10ms-də bir ADC oxuyur və Status strukturuna yazır */
                         SystemStatus_t* cal_status = AdvancedPressureControl_GetStatus();
@@ -1438,7 +1439,8 @@ void ILI9341_HandlePressureControlTouch(void)
                         ILI9341_ShowPressureCalibrationPage(); /* Refresh page */
                     }
                     /* CAL MAX button - larger button */
-                    else if (screen_x >= 120 && screen_x <= 210 && screen_y >= 190 && screen_y <= 230) {
+                    /* DÜZƏLİŞ: y koordinatı 190-230 → 200-240 (buton y=200-də çəkilir, hündürlük=40) */
+                    else if (screen_x >= 120 && screen_x <= 210 && screen_y >= 200 && screen_y <= 240) {
                         /* KRİTİK DÜZƏLİŞ: ADC oxunması PID sistemindən götürülür - ADC bloklanması yoxdur */
                         /* PID sistemi hər 10ms-də bir ADC oxuyur və Status strukturuna yazır */
                         SystemStatus_t* cal_status = AdvancedPressureControl_GetStatus();
@@ -1467,7 +1469,8 @@ void ILI9341_HandlePressureControlTouch(void)
                         ILI9341_ShowPressureCalibrationPage(); /* Refresh page */
                     }
                     /* SAVE button - larger button */
-                    else if (screen_x >= 220 && screen_x <= 310 && screen_y >= 190 && screen_y <= 230) {
+                    /* DÜZƏLİŞ: y koordinatı 190-230 → 200-240 (buton y=200-də çəkilir, hündürlük=40) */
+                    else if (screen_x >= 220 && screen_x <= 310 && screen_y >= 200 && screen_y <= 240) {
                         /* DÜZƏLİŞ: Advanced sistem kalibrləmə funksiyasını istifadə et */
                         // UI-dan kalibrləmə dəyərlərini Advanced sistemə ötür
                         extern uint16_t adc_min, adc_max;
@@ -1506,7 +1509,8 @@ void ILI9341_HandlePressureControlTouch(void)
                         ILI9341_ShowMenuPage();
                     }
                     /* Back button - larger button */
-                    else if (screen_x >= 20 && screen_x <= 110 && screen_y >= 240 && screen_y <= 280) {
+                    /* DÜZƏLİŞ: y koordinatı 240-280 → 250-290 (buton y=250-də çəkilir, hündürlük=40) */
+                    else if (screen_x >= 20 && screen_x <= 110 && screen_y >= 250 && screen_y <= 290) {
                         ILI9341_ShowMenuPage();
                     }
                     break;
