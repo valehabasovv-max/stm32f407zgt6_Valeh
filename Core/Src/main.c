@@ -653,6 +653,7 @@ void Screen_Update(void) {
 static uint16_t g_last_raw_x = 0, g_last_raw_y = 0;
 static uint16_t g_last_screen_x = 0, g_last_screen_y = 0;
 static uint8_t g_show_debug = 1;  /* Debug göstəricisi aktiv */
+static uint8_t g_last_button_hit = 0;  /* Son basılan buton */
 
 /**
  * @brief Touch işləmə - SADƏLƏŞDİRİLMİŞ VƏ ETİBARLI VERSİYA
@@ -737,13 +738,28 @@ void Touch_Process(void) {
 }
 
 /**
- * @brief Əsas ekran touch - SADƏLƏŞDİRİLMİŞ VƏ ETİBARLI
- * @note Buton zonaları genişləndirilmiş - daha yaxşı toxunuş algılama
+ * @brief Əsas ekran touch - GÜCLƏNDİRİLMİŞ DEBUG İLƏ
+ * @note Buton zonaları genişləndirilmiş + vizual feedback
  */
 void Touch_HandleMain(uint16_t x, uint16_t y) {
     SystemStatus_t* status = AdvancedPressureControl_GetStatus();
     
     printf("Touch Main: x=%d, y=%d\r\n", x, y);
+    
+    /* DEBUG: Toxunuş nöqtəsini qırmızı ilə göstər */
+    if (g_show_debug) {
+        /* Köhnə nöqtəni sil (əgər varsa) */
+        static uint16_t prev_x = 0, prev_y = 0;
+        if (prev_x != 0 || prev_y != 0) {
+            ILI9341_FillRect(prev_x - 2, prev_y - 2, 5, 5, COLOR_BG_DARK);
+        }
+        /* Yeni nöqtəni çək */
+        if (x >= 2 && x <= 317 && y >= 2 && y <= 237) {
+            ILI9341_FillRect(x - 2, y - 2, 5, 5, ILI9341_COLOR_RED);
+            prev_x = x;
+            prev_y = y;
+        }
+    }
     
     /* ============================================
      * BAŞLIQ PANELI - MODE DƏYİŞDİRMƏ (y < 25)
@@ -752,61 +768,67 @@ void Touch_HandleMain(uint16_t x, uint16_t y) {
     if (y < 30) {
         uint8_t mode = XPT2046_GetCoordMode();
         
-        if (x < 50) {
+        if (x < 60) {
             /* Sol künc - mode azalt */
             mode = (mode > 0) ? (mode - 1) : 7;
             XPT2046_SetCoordMode(mode);
             printf(">>> MODE DOWN: %d\r\n", mode);
+            g_last_button_hit = 1;
             g_needs_redraw = 1;
         }
-        else if (x > 270) {
+        else if (x > 260) {
             /* Sağ künc - mode artır */
             mode = (mode < 7) ? (mode + 1) : 0;
             XPT2046_SetCoordMode(mode);
             printf(">>> MODE UP: %d\r\n", mode);
+            g_last_button_hit = 2;
             g_needs_redraw = 1;
         }
         return;
     }
     
     /* ============================================
-     * ALT PANEL - KONTROL DÜYMƏLƏRİ (y > 195)
-     * Buton mövqeləri: START(10-80), MENU(85-155), SP-(160-195), SP+(200-235)
+     * ALT PANEL - KONTROL DÜYMƏLƏRİ (y > 190)
+     * Buton mövqeləri genişləndirilmiş
      * ============================================ */
-    if (y > 195) {
-        /* START/STOP düyməsi (x: 10-80) */
-        if (x >= 5 && x < 85) {
+    if (y > 190) {
+        /* START/STOP düyməsi (x: 0-90) */
+        if (x < 90) {
             printf(">>> START/STOP\r\n");
             g_system_running = !g_system_running;
             status->control_enabled = g_system_running;
+            g_last_button_hit = 3;
             g_needs_redraw = 1;
             return;
         }
         
-        /* MENU düyməsi (x: 85-155) */
-        if (x >= 85 && x < 160) {
+        /* MENU düyməsi (x: 90-165) */
+        if (x >= 90 && x < 165) {
             printf(">>> MENU\r\n");
             g_current_page = PAGE_MENU;
+            g_last_button_hit = 4;
             g_needs_redraw = 1;
             return;
         }
         
-        /* SP- düyməsi (x: 160-195) */
-        if (x >= 160 && x < 200) {
+        /* SP- düyməsi (x: 165-205) */
+        if (x >= 165 && x < 205) {
             printf(">>> SP-\r\n");
             float new_sp = status->target_pressure - 10.0f;
             if (new_sp < 0.0f) new_sp = 0.0f;
             AdvancedPressureControl_SetTargetPressure(new_sp);
+            g_last_button_hit = 5;
             g_needs_redraw = 1;
             return;
         }
         
-        /* SP+ düyməsi (x: 200-235) */
-        if (x >= 200 && x < 250) {
+        /* SP+ düyməsi (x: 205-250) */
+        if (x >= 205 && x < 250) {
             printf(">>> SP+\r\n");
             float new_sp = status->target_pressure + 10.0f;
             if (new_sp > 300.0f) new_sp = 300.0f;
             AdvancedPressureControl_SetTargetPressure(new_sp);
+            g_last_button_hit = 6;
             g_needs_redraw = 1;
             return;
         }
@@ -814,12 +836,12 @@ void Touch_HandleMain(uint16_t x, uint16_t y) {
     }
     
     /* ============================================
-     * PRESET DÜYMƏLƏRİ - SOL PANEL (x < 115, y: 25-120)
-     * 3x2 grid - hər düymə ~34x38 pixel
+     * PRESET DÜYMƏLƏRİ - SOL PANEL (x < 120, y: 25-125)
+     * 3x2 grid - genişləndirilmiş zonalar
      * ============================================ */
-    if (x < 115 && y >= 25 && y < 125) {
-        int col = x / 38;        /* 0, 1 və ya 2 */
-        int row = (y - 25) / 45; /* 0 və ya 1 */
+    if (x < 120 && y >= 25 && y < 130) {
+        int col = x / 40;        /* 0, 1 və ya 2 */
+        int row = (y - 25) / 50; /* 0 və ya 1 */
         
         if (col > 2) col = 2;
         if (row > 1) row = 1;
@@ -829,13 +851,25 @@ void Touch_HandleMain(uint16_t x, uint16_t y) {
             printf(">>> PRESET %d (%.0f bar)\r\n", idx, g_presets[idx]);
             g_current_preset = idx;
             AdvancedPressureControl_SetTargetPressure(g_presets[idx]);
+            g_last_button_hit = 10 + idx;
             g_needs_redraw = 1;
         }
         return;
     }
     
-    /* Digər zonalara toxunuş - heç nə etmə */
+    /* Digər zonalara toxunuş - koordinatları göstər */
     printf("Touch outside buttons: x=%d, y=%d\r\n", x, y);
+    g_last_button_hit = 0;
+    
+    /* DEBUG: Koordinat məlumatını ekranda göstər */
+    if (g_show_debug) {
+        char dbg[32];
+        ILI9341_FillRect(115, 125, 95, 30, COLOR_BG_DARK);
+        sprintf(dbg, "X:%d Y:%d", x, y);
+        ILI9341_DrawString(115, 125, dbg, ILI9341_COLOR_MAGENTA, COLOR_BG_DARK, 1);
+        sprintf(dbg, "BTN:%d M:%d", g_last_button_hit, XPT2046_GetCoordMode());
+        ILI9341_DrawString(115, 140, dbg, ILI9341_COLOR_CYAN, COLOR_BG_DARK, 1);
+    }
 }
 
 /**
