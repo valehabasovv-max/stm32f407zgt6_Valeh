@@ -2063,40 +2063,56 @@ void ILI9341_DrawCalibrationTarget(uint16_t x, uint16_t y, uint16_t color)
 }
 
 /**
- * @brief 3-NÖQTƏLİ touch kalibrasiya - TAM VERSİYA
- * @note Sol-üst, sağ-üst və sol-alt künclərdə kalibrasiya
+ * @brief 4-NÖQTƏLİ touch kalibrasiya - BÜTÜN KÜNCLƏR
+ * @note Sol-üst, sağ-üst, sol-alt, sağ-alt - 4 küncdə kalibrasiya
  * @return 1 uğurlu, 0 xəta
  */
 uint8_t ILI9341_RunTouchCalibration(void)
 {
-    printf("=== 3-POINT TOUCH CALIBRATION ===\r\n");
+    printf("=== 4-POINT TOUCH CALIBRATION ===\r\n");
     
-    /* Kalibrasiya nöqtələri - ekran küncləri */
+    /* Kalibrasiya nöqtələri - ekranın 4 küncü */
     /* Ekran: 320x240 (landscape) */
-    const uint16_t cal_screen_x[3] = {30, 290, 30};    /* Sol-üst, Sağ-üst, Sol-alt */
-    const uint16_t cal_screen_y[3] = {30, 30, 210};
-    const char* cal_labels[3] = {"TOP-LEFT", "TOP-RIGHT", "BOTTOM-LEFT"};
+    /* Künc nöqtələri - kənardan 20 piksel içəridə */
+    const uint16_t cal_screen_x[4] = {20, 300, 20, 300};   /* Sol-üst, Sağ-üst, Sol-alt, Sağ-alt */
+    const uint16_t cal_screen_y[4] = {20, 20, 220, 220};
+    const char* cal_labels[4] = {"TOP-LEFT", "TOP-RIGHT", "BOTTOM-LEFT", "BOTTOM-RIGHT"};
     
-    uint16_t cal_raw_x[3] = {0, 0, 0};
-    uint16_t cal_raw_y[3] = {0, 0, 0};
+    uint16_t cal_raw_x[4] = {0, 0, 0, 0};
+    uint16_t cal_raw_y[4] = {0, 0, 0, 0};
     uint8_t cal_success = 1;
     
     /* Hər nöqtə üçün kalibrasiya */
-    for (int point = 0; point < 3; point++) {
+    for (int point = 0; point < 4; point++) {
         ILI9341_FillScreen(ILI9341_COLOR_BLACK);
         
         /* Başlıq */
-        ILI9341_DrawString(50, 100, "Touch the RED dot", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 1);
+        ILI9341_DrawString(40, 100, "Touch the RED dot", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
         
         char info[32];
-        sprintf(info, "Point %d/3: %s", point + 1, cal_labels[point]);
-        ILI9341_DrawString(50, 120, info, ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
+        sprintf(info, "Point %d/4: %s", point + 1, cal_labels[point]);
+        ILI9341_DrawString(60, 130, info, ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
         
-        /* Hədəf nöqtəni çək */
+        /* Hədəf nöqtəni çək - böyük və görünən */
         ILI9341_DrawCalibrationTarget(cal_screen_x[point], cal_screen_y[point], ILI9341_COLOR_RED);
         
-        /* Touch gözlə - 10 saniyə timeout */
-        uint32_t timeout = HAL_GetTick() + 10000;
+        /* Əlavə: kənardan xətt çək ki, künc görünsün */
+        if (point == 0) { /* Sol-üst */
+            ILI9341_DrawLine(0, cal_screen_y[point], cal_screen_x[point] - 15, cal_screen_y[point], ILI9341_COLOR_YELLOW);
+            ILI9341_DrawLine(cal_screen_x[point], 0, cal_screen_x[point], cal_screen_y[point] - 15, ILI9341_COLOR_YELLOW);
+        } else if (point == 1) { /* Sağ-üst */
+            ILI9341_DrawLine(cal_screen_x[point] + 15, cal_screen_y[point], 319, cal_screen_y[point], ILI9341_COLOR_YELLOW);
+            ILI9341_DrawLine(cal_screen_x[point], 0, cal_screen_x[point], cal_screen_y[point] - 15, ILI9341_COLOR_YELLOW);
+        } else if (point == 2) { /* Sol-alt */
+            ILI9341_DrawLine(0, cal_screen_y[point], cal_screen_x[point] - 15, cal_screen_y[point], ILI9341_COLOR_YELLOW);
+            ILI9341_DrawLine(cal_screen_x[point], cal_screen_y[point] + 15, cal_screen_x[point], 239, ILI9341_COLOR_YELLOW);
+        } else { /* Sağ-alt */
+            ILI9341_DrawLine(cal_screen_x[point] + 15, cal_screen_y[point], 319, cal_screen_y[point], ILI9341_COLOR_YELLOW);
+            ILI9341_DrawLine(cal_screen_x[point], cal_screen_y[point] + 15, cal_screen_x[point], 239, ILI9341_COLOR_YELLOW);
+        }
+        
+        /* Touch gözlə - 15 saniyə timeout */
+        uint32_t timeout = HAL_GetTick() + 15000;
         uint8_t got_touch = 0;
         uint16_t raw_x = 0, raw_y = 0;
         
@@ -2104,27 +2120,27 @@ uint8_t ILI9341_RunTouchCalibration(void)
         while (XPT2046_IsTouched() && HAL_GetTick() < timeout) {
             HAL_Delay(10);
         }
-        HAL_Delay(200);  /* Əlavə gecikmə */
+        HAL_Delay(300);  /* Əlavə gecikmə - nöqtələr arası */
         
         while (!got_touch && HAL_GetTick() < timeout) {
             if (XPT2046_IsTouched()) {
                 HAL_Delay(50);  /* Debounce */
                 if (XPT2046_IsTouched()) {
-                    /* 5 dəfə oxu və orta dəyəri götür */
+                    /* 8 dəfə oxu və orta dəyəri götür */
                     uint32_t sum_x = 0, sum_y = 0;
                     uint8_t valid_reads = 0;
                     
-                    for (int r = 0; r < 5; r++) {
+                    for (int r = 0; r < 8; r++) {
                         uint16_t rx, ry;
                         if (XPT2046_GetCoordinates(&rx, &ry)) {
                             sum_x += rx;
                             sum_y += ry;
                             valid_reads++;
                         }
-                        HAL_Delay(20);
+                        HAL_Delay(15);
                     }
                     
-                    if (valid_reads >= 3) {
+                    if (valid_reads >= 4) {
                         raw_x = sum_x / valid_reads;
                         raw_y = sum_y / valid_reads;
                         got_touch = 1;
@@ -2132,12 +2148,13 @@ uint8_t ILI9341_RunTouchCalibration(void)
                         cal_raw_x[point] = raw_x;
                         cal_raw_y[point] = raw_y;
                         
-                        printf("Point %d: screen(%d,%d) -> raw(%d,%d)\r\n", 
-                               point + 1, cal_screen_x[point], cal_screen_y[point], raw_x, raw_y);
+                        printf("Point %d [%s]: screen(%d,%d) -> raw(%d,%d)\r\n", 
+                               point + 1, cal_labels[point], 
+                               cal_screen_x[point], cal_screen_y[point], raw_x, raw_y);
                         
                         /* OK göstər */
-                        ILI9341_DrawString(140, 180, "OK!", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 2);
-                        HAL_Delay(500);
+                        ILI9341_DrawString(140, 160, "OK!", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 2);
+                        HAL_Delay(400);
                     }
                 }
             }
@@ -2154,56 +2171,96 @@ uint8_t ILI9341_RunTouchCalibration(void)
         while (XPT2046_IsTouched()) {
             HAL_Delay(10);
         }
-        HAL_Delay(300);
+        HAL_Delay(200);
     }
     
     /* Nəticə ekranı */
     ILI9341_FillScreen(ILI9341_COLOR_BLACK);
     
-    if (cal_success && cal_raw_x[0] != 0 && cal_raw_x[1] != 0 && cal_raw_x[2] != 0) {
-        printf("\n=== Calculating calibration... ===\r\n");
-        printf("Raw values:\r\n");
-        printf("  P1: (%d, %d)\r\n", cal_raw_x[0], cal_raw_y[0]);
-        printf("  P2: (%d, %d)\r\n", cal_raw_x[1], cal_raw_y[1]);
-        printf("  P3: (%d, %d)\r\n", cal_raw_x[2], cal_raw_y[2]);
+    if (cal_success) {
+        printf("\n=== 4-POINT CALIBRATION CALCULATION ===\r\n");
+        printf("Raw values from 4 corners:\r\n");
+        for (int i = 0; i < 4; i++) {
+            printf("  P%d [%s]: raw(%d, %d)\r\n", i+1, cal_labels[i], cal_raw_x[i], cal_raw_y[i]);
+        }
         
         /* ============================================
-         * X və Y diapazonunu hesabla
-         * Sol-üst (P1) və Sağ-üst (P2) X diapazonunu verir
-         * Sol-üst (P1) və Sol-alt (P3) Y diapazonunu verir
+         * 4 küncdən X və Y diapazonunu dəqiq hesabla
+         * 
+         * Ekran koordinatları:
+         *   P1(20,20)   P2(300,20)
+         *   P3(20,220)  P4(300,220)
+         * 
+         * Raw koordinatlardan min/max tapırıq
          * ============================================ */
         
-        /* Raw X dəyərləri arasındakı fərq - hansı böyükdür? */
-        int32_t raw_dx = (int32_t)cal_raw_x[1] - (int32_t)cal_raw_x[0];  /* P1 -> P2 (X boyunca) */
-        int32_t raw_dy = (int32_t)cal_raw_y[2] - (int32_t)cal_raw_y[0];  /* P1 -> P3 (Y boyunca) */
+        /* Raw dəyərlərin min/max-ını tap */
+        uint16_t raw_x_min = cal_raw_x[0], raw_x_max = cal_raw_x[0];
+        uint16_t raw_y_min = cal_raw_y[0], raw_y_max = cal_raw_y[0];
         
-        /* Ekran koordinatları fərqi */
-        int32_t screen_dx = (int32_t)cal_screen_x[1] - (int32_t)cal_screen_x[0];  /* 290 - 30 = 260 */
-        int32_t screen_dy = (int32_t)cal_screen_y[2] - (int32_t)cal_screen_y[0];  /* 210 - 30 = 180 */
+        for (int i = 1; i < 4; i++) {
+            if (cal_raw_x[i] < raw_x_min) raw_x_min = cal_raw_x[i];
+            if (cal_raw_x[i] > raw_x_max) raw_x_max = cal_raw_x[i];
+            if (cal_raw_y[i] < raw_y_min) raw_y_min = cal_raw_y[i];
+            if (cal_raw_y[i] > raw_y_max) raw_y_max = cal_raw_y[i];
+        }
         
-        printf("Delta raw: dx=%ld, dy=%ld\r\n", raw_dx, raw_dy);
-        printf("Delta screen: dx=%ld, dy=%ld\r\n", screen_dx, screen_dy);
+        printf("Raw ranges: X[%d-%d], Y[%d-%d]\r\n", raw_x_min, raw_x_max, raw_y_min, raw_y_max);
         
-        /* Bütün modları test et və ən yaxşısını tap */
+        /* ============================================
+         * Koordinat MODE-u müəyyən et
+         * 4 nöqtədən istifadə edərək ən yaxşı modu tapırıq
+         * ============================================ */
+        
+        /* Kənar məsafələri hesabla - ekran 20 pikseldən başlayır */
+        /* 20 piksel = ekranın 6.25%-i (20/320) */
+        /* Deməli raw aralığı da ~6.25% genişlətməliyik */
+        uint16_t x_range = raw_x_max - raw_x_min;
+        uint16_t y_range = raw_y_max - raw_y_min;
+        
+        /* Kənar üçün əlavə (20 piksel = ~7% kənar) */
+        uint16_t x_margin = x_range / 14;  /* ~7% */
+        uint16_t y_margin = y_range / 11;  /* ~9% (20/220) */
+        
+        uint16_t new_x_min = (raw_x_min > x_margin) ? (raw_x_min - x_margin) : 50;
+        uint16_t new_x_max = raw_x_max + x_margin;
+        uint16_t new_y_min = (raw_y_min > y_margin) ? (raw_y_min - y_margin) : 50;
+        uint16_t new_y_max = raw_y_max + y_margin;
+        
+        /* Limitlə */
+        if (new_x_min < 50) new_x_min = 50;
+        if (new_x_max > 4050) new_x_max = 4050;
+        if (new_y_min < 50) new_y_min = 50;
+        if (new_y_max > 4050) new_y_max = 4050;
+        
+        printf("Calculated calibration: X[%d-%d], Y[%d-%d]\r\n", 
+               new_x_min, new_x_max, new_y_min, new_y_max);
+        
+        /* Kalibrasiya dəyərlərini təyin et */
+        XPT2046_SetCalibration(new_x_min, new_x_max, new_y_min, new_y_max);
+        
+        /* Bütün 8 modu test et və ən yaxşısını tap */
         uint8_t best_mode = 0;
         int32_t best_total_error = 0x7FFFFFFF;
+        
+        printf("\nTesting all 8 coordinate modes:\r\n");
         
         for (uint8_t mode = 0; mode < 8; mode++) {
             XPT2046_SetCoordMode(mode);
             
             int32_t total_error = 0;
             
-            /* Hər 3 nöqtəni test et */
-            for (int p = 0; p < 3; p++) {
+            /* Hər 4 nöqtəni test et */
+            for (int p = 0; p < 4; p++) {
                 uint16_t sx, sy;
                 XPT2046_ConvertToScreen(cal_raw_x[p], cal_raw_y[p], &sx, &sy);
                 
                 int32_t ex = (int32_t)sx - (int32_t)cal_screen_x[p];
                 int32_t ey = (int32_t)sy - (int32_t)cal_screen_y[p];
-                total_error += ex * ex + ey * ey;
+                total_error += (ex * ex + ey * ey);
             }
             
-            printf("Mode %d: total_error=%ld\r\n", mode, total_error);
+            printf("  Mode %d: total_error = %ld\r\n", mode, total_error);
             
             if (total_error < best_total_error) {
                 best_total_error = total_error;
@@ -2212,94 +2269,49 @@ uint8_t ILI9341_RunTouchCalibration(void)
         }
         
         XPT2046_SetCoordMode(best_mode);
-        printf("==> BEST MODE: %d (error=%ld)\r\n", best_mode, best_total_error);
+        printf("\n==> BEST MODE: %d (total error = %ld)\r\n", best_mode, best_total_error);
         
-        /* Əgər error hələ də böyükdürsə, X/Y range-i düzəlt */
-        if (best_total_error > 5000) {
-            printf("Error too high - adjusting calibration range...\r\n");
-            
-            /* X və Y üçün min/max hesabla */
-            uint16_t min_raw_x = cal_raw_x[0];
-            uint16_t max_raw_x = cal_raw_x[0];
-            uint16_t min_raw_y = cal_raw_y[0];
-            uint16_t max_raw_y = cal_raw_y[0];
-            
-            for (int p = 0; p < 3; p++) {
-                if (cal_raw_x[p] < min_raw_x) min_raw_x = cal_raw_x[p];
-                if (cal_raw_x[p] > max_raw_x) max_raw_x = cal_raw_x[p];
-                if (cal_raw_y[p] < min_raw_y) min_raw_y = cal_raw_y[p];
-                if (cal_raw_y[p] > max_raw_y) max_raw_y = cal_raw_y[p];
-            }
-            
-            /* 30/290 ekran X üçün raw aralığı genişlət */
-            /* 30 piksel = ~10% kənar */
-            uint16_t x_range = max_raw_x - min_raw_x;
-            uint16_t y_range = max_raw_y - min_raw_y;
-            
-            /* 10% margin ilə genişlət */
-            uint16_t new_x_min = (min_raw_x > x_range / 9) ? (min_raw_x - x_range / 9) : 100;
-            uint16_t new_x_max = max_raw_x + x_range / 9;
-            uint16_t new_y_min = (min_raw_y > y_range / 9) ? (min_raw_y - y_range / 9) : 100;
-            uint16_t new_y_max = max_raw_y + y_range / 9;
-            
-            /* Limitlə */
-            if (new_x_max > 4000) new_x_max = 4000;
-            if (new_y_max > 4000) new_y_max = 4000;
-            
-            XPT2046_SetCalibration(new_x_min, new_x_max, new_y_min, new_y_max);
-            
-            printf("New calibration: X[%d-%d], Y[%d-%d]\r\n", 
-                   new_x_min, new_x_max, new_y_min, new_y_max);
-            
-            /* Yenidən ən yaxşı modu tap */
-            best_total_error = 0x7FFFFFFF;
-            for (uint8_t mode = 0; mode < 8; mode++) {
-                XPT2046_SetCoordMode(mode);
-                
-                int32_t total_error = 0;
-                for (int p = 0; p < 3; p++) {
-                    uint16_t sx, sy;
-                    XPT2046_ConvertToScreen(cal_raw_x[p], cal_raw_y[p], &sx, &sy);
-                    
-                    int32_t ex = (int32_t)sx - (int32_t)cal_screen_x[p];
-                    int32_t ey = (int32_t)sy - (int32_t)cal_screen_y[p];
-                    total_error += ex * ex + ey * ey;
-                }
-                
-                if (total_error < best_total_error) {
-                    best_total_error = total_error;
-                    best_mode = mode;
-                }
-            }
-            
-            XPT2046_SetCoordMode(best_mode);
-            printf("After adjustment - BEST MODE: %d (error=%ld)\r\n", best_mode, best_total_error);
-        }
-        
-        /* Final test - hər nöqtəni göstər */
-        ILI9341_DrawString(40, 30, "CALIBRATION COMPLETE!", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 2);
+        /* Nəticə ekranı */
+        ILI9341_DrawString(20, 10, "4-POINT CALIBRATION OK!", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 2);
         
         char mode_str[32];
-        sprintf(mode_str, "Mode: %d", best_mode);
-        ILI9341_DrawString(100, 70, mode_str, ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 2);
+        sprintf(mode_str, "Best Mode: %d", best_mode);
+        ILI9341_DrawString(80, 40, mode_str, ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 2);
+        
+        const char* mode_desc[] = {
+            "Normal", "Swap+InvX", "InvBoth", "SwapOnly",
+            "InvX", "InvY", "Swap+InvY", "Swap+InvBoth"
+        };
+        ILI9341_DrawString(80, 70, mode_desc[best_mode], ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 1);
         
         /* Test nəticələrini göstər */
-        ILI9341_DrawString(20, 110, "Test results:", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 1);
+        ILI9341_DrawString(10, 95, "Verification:", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 1);
         
-        for (int p = 0; p < 3; p++) {
+        for (int p = 0; p < 4; p++) {
             uint16_t sx, sy;
             XPT2046_ConvertToScreen(cal_raw_x[p], cal_raw_y[p], &sx, &sy);
             
+            int32_t ex = (int32_t)sx - (int32_t)cal_screen_x[p];
+            int32_t ey = (int32_t)sy - (int32_t)cal_screen_y[p];
+            
             char result[48];
-            sprintf(result, "P%d: exp(%d,%d) got(%d,%d)", 
-                    p + 1, cal_screen_x[p], cal_screen_y[p], sx, sy);
-            ILI9341_DrawString(20, 130 + p * 20, result, ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 1);
+            sprintf(result, "P%d: (%d,%d)->(%d,%d) err:%ld", 
+                    p + 1, cal_screen_x[p], cal_screen_y[p], sx, sy,
+                    (ex*ex + ey*ey));
+            
+            uint16_t color = ((ex*ex + ey*ey) < 400) ? ILI9341_COLOR_GREEN : ILI9341_COLOR_ORANGE;
+            ILI9341_DrawString(10, 115 + p * 18, result, color, ILI9341_COLOR_BLACK, 1);
         }
         
-        ILI9341_DrawString(60, 210, "Touch to continue...", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
+        /* Kalibrasiya dəyərlərini göstər */
+        char cal_info[48];
+        sprintf(cal_info, "X:[%d-%d] Y:[%d-%d]", new_x_min, new_x_max, new_y_min, new_y_max);
+        ILI9341_DrawString(10, 195, cal_info, ILI9341_COLOR_MAGENTA, ILI9341_COLOR_BLACK, 1);
+        
+        ILI9341_DrawString(60, 220, "Touch to continue...", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
         
         /* Touch gözlə */
-        HAL_Delay(1000);
+        HAL_Delay(1500);
         while (!XPT2046_IsTouched()) {
             HAL_Delay(50);
         }
@@ -2309,17 +2321,18 @@ uint8_t ILI9341_RunTouchCalibration(void)
         
     } else {
         /* Kalibrasiya uğursuz - default istifadə et */
-        printf("Calibration failed - using defaults\r\n");
+        printf("4-Point Calibration FAILED - using defaults\r\n");
         
         XPT2046_LoadDefaultCalibration();
         XPT2046_SetCoordMode(3);  /* SwapOnly - ən çox işləyən */
         
-        ILI9341_DrawString(40, 80, "CALIBRATION FAILED", ILI9341_COLOR_RED, ILI9341_COLOR_BLACK, 2);
-        ILI9341_DrawString(40, 120, "Using default Mode 3", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
+        ILI9341_DrawString(30, 80, "CALIBRATION FAILED!", ILI9341_COLOR_RED, ILI9341_COLOR_BLACK, 2);
+        ILI9341_DrawString(50, 120, "Using default Mode 3", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
+        ILI9341_DrawString(40, 150, "Try again after reboot", ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 1);
         
-        HAL_Delay(2000);
+        HAL_Delay(3000);
     }
     
-    printf("=== TOUCH CALIBRATION COMPLETE ===\r\n\n");
+    printf("=== 4-POINT TOUCH CALIBRATION COMPLETE ===\r\n\n");
     return cal_success;
 }
