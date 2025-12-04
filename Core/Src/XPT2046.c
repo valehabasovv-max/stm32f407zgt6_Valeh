@@ -18,8 +18,16 @@ static uint16_t cal_y_max = 3800;
  * 1 = X və Y dəyişdir, X-i əks et
  * 2 = X və Y-ni əks et
  * 3 = X və Y dəyişdir (swap only) - ən çox işləyən
+ * 4 = Invert X only
+ * 5 = Invert Y only
+ * 6 = Swap X-Y + Invert Y
+ * 7 = Swap X-Y + Invert both
+ * 
+ * KRİTİK DÜZƏLİŞ: LCD landscape mode-dadır (Memory Access Control = 0x28, MV=1)
+ * Bu səbəbdən touch koordinatları da swap edilməlidir.
+ * Mode 3 (Swap X-Y only) landscape LCD üçün ən uyğundur.
  */
-static uint8_t coord_mode = 0;  /* DÜZƏLİŞ: Mode 0-dan başla, kalibrasiya optimal olanı tapacaq */
+static uint8_t coord_mode = 3;  /* DÜZƏLİŞ: Mode 3 - Swap X-Y - landscape LCD üçün düzgün mode */
 
 /* Touch təsdiqi üçün parametrlər */
 #define TOUCH_SAMPLES 8
@@ -80,19 +88,24 @@ void XPT2046_LoadDefaultCalibration(void)
     cal_y_max = 3800;
     
     /* ============================================
-     * KOORDİNAT MODE SEÇİMİ - AVTOMATİK
+     * KOORDİNAT MODE SEÇİMİ - LANDSCAPE LCD ÜÇÜN
      * ILI9341 Memory Access Control = 0x28 (landscape, MV=1)
      * 
      * Mode 0: Normal - touch və LCD eyni istiqamətdə
      * Mode 1: Swap X-Y + Invert X
      * Mode 2: Invert both X and Y - 180° fırlanmış
-     * Mode 3: Swap X-Y only - digər landscape variant
+     * Mode 3: Swap X-Y only - landscape LCD üçün ən uyğun
+     * Mode 4: Invert X only
+     * Mode 5: Invert Y only
+     * Mode 6: Swap X-Y + Invert Y
+     * Mode 7: Swap X-Y + Invert both
      * 
-     * Default: Mode 0 (ən sadə), sağ üst küncdə dəyişdirmə imkanı var
+     * KRİTİK DÜZƏLİŞ: LCD MV=1 (landscape) olduğu üçün
+     * touch koordinatları da swap edilməlidir - Mode 3
      * ============================================ */
     
-    /* Default olaraq MODE 0 - istifadəçi ekranda dəyişdirə bilər */
-    coord_mode = 0;
+    /* Landscape LCD üçün MODE 3 - Swap X-Y */
+    coord_mode = 3;
     
     /* 3-nöqtəli kalibrasiyadan istifadə etmə, köhnə metod istifadə et */
     use_matrix_calibration = 0;
@@ -946,7 +959,34 @@ void XPT2046_AutoCal_ClearButtons(void)
 }
 
 /**
+ * @brief Integer square root - Newton's method
+ * @param n: Kök hesablanacaq ədəd
+ * @return n-in tam hissəli kökü
+ */
+static uint16_t isqrt(uint32_t n)
+{
+    if (n == 0) return 0;
+    
+    uint32_t x = n;
+    uint32_t y = (x + 1) / 2;
+    
+    while (y < x) {
+        x = y;
+        y = (x + n / x) / 2;
+    }
+    
+    return (uint16_t)x;
+}
+
+/**
  * @brief Ən yaxın düyməni tap
+ * @param screen_x, screen_y: Ekran koordinatları
+ * @param btn_id: Tapılan düymənin ID-si
+ * @param distance: Düyməyə məsafə
+ * @return 1 düymə tapıldı, 0 tapılmadı
+ * 
+ * KRİTİK DÜZƏLİŞ: Məsafə hesablaması optimallaşdırıldı
+ * Əvvəlki while loop çox yavaş idi, indi Newton's method istifadə edilir
  */
 uint8_t XPT2046_AutoCal_FindNearestButton(uint16_t screen_x, uint16_t screen_y,
                                            uint8_t *btn_id, uint16_t *distance)
@@ -955,7 +995,7 @@ uint8_t XPT2046_AutoCal_FindNearestButton(uint16_t screen_x, uint16_t screen_y,
         return 0;
     }
     
-    uint16_t min_dist = 0xFFFF;
+    uint32_t min_dist_sq = 0xFFFFFFFF;  /* Minimum məsafənin kvadratı */
     uint8_t nearest_id = 0;
     uint8_t found = 0;
     
@@ -964,29 +1004,26 @@ uint8_t XPT2046_AutoCal_FindNearestButton(uint16_t screen_x, uint16_t screen_y,
         uint16_t btn_cx = g_buttons[i].x + g_buttons[i].w / 2;
         uint16_t btn_cy = g_buttons[i].y + g_buttons[i].h / 2;
         
-        /* Məsafəni hesabla (Manhattan distance - daha sürətli) */
+        /* Məsafəni hesabla */
         int16_t dx = (int16_t)screen_x - (int16_t)btn_cx;
         int16_t dy = (int16_t)screen_y - (int16_t)btn_cy;
         
-        /* Euclidean distance - daha dəqiq */
+        /* Euclidean distance squared - kök hesablamadan müqayisə */
         uint32_t dist_sq = (uint32_t)(dx * dx) + (uint32_t)(dy * dy);
         
-        /* Kök hesablamadan müqayisə edə bilərik */
-        if (dist_sq < (uint32_t)min_dist * min_dist) {
-            /* Əsl məsafəni hesabla */
-            uint16_t dist = 0;
-            while (dist * dist < dist_sq) dist++;
-            
-            if (dist < min_dist) {
-                min_dist = dist;
-                nearest_id = g_buttons[i].id;
-                found = 1;
-            }
+        /* Ən kiçik məsafəni tap */
+        if (dist_sq < min_dist_sq) {
+            min_dist_sq = dist_sq;
+            nearest_id = g_buttons[i].id;
+            found = 1;
         }
     }
     
-    if (found && btn_id) *btn_id = nearest_id;
-    if (found && distance) *distance = min_dist;
+    /* Yalnız tapıldıqda nəticəni qaytar */
+    if (found) {
+        if (btn_id) *btn_id = nearest_id;
+        if (distance) *distance = isqrt(min_dist_sq);  /* Optimallaşdırılmış kök hesablaması */
+    }
     
     return found;
 }
