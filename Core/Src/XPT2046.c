@@ -839,3 +839,412 @@ void XPT2046_FinishCalibration(void)
         }
     }
 }
+
+/* =============== AVTOMATİK DÜYMƏ KALİBRASİYA SİSTEMİ =============== */
+/*
+ * Bu sistem düyməyə toxunanda avtomatik olaraq kalibrasiya edir.
+ * 
+ * NECƏ İŞLƏYİR:
+ * 1. Düymələr qeydiyyata alınır (button x, y, w, h)
+ * 2. İstifadəçi ekrana toxunduqda, sistem ən yaxın düyməni tapır
+ * 3. Toxunuşun düymə mərkəzindən fərqini (offset) hesablayır
+ * 4. Bir neçə toxunuşdan sonra orta offset təyin edilir
+ * 5. Bu offset bütün gələcək toxunuşlara tətbiq edilir
+ * 
+ * ÜSTÜNLÜKLƏR:
+ * - İstifadəçi düyməyə toxunmağa çalışdıqca sistem özü öyrənir
+ * - 3-nöqtəli kalibrasiya lazım deyil
+ * - Real-time düzəliş
+ */
+
+/* Qlobal avtomatik kalibrasiya dəyişənləri */
+static AutoCalibration_t g_auto_cal = {
+    .offset_x = 0,
+    .offset_y = 0,
+    .sum_offset_x = 0,
+    .sum_offset_y = 0,
+    .sample_count = 0,
+    .is_calibrated = 0,
+    .learning_mode = 1,  /* Öyrənmə rejimi default olaraq aktiv */
+    .last_button_id = 0,
+    .min_samples = AUTO_CAL_MIN_SAMPLES,
+    .proximity_threshold = AUTO_CAL_PROXIMITY,
+    .total_touches = 0,
+    .matched_touches = 0
+};
+
+/* Qeydiyyata alınmış düymələr */
+static AutoCalButton_t g_buttons[AUTO_CAL_MAX_BUTTONS];
+static uint8_t g_button_count = 0;
+
+/**
+ * @brief Avtomatik kalibrasiya sistemini başlat
+ */
+void XPT2046_AutoCal_Init(void)
+{
+    g_auto_cal.offset_x = 0;
+    g_auto_cal.offset_y = 0;
+    g_auto_cal.sum_offset_x = 0;
+    g_auto_cal.sum_offset_y = 0;
+    g_auto_cal.sample_count = 0;
+    g_auto_cal.is_calibrated = 0;
+    g_auto_cal.learning_mode = 1;
+    g_auto_cal.last_button_id = 0;
+    g_auto_cal.min_samples = AUTO_CAL_MIN_SAMPLES;
+    g_auto_cal.proximity_threshold = AUTO_CAL_PROXIMITY;
+    g_auto_cal.total_touches = 0;
+    g_auto_cal.matched_touches = 0;
+    
+    g_button_count = 0;
+    
+    printf("AutoCal: System initialized, learning mode ON\r\n");
+}
+
+/**
+ * @brief Düymə əlavə et (kalibrasiya üçün)
+ */
+uint8_t XPT2046_AutoCal_RegisterButton(uint16_t x, uint16_t y, 
+                                        uint16_t w, uint16_t h,
+                                        const char* name, uint8_t id)
+{
+    if (g_button_count >= AUTO_CAL_MAX_BUTTONS) {
+        printf("AutoCal: Max buttons reached!\r\n");
+        return 0;
+    }
+    
+    /* Eyni ID ilə düymə varsa, yeniləyirik */
+    for (uint8_t i = 0; i < g_button_count; i++) {
+        if (g_buttons[i].id == id) {
+            g_buttons[i].x = x;
+            g_buttons[i].y = y;
+            g_buttons[i].w = w;
+            g_buttons[i].h = h;
+            g_buttons[i].name = name;
+            return 1;
+        }
+    }
+    
+    /* Yeni düymə əlavə et */
+    g_buttons[g_button_count].x = x;
+    g_buttons[g_button_count].y = y;
+    g_buttons[g_button_count].w = w;
+    g_buttons[g_button_count].h = h;
+    g_buttons[g_button_count].name = name;
+    g_buttons[g_button_count].id = id;
+    g_button_count++;
+    
+    return 1;
+}
+
+/**
+ * @brief Bütün düymələri sil
+ */
+void XPT2046_AutoCal_ClearButtons(void)
+{
+    g_button_count = 0;
+    printf("AutoCal: All buttons cleared\r\n");
+}
+
+/**
+ * @brief Ən yaxın düyməni tap
+ */
+uint8_t XPT2046_AutoCal_FindNearestButton(uint16_t screen_x, uint16_t screen_y,
+                                           uint8_t *btn_id, uint16_t *distance)
+{
+    if (g_button_count == 0) {
+        return 0;
+    }
+    
+    uint16_t min_dist = 0xFFFF;
+    uint8_t nearest_id = 0;
+    uint8_t found = 0;
+    
+    for (uint8_t i = 0; i < g_button_count; i++) {
+        /* Düymənin mərkəzini hesabla */
+        uint16_t btn_cx = g_buttons[i].x + g_buttons[i].w / 2;
+        uint16_t btn_cy = g_buttons[i].y + g_buttons[i].h / 2;
+        
+        /* Məsafəni hesabla (Manhattan distance - daha sürətli) */
+        int16_t dx = (int16_t)screen_x - (int16_t)btn_cx;
+        int16_t dy = (int16_t)screen_y - (int16_t)btn_cy;
+        
+        /* Euclidean distance - daha dəqiq */
+        uint32_t dist_sq = (uint32_t)(dx * dx) + (uint32_t)(dy * dy);
+        
+        /* Kök hesablamadan müqayisə edə bilərik */
+        if (dist_sq < (uint32_t)min_dist * min_dist) {
+            /* Əsl məsafəni hesabla */
+            uint16_t dist = 0;
+            while (dist * dist < dist_sq) dist++;
+            
+            if (dist < min_dist) {
+                min_dist = dist;
+                nearest_id = g_buttons[i].id;
+                found = 1;
+            }
+        }
+    }
+    
+    if (found && btn_id) *btn_id = nearest_id;
+    if (found && distance) *distance = min_dist;
+    
+    return found;
+}
+
+/**
+ * @brief Düymə daxilindəmi yoxla
+ */
+static uint8_t IsInsideButton(uint16_t x, uint16_t y, AutoCalButton_t* btn)
+{
+    return (x >= btn->x && x <= btn->x + btn->w &&
+            y >= btn->y && y <= btn->y + btn->h);
+}
+
+/**
+ * @brief Düyməni ID-yə görə tap
+ */
+static AutoCalButton_t* FindButtonById(uint8_t id)
+{
+    for (uint8_t i = 0; i < g_button_count; i++) {
+        if (g_buttons[i].id == id) {
+            return &g_buttons[i];
+        }
+    }
+    return NULL;
+}
+
+/**
+ * @brief Toxunuşu işlə və avtomatik kalibrasiya et
+ */
+uint8_t XPT2046_AutoCal_ProcessTouch(uint16_t raw_x, uint16_t raw_y,
+                                      uint16_t *screen_x, uint16_t *screen_y)
+{
+    if (!screen_x || !screen_y) return 0;
+    
+    g_auto_cal.total_touches++;
+    
+    /* Əvvəlcə standart çevirmə */
+    uint16_t sx, sy;
+    XPT2046_ConvertToScreen(raw_x, raw_y, &sx, &sy);
+    
+    /* Offset tətbiq et */
+    int16_t corrected_x = (int16_t)sx + g_auto_cal.offset_x;
+    int16_t corrected_y = (int16_t)sy + g_auto_cal.offset_y;
+    
+    /* Limitlər */
+    if (corrected_x < 0) corrected_x = 0;
+    if (corrected_x > 319) corrected_x = 319;
+    if (corrected_y < 0) corrected_y = 0;
+    if (corrected_y > 239) corrected_y = 239;
+    
+    *screen_x = (uint16_t)corrected_x;
+    *screen_y = (uint16_t)corrected_y;
+    
+    /* Öyrənmə rejimində deyilsə, sadəcə düzəldilmiş koordinatları qaytar */
+    if (!g_auto_cal.learning_mode) {
+        /* Ən yaxın düyməni tap (qayıdış dəyəri üçün) */
+        uint8_t btn_id = 0;
+        uint16_t dist = 0;
+        if (XPT2046_AutoCal_FindNearestButton(*screen_x, *screen_y, &btn_id, &dist)) {
+            if (dist <= g_auto_cal.proximity_threshold) {
+                return btn_id;
+            }
+        }
+        return 0;
+    }
+    
+    /* ========== ÖYRƏNİŞ REJİMİ ========== */
+    
+    /* Düzəldilməmiş koordinatla ən yaxın düyməni tap */
+    uint8_t btn_id = 0;
+    uint16_t dist = 0;
+    
+    if (!XPT2046_AutoCal_FindNearestButton(sx, sy, &btn_id, &dist)) {
+        /* Düymə tapılmadı */
+        return 0;
+    }
+    
+    /* Yaxınlıq həddini yoxla */
+    if (dist > g_auto_cal.proximity_threshold) {
+        /* Çox uzaq, öyrənməyə daxil etmə */
+        return 0;
+    }
+    
+    g_auto_cal.matched_touches++;
+    g_auto_cal.last_button_id = btn_id;
+    
+    /* Düyməni tap */
+    AutoCalButton_t* btn = FindButtonById(btn_id);
+    if (!btn) return 0;
+    
+    /* Düymənin mərkəzi */
+    uint16_t btn_cx = btn->x + btn->w / 2;
+    uint16_t btn_cy = btn->y + btn->h / 2;
+    
+    /* Offset hesabla: fərq = hədəf - faktik */
+    int16_t delta_x = (int16_t)btn_cx - (int16_t)sx;
+    int16_t delta_y = (int16_t)btn_cy - (int16_t)sy;
+    
+    /* Çox böyük offset-ləri rədd et */
+    if (delta_x > AUTO_CAL_MAX_OFFSET || delta_x < -AUTO_CAL_MAX_OFFSET ||
+        delta_y > AUTO_CAL_MAX_OFFSET || delta_y < -AUTO_CAL_MAX_OFFSET) {
+        printf("AutoCal: Offset too large (%d,%d), ignoring\r\n", delta_x, delta_y);
+        return btn_id;
+    }
+    
+    /* Kumulativ offset-ə əlavə et */
+    g_auto_cal.sum_offset_x += delta_x;
+    g_auto_cal.sum_offset_y += delta_y;
+    g_auto_cal.sample_count++;
+    
+    printf("AutoCal: Button '%s' (id=%d), delta(%d,%d), samples=%d\r\n",
+           btn->name ? btn->name : "?", btn_id, delta_x, delta_y, g_auto_cal.sample_count);
+    
+    /* Minimum nümunə sayına çatdıqda kalibrasiya et */
+    if (g_auto_cal.sample_count >= g_auto_cal.min_samples) {
+        /* Orta offset hesabla */
+        g_auto_cal.offset_x = (int16_t)(g_auto_cal.sum_offset_x / g_auto_cal.sample_count);
+        g_auto_cal.offset_y = (int16_t)(g_auto_cal.sum_offset_y / g_auto_cal.sample_count);
+        g_auto_cal.is_calibrated = 1;
+        
+        printf("AutoCal: CALIBRATED! Offset = (%d, %d) from %d samples\r\n",
+               g_auto_cal.offset_x, g_auto_cal.offset_y, g_auto_cal.sample_count);
+        
+        /* Düzəldilmiş koordinatları yenilə */
+        corrected_x = (int16_t)sx + g_auto_cal.offset_x;
+        corrected_y = (int16_t)sy + g_auto_cal.offset_y;
+        
+        if (corrected_x < 0) corrected_x = 0;
+        if (corrected_x > 319) corrected_x = 319;
+        if (corrected_y < 0) corrected_y = 0;
+        if (corrected_y > 239) corrected_y = 239;
+        
+        *screen_x = (uint16_t)corrected_x;
+        *screen_y = (uint16_t)corrected_y;
+    }
+    
+    return btn_id;
+}
+
+/**
+ * @brief Öyrənmə rejimini aktiv/deaktiv et
+ */
+void XPT2046_AutoCal_SetLearning(uint8_t enable)
+{
+    g_auto_cal.learning_mode = enable;
+    printf("AutoCal: Learning mode %s\r\n", enable ? "ON" : "OFF");
+}
+
+/**
+ * @brief Kalibrasiya olunubmu yoxla
+ */
+uint8_t XPT2046_AutoCal_IsCalibrated(void)
+{
+    return g_auto_cal.is_calibrated;
+}
+
+/**
+ * @brief Kalibrasiyani sıfırla
+ */
+void XPT2046_AutoCal_Reset(void)
+{
+    g_auto_cal.offset_x = 0;
+    g_auto_cal.offset_y = 0;
+    g_auto_cal.sum_offset_x = 0;
+    g_auto_cal.sum_offset_y = 0;
+    g_auto_cal.sample_count = 0;
+    g_auto_cal.is_calibrated = 0;
+    g_auto_cal.total_touches = 0;
+    g_auto_cal.matched_touches = 0;
+    
+    printf("AutoCal: Reset complete\r\n");
+}
+
+/**
+ * @brief Offset dəyərlərini al
+ */
+void XPT2046_AutoCal_GetOffset(int16_t *offset_x, int16_t *offset_y)
+{
+    if (offset_x) *offset_x = g_auto_cal.offset_x;
+    if (offset_y) *offset_y = g_auto_cal.offset_y;
+}
+
+/**
+ * @brief Offset dəyərlərini manual təyin et
+ */
+void XPT2046_AutoCal_SetOffset(int16_t offset_x, int16_t offset_y)
+{
+    g_auto_cal.offset_x = offset_x;
+    g_auto_cal.offset_y = offset_y;
+    g_auto_cal.is_calibrated = 1;
+    
+    printf("AutoCal: Offset manually set to (%d, %d)\r\n", offset_x, offset_y);
+}
+
+/**
+ * @brief Statistikanı al
+ */
+void XPT2046_AutoCal_GetStats(uint32_t *total, uint32_t *matched, uint16_t *samples)
+{
+    if (total) *total = g_auto_cal.total_touches;
+    if (matched) *matched = g_auto_cal.matched_touches;
+    if (samples) *samples = g_auto_cal.sample_count;
+}
+
+/**
+ * @brief Düzəldilmiş ekran koordinatlarını al
+ */
+void XPT2046_AutoCal_GetCorrectedCoords(uint16_t raw_x, uint16_t raw_y,
+                                         uint16_t *screen_x, uint16_t *screen_y)
+{
+    if (!screen_x || !screen_y) return;
+    
+    /* Standart çevirmə */
+    uint16_t sx, sy;
+    XPT2046_ConvertToScreen(raw_x, raw_y, &sx, &sy);
+    
+    /* Offset tətbiq et */
+    int16_t corrected_x = (int16_t)sx + g_auto_cal.offset_x;
+    int16_t corrected_y = (int16_t)sy + g_auto_cal.offset_y;
+    
+    /* Limitlər */
+    if (corrected_x < 0) corrected_x = 0;
+    if (corrected_x > 319) corrected_x = 319;
+    if (corrected_y < 0) corrected_y = 0;
+    if (corrected_y > 239) corrected_y = 239;
+    
+    *screen_x = (uint16_t)corrected_x;
+    *screen_y = (uint16_t)corrected_y;
+}
+
+/**
+ * @brief Proximity threshold təyin et
+ */
+void XPT2046_AutoCal_SetProximity(uint16_t threshold)
+{
+    g_auto_cal.proximity_threshold = threshold;
+    printf("AutoCal: Proximity threshold set to %d pixels\r\n", threshold);
+}
+
+/**
+ * @brief Debug məlumatlarını çap et
+ */
+void XPT2046_AutoCal_PrintDebug(void)
+{
+    printf("\r\n=== AUTO CALIBRATION DEBUG ===\r\n");
+    printf("Status: %s\r\n", g_auto_cal.is_calibrated ? "CALIBRATED" : "NOT CALIBRATED");
+    printf("Learning: %s\r\n", g_auto_cal.learning_mode ? "ON" : "OFF");
+    printf("Offset: (%d, %d)\r\n", g_auto_cal.offset_x, g_auto_cal.offset_y);
+    printf("Samples: %d/%d\r\n", g_auto_cal.sample_count, g_auto_cal.min_samples);
+    printf("Touches: total=%lu, matched=%lu\r\n", g_auto_cal.total_touches, g_auto_cal.matched_touches);
+    printf("Buttons registered: %d\r\n", g_button_count);
+    
+    for (uint8_t i = 0; i < g_button_count; i++) {
+        printf("  [%d] '%s': (%d,%d) %dx%d\r\n", 
+               g_buttons[i].id,
+               g_buttons[i].name ? g_buttons[i].name : "?",
+               g_buttons[i].x, g_buttons[i].y,
+               g_buttons[i].w, g_buttons[i].h);
+    }
+    printf("==============================\r\n\n");
+}
