@@ -21,13 +21,13 @@ extern "C" {
  * Bu pinləri öz hardware-ınıza görə dəyişdirin
  * 
  * PIN KONFİQURASİYASI:
- *   T_CS   (Chip Select)        -> PB12
+ *   T_CS   (Chip Select)        -> PB2
  *   T_CLK  (SCK - Serial Clock) -> PB1
  *   T_DO   (MISO)               -> PF8
  *   T_DIN  (MOSI)               -> PF9
  *   T_IRQ  (Interrupt Request)  -> PF10
  */
-#define XPT2046_CS_PIN          GPIO_PIN_12
+#define XPT2046_CS_PIN          GPIO_PIN_2
 #define XPT2046_CS_PORT         GPIOB
 #define XPT2046_IRQ_PIN         GPIO_PIN_10
 #define XPT2046_IRQ_PORT        GPIOF
