@@ -1879,7 +1879,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pins : XPT2046 Touch - Software SPI (bit-bang) */
   /* İlkin səviyyələr: CS=HIGH (deaktiv), SCK=LOW, MOSI=LOW */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_2, GPIO_PIN_SET);   /* TCS = HIGH (PB2) */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);   /* TCS = HIGH (PB12) */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);  /* SCK = LOW */
   HAL_GPIO_WritePin(GPIOF, GPIO_PIN_9, GPIO_PIN_RESET);  /* MOSI = LOW */
 
@@ -1890,8 +1890,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /* PB2: TCS (Chip Select) - çıxış */
-  GPIO_InitStruct.Pin = GPIO_PIN_2;
+  /* PB12: TCS (Chip Select) - çıxış */
+  GPIO_InitStruct.Pin = GPIO_PIN_12;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
