@@ -118,6 +118,19 @@ static uint8_t g_current_preset = 1;  /* 100 bar default */
 /* Sistem durumu */
 static uint8_t g_system_running = 0;  /* 0=Stop, 1=Run */
 
+/* Debug göstərici üçün dəyişənlər */
+static uint16_t g_last_raw_x = 0, g_last_raw_y = 0;
+static uint16_t g_last_screen_x = 0, g_last_screen_y = 0;
+static uint8_t g_show_debug = 1;  /* Debug göstəricisi aktiv - kalibrasiya üçün */
+static uint8_t g_last_button_hit = 0;  /* Son basılan buton */
+
+/* Buton koordinatları - hədəf butonun koordinatları */
+static uint16_t g_last_btn_x = 0, g_last_btn_y = 0;
+static uint16_t g_last_btn_w = 0, g_last_btn_h = 0;
+
+/* Avtomatik kalibrasiya statusu üçün rəng animasiyası */
+static uint8_t g_cal_anim_frame = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -744,19 +757,6 @@ void Screen_Update(void) {
 }
 
 /* =============== TOUCH İDARƏETMƏSİ =============== */
-
-/* Debug göstərici üçün dəyişənlər */
-static uint16_t g_last_raw_x = 0, g_last_raw_y = 0;
-static uint16_t g_last_screen_x = 0, g_last_screen_y = 0;
-static uint8_t g_show_debug = 1;  /* Debug göstəricisi aktiv - kalibrasiya üçün */
-static uint8_t g_last_button_hit = 0;  /* Son basılan buton */
-
-/* Buton koordinatları - hədəf butonun koordinatları */
-static uint16_t g_last_btn_x = 0, g_last_btn_y = 0;
-static uint16_t g_last_btn_w = 0, g_last_btn_h = 0;
-
-/* Avtomatik kalibrasiya statusu üçün rəng animasiyası */
-static uint8_t g_cal_anim_frame = 0;
 
 /**
  * @brief Touch işləmə - AVTOMATİK KALİBRASİYA İLƏ
