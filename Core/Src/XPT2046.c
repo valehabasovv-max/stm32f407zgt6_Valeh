@@ -32,7 +32,7 @@ static uint32_t last_touch_time = 0;
 /* Pin tərifləri */
 /* 
  * Hardware qoşulması:
- *   T_CS   (Chip Select)        -> PB2
+ *   T_CS   (Chip Select)        -> PB12
  *   T_CLK  (SCK - Serial Clock) -> PB1
  *   T_DO   (MISO)               -> PF8
  *   T_DIN  (MOSI)               -> PF9
@@ -203,13 +203,13 @@ void XPT2046_Init(void)
     
     /* ============================================
      * QEYD: Touch kontroller bit-bang SPI istifadə edir
-     * Pinlər: CS=PB2, SCK=PB1, MISO=PF8, MOSI=PF9, IRQ=PF10
+     * Pinlər: CS=PB12, SCK=PB1, MISO=PF8, MOSI=PF9, IRQ=PF10
      * Bu pinlər SPI1-dən fərqlidir, ona görə SPI1 deaktiv etmək lazım deyil
      * ============================================ */
     
     GPIO_InitTypeDef g = {0};
 
-    /* CS: çıxış (PB2) */
+    /* CS: çıxış (PB12) */
     g.Mode  = GPIO_MODE_OUTPUT_PP;
     g.Pull  = GPIO_NOPULL;
     g.Speed = GPIO_SPEED_FREQ_HIGH;
@@ -262,7 +262,7 @@ void XPT2046_Init(void)
     uint8_t irq_state = HAL_GPIO_ReadPin(TP_IRQ_GPIO_Port, TP_IRQ_Pin);
     
     printf("XPT2046 Touch Controller initialized\r\n");
-    printf("Pin config: CS=PB2, SCK=PB1, MISO=PF8, MOSI=PF9, IRQ=PF10\r\n");
+    printf("Pin config: CS=PB12, SCK=PB1, MISO=PF8, MOSI=PF9, IRQ=PF10\r\n");
     printf("Calibration: X[%d-%d], Y[%d-%d], Mode=%d\r\n", 
            cal_x_min, cal_x_max, cal_y_min, cal_y_max, coord_mode);
     printf("IRQ Pin (PF10) state: %s\r\n", irq_state ? "HIGH (ready)" : "LOW (touched or problem)");
