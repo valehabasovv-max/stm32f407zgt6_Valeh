@@ -87,6 +87,58 @@ typedef struct {
     uint8_t calibrated;
 } TouchCalibration_t;
 
+/* =============== AVTOMATİK DÜYMƏ KALİBRASİYASI =============== */
+/* 
+ * Bu sistem düyməyə toxunanda avtomatik olaraq kalibrasiya edir.
+ * İstifadəçi düyməyə toxunduqda, sistem:
+ * 1. Toxunuşun hansı düyməyə yaxın olduğunu müəyyən edir
+ * 2. Raw koordinatları həmin düymənin mərkəzinə uyğunlaşdırır
+ * 3. Offset-i hesablayır və kalibrasiyaya tətbiq edir
+ */
+
+/* Düymə strukturu - kalibrasiya üçün */
+typedef struct {
+    uint16_t x;          /* Düymənin sol kənarı */
+    uint16_t y;          /* Düymənin üst kənarı */
+    uint16_t w;          /* Düymənin eni */
+    uint16_t h;          /* Düymənin hündürlüyü */
+    const char* name;    /* Düymənin adı (debug üçün) */
+    uint8_t id;          /* Düymənin ID-si */
+} AutoCalButton_t;
+
+/* Avtomatik kalibrasiya strukturu */
+typedef struct {
+    /* Öyrənilmiş offset dəyərləri */
+    int16_t offset_x;        /* X offset (piksel) */
+    int16_t offset_y;        /* Y offset (piksel) */
+    
+    /* Öyrənmə prosesi */
+    int32_t sum_offset_x;    /* Kumulativ X offset */
+    int32_t sum_offset_y;    /* Kumulativ Y offset */
+    uint16_t sample_count;   /* Nümunə sayı */
+    
+    /* Kalibrasiya vəziyyəti */
+    uint8_t is_calibrated;   /* Kalibrasiya olunubmu? */
+    uint8_t learning_mode;   /* Öyrənmə rejimi aktivdir? */
+    uint8_t last_button_id;  /* Son basılan düymənin ID-si */
+    
+    /* Konfiqurasiya */
+    uint16_t min_samples;    /* Minimum nümunə sayı (stabil kalibrasiya üçün) */
+    uint16_t proximity_threshold; /* Düymə yaxınlıq həddi (piksel) */
+    
+    /* Statistika */
+    uint32_t total_touches;  /* Ümumi toxunuş sayı */
+    uint32_t matched_touches;/* Düyməyə uyğun gələn toxunuş sayı */
+} AutoCalibration_t;
+
+/* Maksimum düymə sayı */
+#define AUTO_CAL_MAX_BUTTONS    32
+
+/* Default konfiqurasiya dəyərləri */
+#define AUTO_CAL_MIN_SAMPLES        3     /* Minimum 3 nümunə lazımdır - daha sürətli öyrənmə */
+#define AUTO_CAL_PROXIMITY          120   /* 120 piksel yaxınlıq həddi - daha tolerant */
+#define AUTO_CAL_MAX_OFFSET         150   /* Maksimum qəbul edilən offset - böyük sapmalar üçün */
+
 /* =============== FUNKSİYA PROTOTİPLƏRİ =============== */
 
 /* Başlatma */
@@ -138,6 +190,105 @@ uint8_t XPT2046_IsButtonPressed(uint16_t btn_x, uint16_t btn_y,
                                 uint16_t touch_x, uint16_t touch_y);
 uint8_t XPT2046_GetTouchDebounced(uint16_t *screen_x, uint16_t *screen_y, 
                                   uint32_t debounce_ms);
+
+/* =============== AVTOMATİK DÜYMƏ KALİBRASİYA FUNKSİYALARI =============== */
+
+/**
+ * @brief Avtomatik kalibrasiya sistemini başlat
+ */
+void XPT2046_AutoCal_Init(void);
+
+/**
+ * @brief Düymə əlavə et (kalibrasiya üçün)
+ * @param x, y: Düymənin sol üst küncü
+ * @param w, h: Düymənin ölçüsü
+ * @param name: Düymənin adı (debug)
+ * @param id: Düymənin unikal ID-si
+ * @return 1 uğurlu, 0 xəta
+ */
+uint8_t XPT2046_AutoCal_RegisterButton(uint16_t x, uint16_t y, 
+                                        uint16_t w, uint16_t h,
+                                        const char* name, uint8_t id);
+
+/**
+ * @brief Bütün düymələri sil
+ */
+void XPT2046_AutoCal_ClearButtons(void);
+
+/**
+ * @brief Toxunuşu işlə və avtomatik kalibrasiya et
+ * @param raw_x, raw_y: Raw touch koordinatları
+ * @param screen_x, screen_y: Çevrilmiş ekran koordinatları (düzəldilmiş)
+ * @return Uyğun gələn düymənin ID-si (0 = heç bir düymə)
+ */
+uint8_t XPT2046_AutoCal_ProcessTouch(uint16_t raw_x, uint16_t raw_y,
+                                      uint16_t *screen_x, uint16_t *screen_y);
+
+/**
+ * @brief Öyrənmə rejimini aktiv/deaktiv et
+ * @param enable: 1 = aktiv, 0 = deaktiv
+ */
+void XPT2046_AutoCal_SetLearning(uint8_t enable);
+
+/**
+ * @brief Kalibrasiya olunubmu yoxla
+ * @return 1 kalibrasiya olunub, 0 olunmayıb
+ */
+uint8_t XPT2046_AutoCal_IsCalibrated(void);
+
+/**
+ * @brief Kalibrasiyani sıfırla
+ */
+void XPT2046_AutoCal_Reset(void);
+
+/**
+ * @brief Offset dəyərlərini al
+ * @param offset_x, offset_y: Offset dəyərləri üçün pointer
+ */
+void XPT2046_AutoCal_GetOffset(int16_t *offset_x, int16_t *offset_y);
+
+/**
+ * @brief Offset dəyərlərini manual təyin et
+ * @param offset_x, offset_y: Yeni offset dəyərləri
+ */
+void XPT2046_AutoCal_SetOffset(int16_t offset_x, int16_t offset_y);
+
+/**
+ * @brief Statistikanı al
+ * @param total: Ümumi toxunuş sayı
+ * @param matched: Düyməyə uyğun gələn sayı
+ * @param samples: Kalibrasiya nümunə sayı
+ */
+void XPT2046_AutoCal_GetStats(uint32_t *total, uint32_t *matched, uint16_t *samples);
+
+/**
+ * @brief Ən yaxın düyməni tap
+ * @param screen_x, screen_y: Ekran koordinatları
+ * @param btn_id: Tapılan düymənin ID-si
+ * @param distance: Məsafə
+ * @return 1 düymə tapıldı, 0 tapılmadı
+ */
+uint8_t XPT2046_AutoCal_FindNearestButton(uint16_t screen_x, uint16_t screen_y,
+                                           uint8_t *btn_id, uint16_t *distance);
+
+/**
+ * @brief Düzəldilmiş ekran koordinatlarını al
+ * @param raw_x, raw_y: Raw koordinatlar
+ * @param screen_x, screen_y: Düzəldilmiş ekran koordinatları
+ */
+void XPT2046_AutoCal_GetCorrectedCoords(uint16_t raw_x, uint16_t raw_y,
+                                         uint16_t *screen_x, uint16_t *screen_y);
+
+/**
+ * @brief Proximity threshold təyin et
+ * @param threshold: Yeni threshold dəyəri (piksel)
+ */
+void XPT2046_AutoCal_SetProximity(uint16_t threshold);
+
+/**
+ * @brief Debug məlumatlarını çap et
+ */
+void XPT2046_AutoCal_PrintDebug(void);
 
 #ifdef __cplusplus
 }

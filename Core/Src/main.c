@@ -149,6 +149,14 @@ void Touch_HandleSetpoint(uint16_t x, uint16_t y);
 void Touch_HandlePIDTune(uint16_t x, uint16_t y);
 void Touch_HandleCalibration(uint16_t x, uint16_t y);
 
+/* Avtomatik kalibrasiya */
+void AutoCal_RegisterAllButtons(void);
+void AutoCal_RegisterMainPageButtons(void);
+void AutoCal_RegisterMenuPageButtons(void);
+void AutoCal_RegisterSetpointPageButtons(void);
+void AutoCal_RegisterPIDPageButtons(void);
+void AutoCal_RegisterCalibrationPageButtons(void);
+
 /* UI komponentləri */
 void UI_DrawButton(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                    const char* text, uint16_t bg_color, uint16_t fg_color, uint8_t size);
@@ -333,16 +341,26 @@ void Screen_DrawMain(void) {
         
         /* Başlıq paneli */
         ILI9341_FillRect(0, 0, 320, 22, COLOR_ACCENT_BLUE);
-        ILI9341_DrawString(10, 5, "VALEH HPC", 
-                          COLOR_TEXT_WHITE, COLOR_ACCENT_BLUE, 1);
         
-        /* Sol üst künc - mode azaltma işarəsi */
-        ILI9341_DrawString(0, 5, "<", ILI9341_COLOR_YELLOW, COLOR_ACCENT_BLUE, 1);
+        /* Sol künc - mode azaltma işarəsi */
+        ILI9341_DrawString(5, 5, "<M", ILI9341_COLOR_YELLOW, COLOR_ACCENT_BLUE, 1);
         
-        /* Koordinat mode göstəricisi - sağ üst küncdə (toxunuş üçün böyük zona) */
+        /* Mərkəz - VALEH HPC + reset */
+        ILI9341_DrawString(80, 5, "VALEH HPC", COLOR_TEXT_WHITE, COLOR_ACCENT_BLUE, 1);
+        
+        /* Kalibrasiya sıfırlama zonası - mərkəzdə */
+        if (!XPT2046_AutoCal_IsCalibrated()) {
+            /* Öyrənmə prosesində - LEARN göstər */
+            ILI9341_DrawString(170, 5, "LEARN", COLOR_ACCENT_YELLOW, COLOR_ACCENT_BLUE, 1);
+        } else {
+            /* Kalibrasiya OK - RST göstər */
+            ILI9341_DrawString(170, 5, "[RST]", COLOR_ACCENT_GREEN, COLOR_ACCENT_BLUE, 1);
+        }
+        
+        /* Sağ künc - mode artırma işarəsi */
         char mode_info[16];
         sprintf(mode_info, "M%d>", XPT2046_GetCoordMode());
-        ILI9341_DrawString(290, 5, mode_info, ILI9341_COLOR_YELLOW, COLOR_ACCENT_BLUE, 1);
+        ILI9341_DrawString(285, 5, mode_info, ILI9341_COLOR_YELLOW, COLOR_ACCENT_BLUE, 1);
         
         /* Sol panel - Preset düymələri */
         UI_DrawPanel(5, 25, 105, 95, "PRESET");
@@ -445,6 +463,28 @@ void Screen_DrawMain(void) {
         ILI9341_DrawString(245, 212, "PID:ON", COLOR_ACCENT_GREEN, COLOR_BG_PANEL, 1);
     } else {
         ILI9341_DrawString(245, 212, "PID:OFF", COLOR_ACCENT_RED, COLOR_BG_PANEL, 1);
+    }
+    
+    /* ============================================
+     * AVTOMATİK KALİBRASİYA STATUS İNDİKATORU
+     * Sol alt küncdə kalibrasiya vəziyyətini göstər
+     * ============================================ */
+    ILI9341_FillRect(5, 175, 100, 18, COLOR_BG_DARK);
+    if (XPT2046_AutoCal_IsCalibrated()) {
+        /* Kalibrasiya tamamlandı - yaşıl */
+        int16_t off_x, off_y;
+        XPT2046_AutoCal_GetOffset(&off_x, &off_y);
+        char cal_str[24];
+        sprintf(cal_str, "CAL OK(%+d,%+d)", off_x, off_y);
+        ILI9341_DrawString(5, 175, cal_str, COLOR_ACCENT_GREEN, COLOR_BG_DARK, 1);
+    } else {
+        /* Öyrənmə prosesi davam edir - sarı */
+        uint32_t total, matched;
+        uint16_t samples;
+        XPT2046_AutoCal_GetStats(&total, &matched, &samples);
+        char learn_str[20];
+        sprintf(learn_str, "LEARN %d/5", samples);
+        ILI9341_DrawString(5, 175, learn_str, COLOR_ACCENT_YELLOW, COLOR_BG_DARK, 1);
     }
 }
 
@@ -652,12 +692,15 @@ void Screen_Update(void) {
 /* Debug göstərici üçün dəyişənlər */
 static uint16_t g_last_raw_x = 0, g_last_raw_y = 0;
 static uint16_t g_last_screen_x = 0, g_last_screen_y = 0;
-static uint8_t g_show_debug = 1;  /* Debug göstəricisi aktiv */
+static uint8_t g_show_debug = 1;  /* Debug göstəricisi aktiv - kalibrasiya üçün */
 static uint8_t g_last_button_hit = 0;  /* Son basılan buton */
 
+/* Avtomatik kalibrasiya statusu üçün rəng animasiyası */
+static uint8_t g_cal_anim_frame = 0;
+
 /**
- * @brief Touch işləmə - SADƏLƏŞDİRİLMİŞ VƏ ETİBARLI VERSİYA
- * @note Butonların düzgün işləməsi üçün optimallaşdırılmış
+ * @brief Touch işləmə - AVTOMATİK KALİBRASİYA İLƏ
+ * @note Düymələr avtomatik olaraq kalibrasiya edilir
  */
 void Touch_Process(void) {
     uint16_t tx, ty;
@@ -685,8 +728,12 @@ void Touch_Process(void) {
         return;  /* Koordinat oxunmadı */
     }
     
-    /* Screen koordinatlarına çevir */
-    XPT2046_ConvertToScreen(raw_x, raw_y, &tx, &ty);
+    /* ============================================
+     * AVTOMATİK KALİBRASİYA İLƏ KOORDİNAT ÇEVİRMƏ
+     * Bu funksiya həm koordinatları çevirir, həm də
+     * düymə yaxınlığına görə kalibrasiyani yeniləyir
+     * ============================================ */
+    uint8_t matched_btn = XPT2046_AutoCal_ProcessTouch(raw_x, raw_y, &tx, &ty);
     
     /* Debug üçün saxla */
     g_last_raw_x = raw_x;
@@ -699,20 +746,39 @@ void Touch_Process(void) {
     g_touch_was_pressed = 1;
     
     /* Debug: Koordinatları serial portda göstər */
-    printf("TOUCH: screen(%d,%d) raw(%d,%d) mode=%d page=%d\r\n", 
-           tx, ty, raw_x, raw_y, XPT2046_GetCoordMode(), g_current_page);
+    int16_t off_x, off_y;
+    XPT2046_AutoCal_GetOffset(&off_x, &off_y);
+    printf("TOUCH: screen(%d,%d) raw(%d,%d) mode=%d btn=%d offset(%d,%d) cal=%d\r\n", 
+           tx, ty, raw_x, raw_y, XPT2046_GetCoordMode(), matched_btn, 
+           off_x, off_y, XPT2046_AutoCal_IsCalibrated());
     
-    /* Vizual debug: Əsas ekranda koordinatları göstər */
+    /* Vizual debug: Əsas ekranda koordinat və kalibrasiya vəziyyətini göstər */
     if (g_current_page == PAGE_MAIN && g_show_debug) {
-        char dbg[40];
+        char dbg[48];
         /* Köhnə yazını sil */
-        ILI9341_FillRect(115, 125, 90, 25, COLOR_BG_DARK);
-        /* Raw koordinatları göstər */
-        sprintf(dbg, "R:%d,%d", raw_x, raw_y);
-        ILI9341_DrawString(115, 125, dbg, COLOR_TEXT_GREY, COLOR_BG_DARK, 1);
+        ILI9341_FillRect(115, 125, 95, 35, COLOR_BG_DARK);
+        
         /* Screen koordinatları göstər */
-        sprintf(dbg, "S:%d,%d M%d", tx, ty, XPT2046_GetCoordMode());
-        ILI9341_DrawString(115, 138, dbg, ILI9341_COLOR_CYAN, COLOR_BG_DARK, 1);
+        sprintf(dbg, "S:%d,%d", tx, ty);
+        ILI9341_DrawString(115, 125, dbg, ILI9341_COLOR_CYAN, COLOR_BG_DARK, 1);
+        
+        /* Kalibrasiya vəziyyəti */
+        if (XPT2046_AutoCal_IsCalibrated()) {
+            sprintf(dbg, "CAL:OK ofs(%d,%d)", off_x, off_y);
+            ILI9341_DrawString(115, 138, dbg, ILI9341_COLOR_GREEN, COLOR_BG_DARK, 1);
+        } else {
+            uint32_t total, matched;
+            uint16_t samples;
+            XPT2046_AutoCal_GetStats(&total, &matched, &samples);
+            sprintf(dbg, "LEARN:%d/5", samples);
+            ILI9341_DrawString(115, 138, dbg, ILI9341_COLOR_YELLOW, COLOR_BG_DARK, 1);
+        }
+        
+        /* Uyğun düymə göstər */
+        if (matched_btn > 0) {
+            sprintf(dbg, "BTN:%d", matched_btn);
+            ILI9341_DrawString(115, 151, dbg, ILI9341_COLOR_MAGENTA, COLOR_BG_DARK, 1);
+        }
     }
     
     /* Səhifəyə görə touch işlə */
@@ -773,13 +839,15 @@ void Touch_HandleMain(uint16_t x, uint16_t y) {
     }
     
     /* ============================================
-     * BAŞLIQ PANELI - MODE DƏYİŞDİRMƏ (y < 25)
-     * Sol künc (<) = mode azalt, Sağ künc (>) = mode artır
+     * BAŞLIQ PANELI - MODE DƏYİŞDİRMƏ VƏ KALİBRASİYA (y < 25)
+     * Sol künc (<) = mode azalt
+     * Mərkəz = kalibrasiya sıfırla
+     * Sağ künc (>) = mode artır
      * ============================================ */
     if (y < 25) {
         uint8_t mode = XPT2046_GetCoordMode();
         
-        if (x < 60) {
+        if (x < 50) {
             /* Sol künc - mode azalt */
             mode = (mode > 0) ? (mode - 1) : 7;
             XPT2046_SetCoordMode(mode);
@@ -787,12 +855,26 @@ void Touch_HandleMain(uint16_t x, uint16_t y) {
             g_last_button_hit = 1;
             g_needs_redraw = 1;
         }
-        else if (x > 260) {
+        else if (x > 270) {
             /* Sağ künc - mode artır */
             mode = (mode < 7) ? (mode + 1) : 0;
             XPT2046_SetCoordMode(mode);
             printf(">>> MODE UP: %d\r\n", mode);
             g_last_button_hit = 2;
+            g_needs_redraw = 1;
+        }
+        else if (x >= 120 && x <= 200) {
+            /* Mərkəz - kalibrasiya sıfırla */
+            XPT2046_AutoCal_Reset();
+            printf(">>> CALIBRATION RESET\r\n");
+            
+            /* Vizual feedback */
+            ILI9341_FillRect(100, 100, 120, 40, COLOR_ACCENT_RED);
+            ILI9341_DrawString(110, 110, "CAL RESET!", COLOR_TEXT_WHITE, COLOR_ACCENT_RED, 1);
+            ILI9341_DrawString(108, 125, "Try again!", COLOR_ACCENT_YELLOW, COLOR_ACCENT_RED, 1);
+            HAL_Delay(1000);
+            
+            g_last_button_hit = 99;
             g_needs_redraw = 1;
         }
         return;
@@ -1303,6 +1385,151 @@ void Touch_HandleCalibration(uint16_t x, uint16_t y) {
     printf("Touch in calibration area but no button: x=%d, y=%d\r\n", x, y);
 }
 
+/* =============== AVTOMATİK KALİBRASİYA DÜYMƏ QEYDİYYATI =============== */
+
+/* Düymə ID-ləri */
+enum ButtonID {
+    BTN_ID_NONE = 0,
+    /* Main page */
+    BTN_MAIN_START_STOP = 1,
+    BTN_MAIN_MENU = 2,
+    BTN_MAIN_SP_MINUS = 3,
+    BTN_MAIN_SP_PLUS = 4,
+    BTN_MAIN_PRESET_0 = 10,
+    BTN_MAIN_PRESET_1 = 11,
+    BTN_MAIN_PRESET_2 = 12,
+    BTN_MAIN_PRESET_3 = 13,
+    BTN_MAIN_PRESET_4 = 14,
+    BTN_MAIN_PRESET_5 = 15,
+    BTN_MAIN_MODE_DOWN = 20,
+    BTN_MAIN_MODE_UP = 21,
+    /* Menu page */
+    BTN_MENU_SETPOINT = 30,
+    BTN_MENU_PID_TUNE = 31,
+    BTN_MENU_CALIBRATION = 32,
+    BTN_MENU_BACK = 33,
+    /* Setpoint page */
+    BTN_SP_MINUS_10 = 40,
+    BTN_SP_MINUS_1 = 41,
+    BTN_SP_PLUS_1 = 42,
+    BTN_SP_PLUS_10 = 43,
+    BTN_SP_BACK = 44,
+    /* PID page */
+    BTN_PID_KP_MINUS = 50,
+    BTN_PID_KP_PLUS = 51,
+    BTN_PID_KI_MINUS = 52,
+    BTN_PID_KI_PLUS = 53,
+    BTN_PID_KD_MINUS = 54,
+    BTN_PID_KD_PLUS = 55,
+    BTN_PID_SP_MINUS = 56,
+    BTN_PID_SP_PLUS = 57,
+    BTN_PID_BACK = 58,
+    BTN_PID_SAVE = 59,
+    /* Calibration page */
+    BTN_CAL_MIN = 60,
+    BTN_CAL_MAX = 61,
+    BTN_CAL_SAVE = 62,
+    BTN_CAL_BACK = 63
+};
+
+/**
+ * @brief Main page düymələrini qeydiyyata al
+ */
+void AutoCal_RegisterMainPageButtons(void)
+{
+    /* Control düymələri - alt panel (y=208) */
+    XPT2046_AutoCal_RegisterButton(10, 208, 70, 25, "START/STOP", BTN_MAIN_START_STOP);
+    XPT2046_AutoCal_RegisterButton(85, 208, 70, 25, "MENU", BTN_MAIN_MENU);
+    XPT2046_AutoCal_RegisterButton(160, 208, 35, 25, "SP-", BTN_MAIN_SP_MINUS);
+    XPT2046_AutoCal_RegisterButton(200, 208, 35, 25, "SP+", BTN_MAIN_SP_PLUS);
+    
+    /* Preset düymələri - sol panel (3x2 grid) */
+    for (int i = 0; i < 6; i++) {
+        uint16_t btn_x = 8 + (i % 3) * 34;
+        uint16_t btn_y = 42 + (i / 3) * 38;
+        char name[16];
+        sprintf(name, "PRESET_%d", i);
+        XPT2046_AutoCal_RegisterButton(btn_x, btn_y, 32, 35, name, BTN_MAIN_PRESET_0 + i);
+    }
+    
+    /* Mode dəyişdirmə düymələri - başlıq paneli */
+    XPT2046_AutoCal_RegisterButton(0, 0, 50, 22, "MODE_DN", BTN_MAIN_MODE_DOWN);
+    XPT2046_AutoCal_RegisterButton(270, 0, 50, 22, "MODE_UP", BTN_MAIN_MODE_UP);
+}
+
+/**
+ * @brief Menu page düymələrini qeydiyyata al
+ */
+void AutoCal_RegisterMenuPageButtons(void)
+{
+    XPT2046_AutoCal_RegisterButton(40, 45, 240, 35, "SETPOINT", BTN_MENU_SETPOINT);
+    XPT2046_AutoCal_RegisterButton(40, 90, 240, 35, "PID_TUNE", BTN_MENU_PID_TUNE);
+    XPT2046_AutoCal_RegisterButton(40, 135, 240, 35, "CALIBRATION", BTN_MENU_CALIBRATION);
+    XPT2046_AutoCal_RegisterButton(40, 180, 240, 35, "BACK", BTN_MENU_BACK);
+}
+
+/**
+ * @brief Setpoint page düymələrini qeydiyyata al
+ */
+void AutoCal_RegisterSetpointPageButtons(void)
+{
+    XPT2046_AutoCal_RegisterButton(25, 100, 50, 35, "SP-10", BTN_SP_MINUS_10);
+    XPT2046_AutoCal_RegisterButton(80, 100, 50, 35, "SP-1", BTN_SP_MINUS_1);
+    XPT2046_AutoCal_RegisterButton(190, 100, 50, 35, "SP+1", BTN_SP_PLUS_1);
+    XPT2046_AutoCal_RegisterButton(245, 100, 50, 35, "SP+10", BTN_SP_PLUS_10);
+    XPT2046_AutoCal_RegisterButton(100, 190, 120, 35, "BACK", BTN_SP_BACK);
+}
+
+/**
+ * @brief PID page düymələrini qeydiyyata al
+ */
+void AutoCal_RegisterPIDPageButtons(void)
+{
+    /* Kp sırası */
+    XPT2046_AutoCal_RegisterButton(200, 40, 40, 30, "Kp-", BTN_PID_KP_MINUS);
+    XPT2046_AutoCal_RegisterButton(260, 40, 40, 30, "Kp+", BTN_PID_KP_PLUS);
+    /* Ki sırası */
+    XPT2046_AutoCal_RegisterButton(200, 80, 40, 30, "Ki-", BTN_PID_KI_MINUS);
+    XPT2046_AutoCal_RegisterButton(260, 80, 40, 30, "Ki+", BTN_PID_KI_PLUS);
+    /* Kd sırası */
+    XPT2046_AutoCal_RegisterButton(200, 120, 40, 30, "Kd-", BTN_PID_KD_MINUS);
+    XPT2046_AutoCal_RegisterButton(260, 120, 40, 30, "Kd+", BTN_PID_KD_PLUS);
+    /* SP sırası */
+    XPT2046_AutoCal_RegisterButton(200, 160, 40, 30, "SP-", BTN_PID_SP_MINUS);
+    XPT2046_AutoCal_RegisterButton(260, 160, 40, 30, "SP+", BTN_PID_SP_PLUS);
+    /* Back/Save */
+    XPT2046_AutoCal_RegisterButton(20, 200, 80, 30, "BACK", BTN_PID_BACK);
+    XPT2046_AutoCal_RegisterButton(220, 200, 80, 30, "SAVE", BTN_PID_SAVE);
+}
+
+/**
+ * @brief Calibration page düymələrini qeydiyyata al
+ */
+void AutoCal_RegisterCalibrationPageButtons(void)
+{
+    XPT2046_AutoCal_RegisterButton(20, 60, 130, 40, "CAL_MIN", BTN_CAL_MIN);
+    XPT2046_AutoCal_RegisterButton(170, 60, 130, 40, "CAL_MAX", BTN_CAL_MAX);
+    XPT2046_AutoCal_RegisterButton(20, 180, 100, 35, "BACK", BTN_CAL_BACK);
+    XPT2046_AutoCal_RegisterButton(200, 180, 100, 35, "SAVE", BTN_CAL_SAVE);
+}
+
+/**
+ * @brief Bütün düymələri qeydiyyata al
+ */
+void AutoCal_RegisterAllButtons(void)
+{
+    XPT2046_AutoCal_ClearButtons();
+    
+    AutoCal_RegisterMainPageButtons();
+    AutoCal_RegisterMenuPageButtons();
+    AutoCal_RegisterSetpointPageButtons();
+    AutoCal_RegisterPIDPageButtons();
+    AutoCal_RegisterCalibrationPageButtons();
+    
+    printf("AutoCal: All buttons registered!\r\n");
+    XPT2046_AutoCal_PrintDebug();
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -1349,15 +1576,32 @@ int main(void)
   ILI9341_Init();
   HAL_Delay(100);
   
-  /* Touch başlat - LCD-dən sonra, kalibrasiyadan əvvəl */
+  /* Touch başlat - LCD-dən sonra */
   XPT2046_Init();
   HAL_Delay(50);
   
   /* ============================================
-   * 3-NÖQTƏLİ TOUCH KALİBRASİYA
-   * Ekran açılmadan əvvəl touch koordinatlarını kalibrasiya et
+   * AVTOMATİK DÜYMƏ KALİBRASİYA SİSTEMİ
+   * İstifadəçi düyməyə toxunduqca sistem öyrənir
    * ============================================ */
-  ILI9341_RunTouchCalibration();
+  XPT2046_AutoCal_Init();
+  AutoCal_RegisterAllButtons();
+  
+  /* Öyrənmə rejimini aktiv et - kalibrasiya avtomatik olacaq */
+  XPT2046_AutoCal_SetLearning(1);
+  
+  /* Kalibrasiya başlangıc ekranı */
+  ILI9341_FillScreen(ILI9341_COLOR_BLACK);
+  ILI9341_DrawString(30, 60, "AUTO-CALIBRATION", ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 2);
+  ILI9341_DrawString(20, 100, "Sistem duymelerinizi", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 1);
+  ILI9341_DrawString(20, 120, "taniyacaq ve ozu", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 1);
+  ILI9341_DrawString(20, 140, "kalibrasiya edecek.", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 1);
+  ILI9341_DrawString(20, 170, "Duymelerinize toxunun!", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
+  ILI9341_DrawString(50, 200, "3 saniye gozleyin...", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 1);
+  HAL_Delay(3000);
+  
+  /* Default koordinat mode-u təyin et */
+  XPT2046_LoadDefaultCalibration();
   
   /* PWM başlat - yalnız istifadə olunan kanallar */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);  /* Motor PWM */
