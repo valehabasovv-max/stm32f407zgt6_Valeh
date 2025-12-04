@@ -772,6 +772,34 @@ void Touch_Process(void) {
         return;
     }
     
+    /* ============================================
+     * HƏMİŞƏ RAW KOORDİNATLARI OXU VƏ GÖSTƏRİCİNİ YENİLƏ
+     * Bu debug üçün vacibdir - istifadəçi toxunuşu görə bilsin
+     * ============================================ */
+    if (XPT2046_ReadRaw(&raw_x, &raw_y)) {
+        /* Raw koordinatları həmişə yenilə - debug üçün */
+        g_last_raw_x = raw_x;
+        g_last_raw_y = raw_y;
+        
+        /* Ekran koordinatlarını da hesabla - debug üçün */
+        XPT2046_ConvertToScreen(raw_x, raw_y, &tx, &ty);
+        
+        /* Offset tətbiq et */
+        int16_t off_x, off_y;
+        XPT2046_AutoCal_GetOffset(&off_x, &off_y);
+        int16_t corrected_x = (int16_t)tx + off_x;
+        int16_t corrected_y = (int16_t)ty + off_y;
+        
+        /* Limitlər */
+        if (corrected_x < 0) corrected_x = 0;
+        if (corrected_x > 319) corrected_x = 319;
+        if (corrected_y < 0) corrected_y = 0;
+        if (corrected_y > 239) corrected_y = 239;
+        
+        g_last_screen_x = (uint16_t)corrected_x;
+        g_last_screen_y = (uint16_t)corrected_y;
+    }
+    
     /* Debounce - əvvəlki touch-dan minimum vaxt keçməlidir */
     uint32_t now = HAL_GetTick();
     if (now - g_last_touch_time < TOUCH_DEBOUNCE_MS) {
@@ -783,10 +811,14 @@ void Touch_Process(void) {
         return;
     }
     
-    /* Raw koordinatları oxu */
-    if (!XPT2046_GetCoordinates(&raw_x, &raw_y)) {
-        return;  /* Koordinat oxunmadı */
+    /* Raw koordinatları yenidən oxu - daha dəqiq dəyər üçün */
+    if (!XPT2046_ReadRaw(&raw_x, &raw_y)) {
+        /* Oxuma uğursuz - debug dəyərləri yuxarıda yenilənib, sadəcə geri qayıt */
+        return;
     }
+    
+    /* Ekran koordinatlarını hesabla */
+    XPT2046_ConvertToScreen(raw_x, raw_y, &tx, &ty);
     
     /* ============================================
      * AVTOMATİK KALİBRASİYA İLƏ KOORDİNAT ÇEVİRMƏ
@@ -795,9 +827,7 @@ void Touch_Process(void) {
      * ============================================ */
     uint8_t matched_btn = XPT2046_AutoCal_ProcessTouch(raw_x, raw_y, &tx, &ty);
     
-    /* Debug üçün saxla */
-    g_last_raw_x = raw_x;
-    g_last_raw_y = raw_y;
+    /* Final koordinatları yenilə - ProcessTouch offset tətbiq etmiş ola bilər */
     g_last_screen_x = tx;
     g_last_screen_y = ty;
     
