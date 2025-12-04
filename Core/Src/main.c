@@ -486,6 +486,62 @@ void Screen_DrawMain(void) {
         sprintf(learn_str, "LEARN %d/5", samples);
         ILI9341_DrawString(5, 175, learn_str, COLOR_ACCENT_YELLOW, COLOR_BG_DARK, 1);
     }
+    
+    /* ============================================
+     * KOORDİNAT GÖSTƏRİCİ PANELİ
+     * Sağ alt küncdə - STATUS panelinin altında
+     * Butonlara toxunanda koordinat dəyişikliyini izləmək üçün
+     * ============================================ */
+    {
+        char coord_str[40];
+        
+        /* Panel arxa planı - STATUS panelinin altında */
+        ILI9341_FillRect(210, 122, 105, 70, COLOR_BG_PANEL);
+        ILI9341_DrawRect(210, 122, 105, 70, ILI9341_COLOR_MAGENTA);
+        
+        /* Başlıq */
+        ILI9341_DrawString(215, 124, "TOUCH DEBUG", ILI9341_COLOR_MAGENTA, COLOR_BG_PANEL, 1);
+        
+        /* SCREEN: Ekran koordinatları - ağ rəngdə - ən vacib! */
+        sprintf(coord_str, "XY:%3d,%3d", g_last_screen_x, g_last_screen_y);
+        ILI9341_DrawString(213, 136, coord_str, ILI9341_COLOR_WHITE, COLOR_BG_PANEL, 1);
+        
+        /* RAW: Raw koordinatları - CYAN rəngdə */
+        sprintf(coord_str, "RW:%4d,%4d", g_last_raw_x, g_last_raw_y);
+        ILI9341_DrawString(213, 148, coord_str, ILI9341_COLOR_CYAN, COLOR_BG_PANEL, 1);
+        
+        /* BTN: Hədəf buton koordinatları - yaşıl rəngdə */
+        if (g_last_button_hit > 0 && g_last_btn_w > 0) {
+            /* Butonun mərkəzi */
+            uint16_t btn_cx = g_last_btn_x + g_last_btn_w / 2;
+            uint16_t btn_cy = g_last_btn_y + g_last_btn_h / 2;
+            sprintf(coord_str, "BT:%3d,%3d", btn_cx, btn_cy);
+            ILI9341_DrawString(213, 160, coord_str, ILI9341_COLOR_GREEN, COLOR_BG_PANEL, 1);
+        } else {
+            ILI9341_DrawString(213, 160, "BT:---,---", COLOR_TEXT_GREY, COLOR_BG_PANEL, 1);
+        }
+        
+        /* FƏRQ: touch ilə buton arasındakı fərq - ən vacib! */
+        if (g_last_button_hit > 0 && g_last_btn_w > 0) {
+            /* Butonun mərkəzi */
+            int16_t btn_cx = g_last_btn_x + g_last_btn_w / 2;
+            int16_t btn_cy = g_last_btn_y + g_last_btn_h / 2;
+            /* Fərq */
+            int16_t dx = (int16_t)g_last_screen_x - btn_cx;
+            int16_t dy = (int16_t)g_last_screen_y - btn_cy;
+            sprintf(coord_str, "DF:%+3d,%+3d", dx, dy);
+            /* Fərq çox böyükdürsə qırmızı, yoxsa yaşıl */
+            uint16_t dif_color = (dx > 30 || dx < -30 || dy > 30 || dy < -30) ? 
+                                  COLOR_ACCENT_RED : COLOR_ACCENT_GREEN;
+            ILI9341_DrawString(213, 172, coord_str, dif_color, COLOR_BG_PANEL, 1);
+        } else {
+            ILI9341_DrawString(213, 172, "DF:--,--", COLOR_TEXT_GREY, COLOR_BG_PANEL, 1);
+        }
+        
+        /* Mode və Buton ID */
+        sprintf(coord_str, "M%d B%02d", XPT2046_GetCoordMode(), g_last_button_hit);
+        ILI9341_DrawString(213, 184, coord_str, ILI9341_COLOR_YELLOW, COLOR_BG_PANEL, 1);
+    }
 }
 
 /**
@@ -695,6 +751,10 @@ static uint16_t g_last_screen_x = 0, g_last_screen_y = 0;
 static uint8_t g_show_debug = 1;  /* Debug göstəricisi aktiv - kalibrasiya üçün */
 static uint8_t g_last_button_hit = 0;  /* Son basılan buton */
 
+/* Buton koordinatları - hədəf butonun koordinatları */
+static uint16_t g_last_btn_x = 0, g_last_btn_y = 0;
+static uint16_t g_last_btn_w = 0, g_last_btn_h = 0;
+
 /* Avtomatik kalibrasiya statusu üçün rəng animasiyası */
 static uint8_t g_cal_anim_frame = 0;
 
@@ -849,6 +909,8 @@ void Touch_HandleMain(uint16_t x, uint16_t y) {
         
         if (x < 50) {
             /* Sol künc - mode azalt */
+            g_last_btn_x = 0; g_last_btn_y = 0;
+            g_last_btn_w = 50; g_last_btn_h = 22;
             mode = (mode > 0) ? (mode - 1) : 7;
             XPT2046_SetCoordMode(mode);
             printf(">>> MODE DOWN: %d\r\n", mode);
@@ -857,6 +919,8 @@ void Touch_HandleMain(uint16_t x, uint16_t y) {
         }
         else if (x > 270) {
             /* Sağ künc - mode artır */
+            g_last_btn_x = 270; g_last_btn_y = 0;
+            g_last_btn_w = 50; g_last_btn_h = 22;
             mode = (mode < 7) ? (mode + 1) : 0;
             XPT2046_SetCoordMode(mode);
             printf(">>> MODE UP: %d\r\n", mode);
@@ -865,6 +929,8 @@ void Touch_HandleMain(uint16_t x, uint16_t y) {
         }
         else if (x >= 120 && x <= 200) {
             /* Mərkəz - kalibrasiya sıfırla */
+            g_last_btn_x = 120; g_last_btn_y = 0;
+            g_last_btn_w = 80; g_last_btn_h = 22;
             XPT2046_AutoCal_Reset();
             printf(">>> CALIBRATION RESET\r\n");
             
@@ -890,6 +956,9 @@ void Touch_HandleMain(uint16_t x, uint16_t y) {
          * Zona: x < 82 (buton + gap-ın yarısı) */
         if (x < 82) {
             printf(">>> START/STOP button HIT at (%d,%d)\r\n", x, y);
+            /* Buton koordinatlarını saxla */
+            g_last_btn_x = 10; g_last_btn_y = 208;
+            g_last_btn_w = 70; g_last_btn_h = 25;
             /* Vizual feedback - buton rəngini dəyiş */
             ILI9341_FillRect(10, 208, 70, 25, ILI9341_COLOR_WHITE);
             g_system_running = !g_system_running;
@@ -903,6 +972,9 @@ void Touch_HandleMain(uint16_t x, uint16_t y) {
          * Zona: x >= 82 && x < 158 */
         if (x >= 82 && x < 158) {
             printf(">>> MENU button HIT at (%d,%d)\r\n", x, y);
+            /* Buton koordinatlarını saxla */
+            g_last_btn_x = 85; g_last_btn_y = 208;
+            g_last_btn_w = 70; g_last_btn_h = 25;
             /* Vizual feedback */
             ILI9341_FillRect(85, 208, 70, 25, ILI9341_COLOR_WHITE);
             g_current_page = PAGE_MENU;
@@ -915,6 +987,9 @@ void Touch_HandleMain(uint16_t x, uint16_t y) {
          * Zona: x >= 158 && x < 198 */
         if (x >= 158 && x < 198) {
             printf(">>> SP- button HIT at (%d,%d)\r\n", x, y);
+            /* Buton koordinatlarını saxla */
+            g_last_btn_x = 160; g_last_btn_y = 208;
+            g_last_btn_w = 35; g_last_btn_h = 25;
             /* Vizual feedback */
             ILI9341_FillRect(160, 208, 35, 25, ILI9341_COLOR_WHITE);
             float new_sp = status->target_pressure - 10.0f;
@@ -929,6 +1004,9 @@ void Touch_HandleMain(uint16_t x, uint16_t y) {
          * Zona: x >= 198 && x < 240 */
         if (x >= 198 && x < 240) {
             printf(">>> SP+ button HIT at (%d,%d)\r\n", x, y);
+            /* Buton koordinatlarını saxla */
+            g_last_btn_x = 200; g_last_btn_y = 208;
+            g_last_btn_w = 35; g_last_btn_h = 25;
             /* Vizual feedback */
             ILI9341_FillRect(200, 208, 35, 25, ILI9341_COLOR_WHITE);
             float new_sp = status->target_pressure + 10.0f;
@@ -976,9 +1054,12 @@ void Touch_HandleMain(uint16_t x, uint16_t y) {
         int idx = row * 3 + col;
         if (idx >= 0 && idx < 6) {
             printf(">>> PRESET %d HIT at (%d,%d) -> %.0f bar\r\n", idx, x, y, g_presets[idx]);
-            /* Vizual feedback - buton rəngini dəyiş */
+            /* Buton koordinatlarını hesabla və saxla */
             uint16_t btn_x = 8 + (idx % 3) * 34;
             uint16_t btn_y = 42 + (idx / 3) * 38;
+            g_last_btn_x = btn_x; g_last_btn_y = btn_y;
+            g_last_btn_w = 32; g_last_btn_h = 35;
+            /* Vizual feedback - buton rəngini dəyiş */
             ILI9341_FillRect(btn_x, btn_y, 32, 35, ILI9341_COLOR_WHITE);
             g_current_preset = idx;
             AdvancedPressureControl_SetTargetPressure(g_presets[idx]);
@@ -1005,19 +1086,11 @@ void Touch_HandleMain(uint16_t x, uint16_t y) {
         return;
     }
     
-    /* Digər zonalara toxunuş */
+    /* Digər zonalara toxunuş - heç bir butona dəymədik */
     printf("Touch outside all zones: x=%d, y=%d\r\n", x, y);
     g_last_button_hit = 0;
-    
-    /* DEBUG: Koordinat məlumatını ekranda göstər */
-    if (g_show_debug) {
-        char dbg[32];
-        ILI9341_FillRect(115, 125, 95, 30, COLOR_BG_DARK);
-        sprintf(dbg, "X:%d Y:%d", x, y);
-        ILI9341_DrawString(115, 125, dbg, ILI9341_COLOR_MAGENTA, COLOR_BG_DARK, 1);
-        sprintf(dbg, "BTN:%d M:%d", g_last_button_hit, XPT2046_GetCoordMode());
-        ILI9341_DrawString(115, 140, dbg, ILI9341_COLOR_CYAN, COLOR_BG_DARK, 1);
-    }
+    g_last_btn_w = 0;  /* Buton yoxdur */
+    g_last_btn_h = 0;
 }
 
 /**
