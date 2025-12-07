@@ -340,10 +340,17 @@ uint8_t XPT2046_ReadRaw(uint16_t *x, uint16_t *y)
         tp_delay();
         
         /* Çox geniş diapazon qəbul et - bütün etibarlı dəyərlər */
+        uint8_t accepted = 0;
         if (rx > 100 && rx < 4000 && ry > 100 && ry < 4000) {
             x_samples[valid_samples] = rx;
             y_samples[valid_samples] = ry;
             valid_samples++;
+            accepted = 1;
+        }
+
+        /* Debug: nümunələri çap et (əgər debug_mode aktivdirsə) */
+        if (debug_mode) {
+            printf("XPT2046 sample %d: rx=%u ry=%u %s\r\n", i, rx, ry, accepted ? "ACCEPT" : "REJECT");
         }
     }
     
@@ -356,6 +363,7 @@ uint8_t XPT2046_ReadRaw(uint16_t *x, uint16_t *y)
     if (valid_samples == 1) {
         *x = x_samples[0];
         *y = y_samples[0];
+        if (debug_mode) printf("XPT2046 final (1 sample): x=%u y=%u\r\n", *x, *y);
         return 1;
     }
     
@@ -379,7 +387,9 @@ uint8_t XPT2046_ReadRaw(uint16_t *x, uint16_t *y)
     uint8_t mid = valid_samples / 2;
     *x = x_samples[mid];
     *y = y_samples[mid];
-    
+
+    if (debug_mode) printf("XPT2046 median result: valid=%d mid=%d x=%u y=%u\r\n", valid_samples, mid, *x, *y);
+
     return 1;
 }
 
@@ -701,6 +711,35 @@ uint8_t XPT2046_IsCalibrated(void)
 TouchCalibration_t* XPT2046_GetCalibrationData(void)
 {
     return &touch_cal;
+}
+
+/**
+ * @brief Self-test: read raw X/Y samples ignoring IRQ and print them
+ * @param samples: number of samples to read and print
+ *
+ * Use this when IRQ may be unreliable to check if the controller responds.
+ */
+void XPT2046_SelfTest(uint8_t samples)
+{
+    if (samples == 0) return;
+
+    printf("XPT2046 SelfTest: reading %u samples (ignoring IRQ)\r\n", samples);
+
+    for (uint8_t i = 0; i < samples; i++) {
+        /* Start transfer */
+        HAL_GPIO_WritePin(TP_CS_GPIO_Port, TP_CS_Pin, GPIO_PIN_RESET);
+        tp_delay();
+
+        uint16_t rx = tp_read12(XPT2046_CMD_READ_X);
+        uint16_t ry = tp_read12(XPT2046_CMD_READ_Y);
+
+        HAL_GPIO_WritePin(TP_CS_GPIO_Port, TP_CS_Pin, GPIO_PIN_SET);
+
+        printf("SelfTest %u: raw_x=%u raw_y=%u\r\n", i, rx, ry);
+        HAL_Delay(20);
+    }
+
+    printf("XPT2046 SelfTest done\r\n");
 }
 
 /**

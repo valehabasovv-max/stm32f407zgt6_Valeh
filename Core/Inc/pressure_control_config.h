@@ -246,11 +246,6 @@ void PressureControlConfig_LoadPIDParams(void);
 void PressureControlConfig_SaveCalibrationData(void);
 void PressureControlConfig_LoadCalibrationData(void);
 
-/* Additional Function Declarations */
-void PressureControlConfig_BackupConfiguration(void);
-void PressureControlConfig_RestoreConfiguration(void);
-void PressureControlConfig_ResetToDefaults(void);
-
 #ifdef __cplusplus
 }
 #endif

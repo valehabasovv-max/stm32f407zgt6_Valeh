@@ -1754,6 +1754,10 @@ int main(void)
     /* Touch işlə */
     Touch_Process();
     
+    /* Pressure Control Touch Handling - ƏLAVƏ EDİLDİ */
+    ILI9341_HandlePressureControlTouch();
+    ILI9341_HandleCalibrationTouch();
+    
     /* Ekran yenilə */
     Screen_Update();
     

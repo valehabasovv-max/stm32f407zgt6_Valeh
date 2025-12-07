@@ -1,0 +1,58 @@
+# Renode Emulator Script for STM32F407ZGT6 - WITH GUI
+# VALEH High Pressure Control System
+# This version includes GUI for visual display
+
+# Create STM32F407 machine
+mach create "Valeh_Pressure_Control"
+
+# Load STM32F4 Discovery platform (compatible with STM32F407)
+# This platform includes STM32F407VG CPU and all necessary peripherals
+machine LoadPlatformDescription @platforms/boards/stm32f4_discovery.repl
+
+# Load the firmware
+$bin?=@binaries/Valeh_injec_pogram.elf
+
+# Configure CPU
+sysbus.cpu PerformanceInMips 168
+sysbus.cpu ExecutionMode Continuous
+
+# Configure UART for printf output (Serial Monitor)
+logLevel 3
+
+# Configure memory regions
+sysbus LoadELF $bin
+
+# Create UART analyzer after platform is loaded
+# UART2 is typically at 0x40004400 for STM32F407
+createUartAnalyzer sysbus.uart2 "uart2_output"
+
+# Note: LCD and Touch simulation
+# Renode does not fully simulate ILI9341 LCD and XPT2046 Touch
+# However, you can:
+# 1. Monitor UART output for debug messages
+# 2. Use Renode's peripheral inspection tools
+# 3. Check memory/register values
+# 4. For full visual interface, use real hardware
+
+# Configure ADC simulation (return test values)
+# This allows the pressure control code to run
+sysbus WriteDoubleWord 0x40012000 0x00000001  # ADC3_CR2 - ADON bit
+
+# Start the machine
+start
+
+# Print welcome message
+echo "=========================================="
+echo "VALEH Pressure Control System Emulator"
+echo "STM32F407ZGT6 - Renode (GUI Mode)"
+echo "=========================================="
+echo ""
+echo "UART2 output will be shown in the analyzer"
+echo "Press Ctrl+C to stop"
+echo ""
+echo "IMPORTANT: LCD and Touch are NOT fully simulated"
+echo "For visual interface, you need to:"
+echo "  1. Upload to real hardware, OR"
+echo "  2. Use UART debug output to monitor state"
+echo ""
+

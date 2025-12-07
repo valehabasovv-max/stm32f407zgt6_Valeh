@@ -59,10 +59,18 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define pressure_sensor_Pin GPIO_PIN_3
+#define pressure_sensor_GPIO_Port GPIOA
+#define Motor_pwm_Pin GPIO_PIN_7
+#define Motor_pwm_GPIO_Port GPIOA
 #define Lcd_RST_Pin GPIO_PIN_5
 #define Lcd_RST_GPIO_Port GPIOC
 #define Lcd_LIG_Pin GPIO_PIN_0
 #define Lcd_LIG_GPIO_Port GPIOB
+#define ZME_pwm_Pin GPIO_PIN_6
+#define ZME_pwm_GPIO_Port GPIOC
+#define DRV_pwm_Pin GPIO_PIN_8
+#define DRV_pwm_GPIO_Port GPIOC
 
 /* USER CODE BEGIN Private defines */
 
