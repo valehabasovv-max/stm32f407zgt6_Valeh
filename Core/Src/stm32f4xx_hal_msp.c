@@ -100,10 +100,10 @@ void HAL_ADC_MspInit(ADC_HandleTypeDef* hadc)
     /**ADC3 GPIO Configuration
     PA3     ------> ADC3_IN3
     */
-    GPIO_InitStruct.Pin = GPIO_PIN_3;
+    GPIO_InitStruct.Pin = pressure_sensor_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+    HAL_GPIO_Init(pressure_sensor_GPIO_Port, &GPIO_InitStruct);
 
     /* USER CODE BEGIN ADC3_MspInit 1 */
 
@@ -132,7 +132,7 @@ void HAL_ADC_MspDeInit(ADC_HandleTypeDef* hadc)
     /**ADC3 GPIO Configuration
     PA3     ------> ADC3_IN3
     */
-    HAL_GPIO_DeInit(GPIOA, GPIO_PIN_3);
+    HAL_GPIO_DeInit(pressure_sensor_GPIO_Port, pressure_sensor_Pin);
 
     /* USER CODE BEGIN ADC3_MspDeInit 1 */
 
@@ -254,25 +254,18 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef* htim)
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOC_CLK_ENABLE();
     /**TIM3 GPIO Configuration
-    PA7     ------> TIM3_CH2 (DRV PWM)
-    PC6     ------> TIM3_CH1 (Motor PWM)
-    PC8     ------> TIM3_CH3 (ZME PWM)
-    
-    QEYD: PB1 (TIM3_CH4) istifadə olunmur - XPT2046 Touch SCK üçün saxlanılır!
+    PA7     ------> TIM3_CH2
+    PC6     ------> TIM3_CH1
+    PC8     ------> TIM3_CH3
     */
-    GPIO_InitStruct.Pin = GPIO_PIN_7;
+    GPIO_InitStruct.Pin = Motor_pwm_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     GPIO_InitStruct.Alternate = GPIO_AF2_TIM3;
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+    HAL_GPIO_Init(Motor_pwm_GPIO_Port, &GPIO_InitStruct);
 
-    /* KRİTİK DÜZƏLİŞ: PB1 (TIM3_CH4) konfiqurasiyası silindi!
-     * PB1 XPT2046 Touch Controller üçün SCK pini kimi istifadə olunur.
-     * TIM3_CH4 sistemdə istifadə olunmur, ona görə də konfiqurasiya lazım deyil.
-     */
-
-    GPIO_InitStruct.Pin = GPIO_PIN_6|GPIO_PIN_8;
+    GPIO_InitStruct.Pin = ZME_pwm_Pin|DRV_pwm_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -305,48 +298,6 @@ void HAL_TIM_PWM_MspDeInit(TIM_HandleTypeDef* htim_pwm)
     /* USER CODE END TIM3_MspDeInit 1 */
   }
 
-}
-
-/**
-  * @brief TIM Base MSP Initialization
-  * This function configures the hardware resources used in this example
-  * @param htim_base: TIM Base handle pointer
-  * @retval None
-  */
-void HAL_TIM_Base_MspInit(TIM_HandleTypeDef* htim_base)
-{
-  if(htim_base->Instance==TIM6)
-  {
-    /* USER CODE BEGIN TIM6_MspInit 0 */
-
-    /* USER CODE END TIM6_MspInit 0 */
-    /* Peripheral clock enable */
-    __HAL_RCC_TIM6_CLK_ENABLE();
-    /* USER CODE BEGIN TIM6_MspInit 1 */
-
-    /* USER CODE END TIM6_MspInit 1 */
-  }
-}
-
-/**
-  * @brief TIM Base MSP De-Initialization
-  * This function freeze the hardware resources used in this example
-  * @param htim_base: TIM Base handle pointer
-  * @retval None
-  */
-void HAL_TIM_Base_MspDeInit(TIM_HandleTypeDef* htim_base)
-{
-  if(htim_base->Instance==TIM6)
-  {
-    /* USER CODE BEGIN TIM6_MspDeInit 0 */
-
-    /* USER CODE END TIM6_MspDeInit 0 */
-    /* Peripheral clock disable */
-    __HAL_RCC_TIM6_CLK_DISABLE();
-    /* USER CODE BEGIN TIM6_MspDeInit 1 */
-
-    /* USER CODE END TIM6_MspDeInit 1 */
-  }
 }
 
 /**

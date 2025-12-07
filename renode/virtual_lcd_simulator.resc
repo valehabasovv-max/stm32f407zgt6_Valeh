@@ -1,0 +1,94 @@
+# Renode Virtual LCD Simulator for STM32F407
+# VALEH High Pressure Control System
+# This creates a virtual LCD display that can show the screen content
+
+# Create STM32F407 machine
+mach create "Valeh_Pressure_Control"
+
+# Load STM32F4 Discovery platform
+machine LoadPlatformDescription @platforms/boards/stm32f4_discovery.repl
+
+# Load the firmware
+$bin?=@binaries/Valeh_injec_pogram.elf
+
+# Configure CPU
+sysbus.cpu PerformanceInMips 168
+sysbus.cpu ExecutionMode Continuous
+
+# Configure UART for printf output
+logLevel 3
+createUartAnalyzer sysbus.uart2 "uart2_output"
+
+# Load firmware
+sysbus LoadELF $bin
+
+# ============================================
+# VIRTUAL LCD SIMULATOR
+# ============================================
+# Create a virtual display that simulates ILI9341 LCD
+# This will show a 320x240 pixel display
+
+# Create virtual LCD display
+# Note: Renode doesn't have built-in LCD simulator, but we can:
+# 1. Monitor FSMC writes (LCD uses FSMC)
+# 2. Create a Python script to visualize
+# 3. Use Renode's peripheral inspection
+
+# Monitor FSMC writes to LCD area
+# ILI9341 is connected via FSMC, typically at address 0x60000000
+# We'll monitor writes to this area and visualize them
+
+# Create a Python helper to visualize LCD
+python:
+"""
+import sys
+import struct
+from Antmicro.Renode.Peripherals.Display import IDisplay
+
+class VirtualLCD:
+    def __init__(self, width=320, height=240):
+        self.width = width
+        self.height = height
+        self.framebuffer = [[0 for x in range(width)] for y in range(height)]
+        
+    def update_pixel(self, x, y, color):
+        if 0 <= x < self.width and 0 <= y < self.height:
+            self.framebuffer[y][x] = color
+            
+    def get_framebuffer(self):
+        return self.framebuffer
+
+lcd = VirtualLCD(320, 240)
+"""
+
+# Monitor FSMC writes
+# FSMC address range for LCD: 0x60000000 - 0x6FFFFFFF
+# We'll hook into FSMC write operations
+
+# Create memory hook for FSMC LCD area
+sysbus.cpu SetHookAtMemoryAccess "0x60000000" "0x6FFFFFFF" true true false:
+    """
+    # This hook will be called when LCD writes happen
+    # We can capture the data and visualize it
+    pass
+    """
+
+# Configure ADC simulation
+sysbus WriteDoubleWord 0x40012000 0x00000001  # ADC3_CR2 - ADON bit
+
+# Start the machine
+start
+
+# Print welcome message
+echo "=========================================="
+echo "VALEH Pressure Control System Emulator"
+echo "STM32F407ZGT6 - Renode with Virtual LCD"
+echo "=========================================="
+echo ""
+echo "Virtual LCD: 320x240 pixels"
+echo "FSMC LCD area: 0x60000000"
+echo ""
+echo "Note: LCD visualization requires additional setup"
+echo "      See SIMULATOR_SETUP.md for details"
+echo ""
+

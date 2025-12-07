@@ -12,9 +12,15 @@
 extern SPI_HandleTypeDef hspi1;
 extern ADC_HandleTypeDef hadc3;
 
-/* XPT2046 Commands */
-#define XPT2046_CMD_READ_X      0x90  /* Read X position */
-#define XPT2046_CMD_READ_Y      0xD0  /* Read Y position */
+/* XPT2046 Commands: use definitions from XPT2046.h (do not redefine here) */
+
+/* Forward declarations for new UI functions (implemented in main.c) */
+extern void Screen_DrawMain(void);
+extern void Screen_DrawMenu(void);
+extern void Screen_DrawSetpoint(void);
+extern void Screen_DrawPIDTune(void);
+extern void Screen_DrawCalibration(void);
+extern void Screen_DrawInfo(void);
 
 /* FSMC init funksiyası main.c-də var, burada dublikat yox */
 
@@ -44,48 +50,16 @@ static inline void lcd_write_data(uint16_t data)
 /* ------------------ ILI9341 INIT ------------------ */
 void ILI9341_Init(void)
 {
-    /* DÜZƏLİŞ: Əvvəlcə backlight-ı söndür, sonra yandır - daha etibarlı */
+    /* Hardware reset and backlight sequence (restore) */
+    /* Turn backlight off, reset LCD, then enable backlight after reset */
     HAL_GPIO_WritePin(LCD_LIG_GPIO_Port, LCD_LIG_Pin, GPIO_PIN_RESET);
     HAL_Delay(10);
-    
-    /* HW reset pulse - TAM RESET DÖVRÜ */
-    /* 1. RST LOW - LCD-ni reset vəziyyətinə sal */
     HAL_GPIO_WritePin(LCD_RST_GPIO_Port, LCD_RST_Pin, GPIO_PIN_RESET);
-    HAL_Delay(100);  /* DÜZƏLİŞ: 50ms-dən 100ms-ə artırıldı - bəzi LCD-lər daha uzun reset tələb edir */
-    
-    /* 2. RST HIGH - LCD-ni aktiv vəziyyətə qaytar */
+    HAL_Delay(100);
     HAL_GPIO_WritePin(LCD_RST_GPIO_Port, LCD_RST_Pin, GPIO_PIN_SET);
-    HAL_Delay(200); /* DÜZƏLİŞ: 150ms-dən 200ms-ə artırıldı - LCD tam başlayana qədər gözlə */
-    
-    /* 3. Backlight ON - yalnız reset tamamlandıqdan sonra */
+    HAL_Delay(200);
     HAL_GPIO_WritePin(LCD_LIG_GPIO_Port, LCD_LIG_Pin, GPIO_PIN_SET);
 
-    /* ============================================
-     * TAM ILI9341 BAŞLATMA ARDICILLIĞI
-     * ============================================ */
-    
-    /* Software Reset */
-    lcd_write_command(0x01);
-    HAL_Delay(50);
-    
-    /* Display OFF */
-    lcd_write_command(0x28);
-    HAL_Delay(10);
-    
-    /* Power Control A */
-    lcd_write_command(0xCB);
-    lcd_write_data(0x39);
-    lcd_write_data(0x2C);
-    lcd_write_data(0x00);
-    lcd_write_data(0x34);
-    lcd_write_data(0x02);
-    
-    /* Power Control B */
-    lcd_write_command(0xCF);
-    lcd_write_data(0x00);
-    lcd_write_data(0xC1);  /* DÜZƏLİŞ: 0x81 əvəzinə 0xC1 */
-    lcd_write_data(0x30);
-    
     /* Driver Timing Control A */
     lcd_write_command(0xE8);
     lcd_write_data(0x85);
@@ -478,104 +452,15 @@ uint8_t ILI9341_IsButtonPressed(Button_t *btn, uint16_t touch_x, uint16_t touch_
 /* Ana menu səhifəsi */
 void ILI9341_ShowMainPage(void)
 {
-    current_page = 0;
-    
-    /* Qara fon */
-    ILI9341_FillScreen(ILI9341_COLOR_BLACK);
-    
-    /* Başlıq */
-    ILI9341_DrawString(100, 20, "MAIN MENU", ILI9341_COLOR_WHITE, 0x0000, 3);
-    
-    /* Settings düyməsi */
-    Button_t settings_btn = {20, 80, 130, 40, ILI9341_COLOR_BLUE, "Settings"};
-    ILI9341_DrawButton(&settings_btn);
-    ILI9341_DrawString(50, 95, "SETTINGS", ILI9341_COLOR_WHITE, 0x0000, 2);
-    
-    /* Test düyməsi */
-    Button_t test_btn = {170, 80, 130, 40, ILI9341_COLOR_GREEN, "Test"};
-    ILI9341_DrawButton(&test_btn);
-    ILI9341_DrawString(200, 95, "TEST", ILI9341_COLOR_WHITE, 0x0000, 2);
-    
-    /* Info düyməsi */
-    Button_t info_btn = {20, 140, 130, 40, ILI9341_COLOR_YELLOW, "Info"};
-    ILI9341_DrawButton(&info_btn);
-    ILI9341_DrawString(50, 155, "INFO", ILI9341_COLOR_WHITE, 0x0000, 2);
+    /* Köhnə əsas menyu silindi. Yeni əsas ekran göstərilir. */
+    ILI9341_ShowPressureControlMain();
 }
 
 /* Touch test səhifəsi */
 void ILI9341_ShowTouchTestPage(void)
 {
-    current_page = 4;
-    
-    /* Qara fon */
-    ILI9341_FillScreen(ILI9341_COLOR_BLACK);
-    
-    /* Başlıq */
-    ILI9341_DrawRectangle(10, 5, 300, 20, ILI9341_COLOR_RED);
-    ILI9341_DrawRectangle(12, 7, 296, 16, ILI9341_COLOR_WHITE);
-    ILI9341_DrawString(120, 12, "TOUCH TEST", ILI9341_COLOR_RED, 0xFFFF, 1);
-    
-    /* Təlimatlar */
-    ILI9341_DrawString(10, 37, "Touch the screen", ILI9341_COLOR_WHITE, 0x0000, 1);
-    ILI9341_DrawString(10, 57, "to see red dots", ILI9341_COLOR_WHITE, 0x0000, 1);
-    
-    /* Geri düyməsi */
-    Button_t back_btn = {20, 200, 280, 35, ILI9341_COLOR_RED, "Back"};
-    ILI9341_DrawButton(&back_btn);
-    ILI9341_DrawString(120, 215, "BACK TO MENU", ILI9341_COLOR_WHITE, 0x0000, 2);
-}
-
-/* Touch handling */
-void ILI9341_HandleTouch(void)
-{
-    uint16_t raw_x, raw_y, screen_x, screen_y;
-    
-    /* Touch sensor işləyirmi test et */
-    if (XPT2046_IsTouched()) {
-        /* Raw koordinatları oxu */
-        if (XPT2046_GetCoordinates(&raw_x, &raw_y)) {
-            /* Raw koordinatları ekran koordinatlarına çevir */
-            XPT2046_ConvertToScreen(raw_x, raw_y, &screen_x, &screen_y);
-            
-            /* Touch nöqtəsini göstərmə - silindi */
-            
-            /* Menu navigation */
-            if (current_page == 0) { // Main page
-                /* Settings button */
-                if (screen_x >= 20 && screen_x <= 150 && screen_y >= 80 && screen_y <= 120) {
-                    current_page = 1;
-                    ILI9341_ShowSettingsPage();
-                }
-                /* Test button - geniş koordinatlar */
-                else if (screen_x >= 160 && screen_x <= 310 && screen_y >= 70 && screen_y <= 130) {
-                    /* Debug: Test düyməsi basıldı - ekranın mərkəzində böyük mavi dairə */
-                    for(int i = -15; i <= 15; i++) {
-                        for(int j = -15; j <= 15; j++) {
-                            if ((i*i + j*j) <= 225) {
-                                ILI9341_DrawPixel(160 + i, 120 + j, ILI9341_COLOR_BLUE);
-                            }
-                        }
-                    }
-                    current_page = 2;
-                    ILI9341_ShowTestPage();
-                }
-                /* Info button */
-                else if (screen_x >= 20 && screen_x <= 150 && screen_y >= 140 && screen_y <= 180) {
-                    current_page = 3;
-                    ILI9341_ShowInfoPage();
-                }
-            }
-            else { // Other pages
-                /* Back button - bütün ekran */
-                if (screen_x >= 0 && screen_x <= 319 && screen_y >= 0 && screen_y <= 239) {
-                    current_page = 0;
-                    ILI9341_ShowMainPage();
-                }
-            }
-        }
-        
-        HAL_Delay(200); /* Debounce */
-    }
+    /* Pressure sensor calibration UI removed — redirect to new UI */
+    Screen_DrawMain();
 }
 
 /* Touch debug - silindi */
@@ -593,76 +478,22 @@ void ILI9341_TestTouch(void)
 /* Settings səhifəsi */
 void ILI9341_ShowSettingsPage(void)
 {
-    current_page = 1;
-    
-    /* Yaşıl fon */
-    ILI9341_FillScreen(ILI9341_COLOR_GREEN);
-    
-    /* Başlıq */
-    ILI9341_DrawRectangle(10, 10, 300, 30, ILI9341_COLOR_BLUE);
-    ILI9341_DrawRectangle(12, 12, 296, 26, ILI9341_COLOR_WHITE);
-    ILI9341_DrawString(120, 20, "SETTINGS", ILI9341_COLOR_BLUE, 0xFFFF, 2);
-    
-    /* Məzmun */
-    ILI9341_DrawString(50, 60, "LCD: 320x240", ILI9341_COLOR_WHITE, 0x0000, 2);
-    ILI9341_DrawString(50, 80, "Touch: XPT2046", ILI9341_COLOR_WHITE, 0x0000, 2);
-    ILI9341_DrawString(50, 100, "MCU: STM32F407", ILI9341_COLOR_WHITE, 0x0000, 2);
-    ILI9341_DrawString(50, 120, "Driver: ILI9341", ILI9341_COLOR_WHITE, 0x0000, 2);
-    
-    /* Geri düyməsi */
-    Button_t back_btn = {20, 200, 280, 35, ILI9341_COLOR_RED, "Back"};
-    ILI9341_DrawButton(&back_btn);
-    ILI9341_DrawString(120, 215, "BACK TO MENU", ILI9341_COLOR_WHITE, 0x0000, 2);
+    /* Köhnə settings səhifəsi silindi. Yeni əsas ekran göstərilir. */
+    ILI9341_ShowPressureControlMain();
 }
 
 /* Test səhifəsi */
 void ILI9341_ShowTestPage(void)
 {
-    current_page = 2;
-    
-    /* Qırmızı fon */
-    ILI9341_FillScreen(ILI9341_COLOR_RED);
-    
-    /* Başlıq */
-    ILI9341_DrawRectangle(10, 10, 300, 30, ILI9341_COLOR_BLUE);
-    ILI9341_DrawRectangle(12, 12, 296, 26, ILI9341_COLOR_WHITE);
-    ILI9341_DrawString(140, 20, "TEST", ILI9341_COLOR_BLUE, 0xFFFF, 2);
-    
-    /* Test məzmunu */
-    ILI9341_DrawString(50, 60, "Color Test: RED", ILI9341_COLOR_WHITE, 0x0000, 2);
-    ILI9341_DrawString(50, 80, "Font Test: ABC abc 123", ILI9341_COLOR_WHITE, 0x0000, 2);
-    ILI9341_DrawString(50, 100, "Touch Test: Touch buttons", ILI9341_COLOR_WHITE, 0x0000, 2);
-    
-    /* Geri düyməsi */
-    Button_t back_btn = {20, 200, 280, 35, ILI9341_COLOR_RED, "Back"};
-    ILI9341_DrawButton(&back_btn);
-    ILI9341_DrawString(120, 215, "BACK TO MENU", ILI9341_COLOR_WHITE, 0x0000, 2);
+    /* Köhnə test səhifəsi silindi. Yeni əsas ekran göstərilir. */
+    ILI9341_ShowPressureControlMain();
 }
 
 /* Info səhifəsi */
 void ILI9341_ShowInfoPage(void)
 {
-    current_page = 3;
-    
-    /* Sarı fon */
-    ILI9341_FillScreen(ILI9341_COLOR_YELLOW);
-    
-    /* Başlıq */
-    ILI9341_DrawRectangle(10, 10, 300, 30, ILI9341_COLOR_BLUE);
-    ILI9341_DrawRectangle(12, 12, 296, 26, ILI9341_COLOR_WHITE);
-    ILI9341_DrawString(140, 20, "INFO", ILI9341_COLOR_BLUE, 0xFFFF, 2);
-    
-    /* Məlumat */
-    ILI9341_DrawString(50, 60, "STM32F407ZGT6", ILI9341_COLOR_BLACK, 0x0000, 2);
-    ILI9341_DrawString(50, 80, "TFT 3.2 LCD", ILI9341_COLOR_BLACK, 0x0000, 2);
-    ILI9341_DrawString(50, 100, "ILI9341 Driver", ILI9341_COLOR_BLACK, 0x0000, 2);
-    ILI9341_DrawString(50, 120, "XPT2046 Touch", ILI9341_COLOR_BLACK, 0x0000, 2);
-    ILI9341_DrawString(50, 140, "FSMC Interface", ILI9341_COLOR_BLACK, 0x0000, 2);
-    
-    /* Geri düyməsi */
-    Button_t back_btn = {20, 200, 280, 35, ILI9341_COLOR_RED, "Back"};
-    ILI9341_DrawButton(&back_btn);
-    ILI9341_DrawString(120, 215, "BACK TO MENU", ILI9341_COLOR_WHITE, 0x0000, 2);
+    /* Köhnə info səhifəsi silindi. Yeni əsas ekran göstərilir. */
+    ILI9341_ShowPressureControlMain();
 }
 
 /* ------------------ Font funksiyaları ------------------ */
@@ -709,58 +540,38 @@ void ILI9341_DrawString(uint16_t x, uint16_t y, const char *str, uint16_t color,
     }
 }
 
-/* ------------------ Pressure Control System ------------------ */
-
-/* Global variables for pressure control system */
+/* ------------------ Pressure Control Globals (fixed placement) ------------------ */
 static uint8_t pressure_control_page = 0; // 0=main, 1=menu, 7=touch_cal, 8=pressure_cal, 9=pid_tune
-// REMOVED: 2=pwm, 3=pressure_limit, 4=drv, 5=zme, 6=motor - PWM və PRES LIM bölmələri silindi
-static float current_pressure = 0.0;
-// REMOVED: float pressure_limit = 300.0; // SİLİNDİ - artıq g_system_status.target_pressure istifadə edilir
-static float drv_percent = 0.0;
-static float zme_percent = 0.0;
-static float motor_percent = 0.0;
-
-/* PWM control variables */
-static float drv_duty_cycle = 50.0;
-static float drv_frequency = 1000.0;
-static float zme_duty_cycle = 50.0;
-static float motor_duty_cycle = 50.0;
-static float motor_frequency = 1000.0;
+static float current_pressure = 0.0f;
+static float drv_percent = 0.0f;
+static float zme_percent = 0.0f;
+static float motor_percent = 0.0f;
+static float drv_duty_cycle = 50.0f;
+static float zme_duty_cycle = 50.0f;
+static float motor_duty_cycle = 50.0f;
+static float drv_frequency = 1000.0f;
+static float zme_frequency = 1000.0f;
+static float motor_frequency = 1000.0f;
 
 /* Pressure sensor calibration variables */
 /* Note: These are NOT static so AdvancedPressureControl can access them */
-float min_voltage = 0.5;      /* Minimum voltage (0.5V) */
-float max_voltage = 5.24;     /* Maximum voltage (5.24V) */
-float min_pressure = 0.0;     /* DÜZƏLİŞ: Minimum pressure (0.0 bar - sıfır təzyiq) */
-float max_pressure = 300.0;   /* Maximum pressure (300.0 bar) */
+float min_voltage = 0.5f;      /* Minimum voltage (0.5V) */
+float max_voltage = 5.24f;     /* Maximum voltage (5.24V) */
+float min_pressure = 0.0f;     /* Minimum pressure (0.0 bar) */
+float max_pressure = 300.0f;   /* Maximum pressure (300.0 bar) */
 uint16_t adc_min = 410;       /* ADC value at minimum pressure (0.5V) */
-uint16_t adc_max = 4095;      /* KRİTİK DÜZƏLİŞ: 12-bit ADC max = 4095 (2^12 - 1), NOT 4096 */
+uint16_t adc_max = 4095;      /* 12-bit ADC max = 4095 */
 static uint8_t calibration_mode = 0; /* 0=normal, 1=calibrate min, 2=calibrate max */
 
 /* Ensure we never overwrite valid calibration data with defaults */
 static bool ILI9341_IsPressureCalibrationValid(const CalibrationData_t* cal)
 {
-    if (cal == NULL || !cal->calibrated) {
-        return false;
-    }
-
+    if (cal == NULL || !cal->calibrated) return false;
     if (!isfinite(cal->adc_min) || !isfinite(cal->adc_max) ||
-        !isfinite(cal->pressure_min) || !isfinite(cal->pressure_max)) {
-        return false;
-    }
-
-    if (cal->adc_min < 0.0f || cal->adc_min > (float)ADC_MAX) {
-        return false;
-    }
-
-    if (cal->adc_max <= cal->adc_min || cal->adc_max > (float)ADC_MAX) {
-        return false;
-    }
-
-    if (cal->pressure_max <= cal->pressure_min) {
-        return false;
-    }
-
+        !isfinite(cal->pressure_min) || !isfinite(cal->pressure_max)) return false;
+    if (cal->adc_min < 0.0f || cal->adc_min > (float)ADC_MAX) return false;
+    if (cal->adc_max <= cal->adc_min || cal->adc_max > (float)ADC_MAX) return false;
+    if (cal->pressure_max <= cal->pressure_min) return false;
     return true;
 }
 
@@ -781,7 +592,7 @@ static const float ZME_PERCENT_PER_BAR = 0.09545f;   /* % per 1 bar ZME */
 /* Pressure limits for ZME control (separate from sensor calibration) */
 static float zme_min_pressure = 3.5f;   /* minimum system pressure for ZME (bar) */
 static float zme_max_pressure = 200.0f;  /* maximum system pressure for ZME (bar) */
-static float zme_frequency = 1000.0f;  /* ZME PWM frequency in Hz */
+/* zme_frequency is declared earlier in Pressure Control Globals; do not redefine here */
 
 // Button states
 static uint8_t avto_active = 0;  // REMOVED but kept for compatibility
@@ -804,152 +615,25 @@ void ILI9341_DrawControlButton(uint16_t x, uint16_t y, uint16_t width, uint16_t 
     ILI9341_DrawString(text_x, text_y, text, ILI9341_COLOR_BLACK, color, text_size);
 }
 
-/* Enhanced circular pressure gauge with better visualization */
+/* Pressure gauge implementation deprecated — provide a no-op stub so legacy callers compile. */
 void ILI9341_DrawPressureGauge(uint16_t center_x, uint16_t center_y, uint16_t radius, float pressure, float max_pressure)
 {
-    // Draw outer circle with thicker border
-    for (int angle = 0; angle < 360; angle++) {
-        int x = center_x + radius * cos(angle * 3.14159 / 180);
-        int y = center_y + radius * sin(angle * 3.14159 / 180);
-        if (x >= 0 && x < 320 && y >= 0 && y < 240) {
-            ILI9341_DrawPixel(x, y, ILI9341_COLOR_WHITE);
-            // Draw thicker border
-            if (x > 0 && x < 319 && y > 0 && y < 239) {
-                ILI9341_DrawPixel(x-1, y, ILI9341_COLOR_WHITE);
-                ILI9341_DrawPixel(x+1, y, ILI9341_COLOR_WHITE);
-                ILI9341_DrawPixel(x, y-1, ILI9341_COLOR_WHITE);
-                ILI9341_DrawPixel(x, y+1, ILI9341_COLOR_WHITE);
-            }
-        }
-    }
-    
-    // Draw scale marks (every 30 degrees)
-    for (int mark = 0; mark < 6; mark++) {
-        int angle = mark * 30;
-        int x1 = center_x + (radius - 2) * cos((angle + 180) * 3.14159 / 180);
-        int y1 = center_y + (radius - 2) * sin((angle + 180) * 3.14159 / 180);
-        int x2 = center_x + (radius - 8) * cos((angle + 180) * 3.14159 / 180);
-        int y2 = center_y + (radius - 8) * sin((angle + 180) * 3.14159 / 180);
-        ILI9341_DrawLine(x1, y1, x2, y2, ILI9341_COLOR_WHITE);
-    }
-    
-    // Draw pressure arc with color coding (0-180 degrees)
-    float pressure_angle = (pressure / max_pressure) * 180.0;
-    for (int angle = 0; angle < pressure_angle; angle++) {
-        int x = center_x + (radius - 5) * cos((angle + 180) * 3.14159 / 180);
-        int y = center_y + (radius - 5) * sin((angle + 180) * 3.14159 / 180);
-        if (x >= 0 && x < 320 && y >= 0 && y < 240) {
-            // Enhanced color coding with more zones
-            uint16_t color;
-            float percentage = (float)angle / 180.0;
-            if (percentage < 0.3) {
-                color = ILI9341_COLOR_GREEN;      // 0-30%: Green (Safe)
-            } else if (percentage < 0.6) {
-                color = ILI9341_COLOR_YELLOW;     // 30-60%: Yellow (Caution)
-            } else if (percentage < 0.8) {
-                color = ILI9341_COLOR_ORANGE;    // 60-80%: Orange (Warning)
-            } else {
-                color = ILI9341_COLOR_RED;       // 80-100%: Red (Danger)
-            }
-            ILI9341_DrawPixel(x, y, color);
-        }
-    }
-    
-    // Draw needle (pointer) showing current pressure
-    if (pressure > 0) {
-        float needle_angle = (pressure / max_pressure) * 180.0 + 180.0;
-        int needle_x = center_x + (radius - 3) * cos(needle_angle * 3.14159 / 180);
-        int needle_y = center_y + (radius - 3) * sin(needle_angle * 3.14159 / 180);
-        ILI9341_DrawLine(center_x, center_y, needle_x, needle_y, ILI9341_COLOR_RED);
-    }
-    
-    // Draw center dot
-    ILI9341_DrawRectangle(center_x - 2, center_y - 2, 5, 5, ILI9341_COLOR_RED);
+    (void)center_x; (void)center_y; (void)radius; (void)pressure; (void)max_pressure;
+    /* intentionally empty to remove old circular gauge from UI */
 }
-
-/* Main pressure control screen */
-void ILI9341_ShowPressureControlMain(void)
+    
+void ILI9341_ShowPressureControlPage(void)
 {
-    pressure_control_page = 0;
-    
-    // Clear screen
-    ILI9341_FillScreen(ILI9341_COLOR_BLACK);
-    
-    // Title at top - "HIGH PRESSURE CONTROL"
-    ILI9341_DrawString(40, 15, "HIGH PRESSURE CONTROL", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 2);
-    
-    // Pressure gauge in center - slightly below title
-    ILI9341_DrawPressureGauge(160, 80, 35, current_pressure, 300.0);
-    
-    // Pressure value display below gauge with enhanced formatting
-    char pressure_str[25];
-    if (current_pressure < 10.0) {
-        sprintf(pressure_str, "%.2f BAR", current_pressure);  // 2 decimal for low values
-    } else if (current_pressure < 100.0) {
-        sprintf(pressure_str, "%.1f BAR", current_pressure);  // 1 decimal for medium values
-    } else {
-        sprintf(pressure_str, "%.0f BAR", current_pressure);   // No decimal for high values
-    }
-    ILI9341_DrawString(130, 125, pressure_str, ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 2);
-    
-    // Show target pressure information (from Advanced system)
-    SystemStatus_t* status = AdvancedPressureControl_GetStatus();
-    char limit_str[30];
-    sprintf(limit_str, "SP: %.0f bar", status->target_pressure);
-    ILI9341_DrawString(10, 140, limit_str, ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 1);
-    
-    // Show safety status (based on target pressure)
-    if (current_pressure > (status->target_pressure + 10.0f)) {
-        ILI9341_DrawString(200, 140, "OVER LIMIT!", ILI9341_COLOR_RED, ILI9341_COLOR_BLACK, 1);
-    } else if (current_pressure > status->target_pressure) {
-        ILI9341_DrawString(200, 140, "NEAR LIMIT", ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
-    } else {
-        ILI9341_DrawString(200, 140, "SAFE", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 1);
-    }
-    
-    // Control buttons (Menu) - below pressure display
-    ILI9341_DrawControlButton(15, 150, 70, 35, ILI9341_COLOR_WHITE, "Menu", 1);
-    // Auto button - REMOVED (AutoMode deleted)
-    // Manual button - REMOVED (Manual mode deleted)
-    // Stop button - REMOVED (Stop button deleted)
-    
-    /* Auto mode status display - REMOVED (AutoMode deleted) */
-    
-    /* Show target pressure (from Advanced system) - eyni status dəyişənini istifadə edirik */
-    char target_info[30];
-    sprintf(target_info, "SP: %.1f bar", status->target_pressure);
-    ILI9341_DrawString(20, 210, target_info, ILI9341_COLOR_YELLOW, ILI9341_COLOR_BLACK, 1);
-    
-    /* Show valve status (for NO valves: 0% = open, 100% = closed) */
-    char valve_status[50];
-    sprintf(valve_status, "ZME:%s DRV:%s", 
-            (zme_duty_cycle == 0.0) ? "OPEN" : "CLOSED",
-            (drv_duty_cycle == 0.0) ? "OPEN" : "CLOSED");
-    ILI9341_DrawString(20, 230, valve_status, ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 1);
+    /* Old pressure-control page removed — redirect to new UI */
+    Screen_DrawMain();
 }
+ 
 
 /* Menu page */
 void ILI9341_ShowMenuPage(void)
 {
-    pressure_control_page = 1;
-    
-    // Clear screen
-    ILI9341_FillScreen(ILI9341_COLOR_BLACK);
-    
-    // Title - moved down to avoid Back button
-    ILI9341_DrawString(120, 60, "MENU", ILI9341_COLOR_WHITE, ILI9341_COLOR_BLACK, 3);
-    
-    // REMOVED: PWM button - PWM bölməsi silindi
-    // REMOVED: Pressure Limit button - PRES LIM bölməsi silindi
-    
-    // Pressure Sensor Calibration button
-    ILI9341_DrawControlButton(80, 90, 160, 35, ILI9341_COLOR_WHITE, "PRESS CAL", 2);
-    
-    // PID Tuning button
-    ILI9341_DrawControlButton(80, 135, 160, 35, ILI9341_COLOR_WHITE, "PID TUNE", 2);
-    
-    // Back button - moved to upper left
-    ILI9341_DrawControlButton(20, 20, 60, 30, ILI9341_COLOR_WHITE, "Back", 1);
+    /* Köhnə menyu silindi. Yeni əsas ekran göstərilir. */
+    ILI9341_ShowPressureControlMain();
 }
 
 /* REMOVED: PWM control page - PWM bölməsi silindi
@@ -1340,6 +1024,14 @@ void ILI9341_UpdatePercentageDisplays(float drv_percent_val, float zme_percent_v
     }
 }
 
+/* Show the main Pressure Control screen (page 0) */
+void ILI9341_ShowPressureControlMain(void)
+{
+    /* Redirect legacy ILI9341 pressure-control main to the new UI in main.c */
+    Screen_DrawMain();
+}
+
+
 /* Handle touch for pressure control system */
 void ILI9341_HandlePressureControlTouch(void)
 {
@@ -1355,13 +1047,7 @@ void ILI9341_HandlePressureControlTouch(void)
             
             switch (pressure_control_page) {
                 case 0: // Main page
-                    /* Menu button */
-                    if (screen_x >= 15 && screen_x <= 85 && screen_y >= 150 && screen_y <= 185) {
-                        ILI9341_ShowMenuPage();
-                    }
-                    /* Auto button - REMOVED (AutoMode deleted) */
-                    /* Manual button - REMOVED (Manual mode deleted) */
-                    /* Stop button - REMOVED (Stop button deleted) */
+                    /* Menu button removed from legacy UI — no action here */
                     break;
                     
                 case 1: // Menu page

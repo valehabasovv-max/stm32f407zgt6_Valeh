@@ -1,0 +1,92 @@
+# Renode Virtual LCD Monitor for STM32F407
+# This script monitors FSMC writes to LCD and visualizes them
+
+# Create STM32F407 machine
+mach create "Valeh_Pressure_Control"
+
+# Load STM32F4 Discovery platform
+machine LoadPlatformDescription @platforms/boards/stm32f4_discovery.repl
+
+# Load the firmware
+$bin?=@binaries/Valeh_injec_pogram.elf
+
+# Configure CPU
+sysbus.cpu PerformanceInMips 168
+sysbus.cpu ExecutionMode Continuous
+
+# Configure UART
+logLevel 3
+createUartAnalyzer sysbus.uart2 "uart2_output"
+
+# Load firmware
+sysbus LoadELF $bin
+
+# ============================================
+# VIRTUAL LCD MONITOR
+# ============================================
+# ILI9341 LCD is connected via FSMC at address 0x60000000
+# We'll monitor writes to this area and visualize them
+
+# Create Python script to monitor FSMC writes and send to external LCD monitor
+python:
+"""
+import sys
+import struct
+
+# FSMC LCD area
+FSMC_LCD_BASE = 0x60000000
+FSMC_LCD_END = 0x6FFFFFFF
+LCD_WIDTH = 320
+LCD_HEIGHT = 240
+
+# Framebuffer to store LCD content
+framebuffer = [[0 for x in range(LCD_WIDTH)] for y in range(LCD_HEIGHT)]
+
+def on_fsmc_write(address, value, width):
+    # FSMC LCD area: 0x60000000 - 0x6FFFFFFF
+    if FSMC_LCD_BASE <= address <= FSMC_LCD_END:
+        # This is a write to LCD
+        if width == 16:  # 16-bit write (RGB565)
+            # Calculate pixel coordinates from address
+            offset = address - FSMC_LCD_BASE
+            # FSMC address mapping (simplified)
+            # Real ILI9341 uses command/data protocol
+            pixel_index = offset // 2  # 2 bytes per pixel
+            x = pixel_index % LCD_WIDTH
+            y = pixel_index // LCD_WIDTH
+            
+            if 0 <= x < LCD_WIDTH and 0 <= y < LCD_HEIGHT:
+                framebuffer[y][x] = value & 0xFFFF
+                # Log for debugging
+                if pixel_index % 1000 == 0:  # Log every 1000 pixels
+                    print(f"LCD Write: addr=0x{address:08X}, x={x}, y={y}, color=0x{value:04X}")
+
+# Hook FSMC writes
+# Note: This is a simplified hook - real ILI9341 protocol is more complex
+# The actual protocol uses command/data signals via FSMC address lines
+try:
+    sysbus.cpu SetHookAtMemoryAccess FSMC_LCD_BASE FSMC_LCD_END true true false on_fsmc_write
+    print("FSMC LCD hook installed successfully")
+except Exception as e:
+    print(f"Warning: Could not install FSMC hook: {e}")
+    print("LCD writes will not be captured automatically")
+"""
+
+# Configure ADC simulation
+sysbus WriteDoubleWord 0x40012000 0x00000001  # ADC3_CR2 - ADON bit
+
+# Start the machine
+start
+
+echo "=========================================="
+echo "VALEH Pressure Control - Virtual LCD"
+echo "STM32F407ZGT6 - Renode"
+echo "=========================================="
+echo ""
+echo "Virtual LCD Monitor: 320x240"
+echo "FSMC LCD Area: 0x60000000"
+echo ""
+echo "Note: LCD visualization requires Python visualizer"
+echo "      Run: python renode/lcd_monitor_gui.py"
+echo ""
+

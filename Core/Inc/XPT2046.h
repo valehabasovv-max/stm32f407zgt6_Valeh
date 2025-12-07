@@ -191,6 +191,9 @@ uint8_t XPT2046_IsButtonPressed(uint16_t btn_x, uint16_t btn_y,
 uint8_t XPT2046_GetTouchDebounced(uint16_t *screen_x, uint16_t *screen_y, 
                                   uint32_t debounce_ms);
 
+/* Self-test: read raw X/Y samples ignoring IRQ and print to serial (debug only) */
+void XPT2046_SelfTest(uint8_t samples);
+
 /* =============== AVTOMATİK DÜYMƏ KALİBRASİYA FUNKSİYALARI =============== */
 
 /**
