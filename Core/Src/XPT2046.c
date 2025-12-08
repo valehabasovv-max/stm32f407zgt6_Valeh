@@ -27,7 +27,7 @@ static uint16_t cal_y_max = 3800;
  * Bu səbəbdən touch koordinatları da swap edilməlidir.
  * Mode 3 (Swap X-Y only) landscape LCD üçün ən uyğundur.
  */
-static uint8_t coord_mode = 3;  /* DÜZƏLİŞ: Mode 3 - Swap X-Y - landscape LCD üçün düzgün mode */
+static uint8_t coord_mode = 1;  /* DÜZƏLİŞ: Mode 1 - Yalnız Mode 1 istifadə olunur */
 
 /* Touch təsdiqi üçün parametrlər */
 #define TOUCH_SAMPLES 8
@@ -104,8 +104,8 @@ void XPT2046_LoadDefaultCalibration(void)
      * touch koordinatları da swap edilməlidir - Mode 3
      * ============================================ */
     
-    /* Landscape LCD üçün MODE 3 - Swap X-Y */
-    coord_mode = 3;
+    /* Mode 1 - Yalnız Mode 1 istifadə olunur */
+    coord_mode = 1;
     
     /* 3-nöqtəli kalibrasiyadan istifadə etmə, köhnə metod istifadə et */
     use_matrix_calibration = 0;
@@ -550,10 +550,9 @@ void XPT2046_GetCalibration(uint16_t *x_min, uint16_t *x_max,
 
 void XPT2046_SetCoordMode(uint8_t mode)
 {
-    if (mode <= 7) {  /* 8 mode var (0-7) */
-        coord_mode = mode;
-        printf("Touch coordinate mode set to: %d\r\n", mode);
-    }
+    /* DÜZƏLİŞ: Yalnız Mode 1 istifadə olunur, digər modlar silinib */
+    coord_mode = 1;  /* Həmişə Mode 1 */
+    printf("Touch coordinate mode fixed to: 1\r\n");
 }
 
 uint8_t XPT2046_GetCoordMode(void)

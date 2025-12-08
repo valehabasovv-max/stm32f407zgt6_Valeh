@@ -355,8 +355,7 @@ void Screen_DrawMain(void) {
         /* Başlıq paneli */
         ILI9341_FillRect(0, 0, 320, 22, COLOR_ACCENT_BLUE);
         
-        /* Sol künc - mode azaltma işarəsi */
-        ILI9341_DrawString(5, 5, "<M", ILI9341_COLOR_YELLOW, COLOR_ACCENT_BLUE, 1);
+        /* Sol künc - boş (mode dəyişdirmə silinib) */
         
         /* Mərkəz - VALEH HPC + reset */
         ILI9341_DrawString(80, 5, "VALEH HPC", COLOR_TEXT_WHITE, COLOR_ACCENT_BLUE, 1);
@@ -370,10 +369,8 @@ void Screen_DrawMain(void) {
             ILI9341_DrawString(170, 5, "[RST]", COLOR_ACCENT_GREEN, COLOR_ACCENT_BLUE, 1);
         }
         
-        /* Sağ künc - mode artırma işarəsi */
-        char mode_info[16];
-        sprintf(mode_info, "M%d>", XPT2046_GetCoordMode());
-        ILI9341_DrawString(285, 5, mode_info, ILI9341_COLOR_YELLOW, COLOR_ACCENT_BLUE, 1);
+        /* Sağ künc - sabit Mode 1 göstəricisi */
+        ILI9341_DrawString(285, 5, "M1", ILI9341_COLOR_YELLOW, COLOR_ACCENT_BLUE, 1);
         
         /* Sol panel - Preset düymələri */
         UI_DrawPanel(5, 25, 105, 95, "PRESET");
@@ -551,8 +548,8 @@ void Screen_DrawMain(void) {
             ILI9341_DrawString(213, 172, "DF:--,--", COLOR_TEXT_GREY, COLOR_BG_PANEL, 1);
         }
         
-        /* Mode və Buton ID */
-        sprintf(coord_str, "M%d B%02d", XPT2046_GetCoordMode(), g_last_button_hit);
+        /* Mode və Buton ID - sabit Mode 1 */
+        sprintf(coord_str, "M1 B%02d", g_last_button_hit);
         ILI9341_DrawString(213, 184, coord_str, ILI9341_COLOR_YELLOW, COLOR_BG_PANEL, 1);
     }
 }
@@ -567,15 +564,12 @@ void Screen_DrawMenu(void) {
         /* Başlıq */
         ILI9341_FillRect(0, 0, 320, 30, COLOR_ACCENT_BLUE);
         
-        /* Sol üst - mode azalt */
-        ILI9341_DrawString(5, 8, "<", ILI9341_COLOR_YELLOW, COLOR_ACCENT_BLUE, 2);
+        /* Sol üst - boş (mode dəyişdirmə silinib) */
         
         ILI9341_DrawString(130, 8, "MENU", COLOR_TEXT_WHITE, COLOR_ACCENT_BLUE, 2);
         
-        /* Sağ üst - mode artır */
-        char mode_str[8];
-        sprintf(mode_str, "M%d>", XPT2046_GetCoordMode());
-        ILI9341_DrawString(280, 8, mode_str, ILI9341_COLOR_YELLOW, COLOR_ACCENT_BLUE, 1);
+        /* Sağ üst - sabit Mode 1 göstəricisi */
+        ILI9341_DrawString(280, 8, "M1", ILI9341_COLOR_YELLOW, COLOR_ACCENT_BLUE, 1);
         
         /* Menyu düymələri */
         UI_DrawButton(40, 45, 240, 35, "SETPOINT", COLOR_BG_PANEL, ILI9341_COLOR_CYAN, 2);
@@ -838,8 +832,8 @@ void Touch_Process(void) {
     /* Debug: Koordinatları serial portda göstər */
     int16_t off_x, off_y;
     XPT2046_AutoCal_GetOffset(&off_x, &off_y);
-    printf("TOUCH: screen(%d,%d) raw(%d,%d) mode=%d btn=%d offset(%d,%d) cal=%d\r\n", 
-           tx, ty, raw_x, raw_y, XPT2046_GetCoordMode(), matched_btn, 
+    printf("TOUCH: screen(%d,%d) raw(%d,%d) mode=1 btn=%d offset(%d,%d) cal=%d\r\n", 
+           tx, ty, raw_x, raw_y, matched_btn, 
            off_x, off_y, XPT2046_AutoCal_IsCalibrated());
     
     /* Vizual debug: Əsas ekranda koordinat və kalibrasiya vəziyyətini göstər */
@@ -929,35 +923,12 @@ void Touch_HandleMain(uint16_t x, uint16_t y) {
     }
     
     /* ============================================
-     * BAŞLIQ PANELI - MODE DƏYİŞDİRMƏ VƏ KALİBRASİYA (y < 25)
-     * Sol künc (<) = mode azalt
+     * BAŞLIQ PANELI - KALİBRASİYA SIFIRLAMA (y < 25)
      * Mərkəz = kalibrasiya sıfırla
-     * Sağ künc (>) = mode artır
+     * DÜZƏLİŞ: Mode dəyişdirmə silinib, yalnız kalibrasiya sıfırlama qalıb
      * ============================================ */
     if (y < 25) {
-        uint8_t mode = XPT2046_GetCoordMode();
-        
-        if (x < 50) {
-            /* Sol künc - mode azalt */
-            g_last_btn_x = 0; g_last_btn_y = 0;
-            g_last_btn_w = 50; g_last_btn_h = 22;
-            mode = (mode > 0) ? (mode - 1) : 7;
-            XPT2046_SetCoordMode(mode);
-            printf(">>> MODE DOWN: %d\r\n", mode);
-            g_last_button_hit = 1;
-            g_needs_redraw = 1;
-        }
-        else if (x > 270) {
-            /* Sağ künc - mode artır */
-            g_last_btn_x = 270; g_last_btn_y = 0;
-            g_last_btn_w = 50; g_last_btn_h = 22;
-            mode = (mode < 7) ? (mode + 1) : 0;
-            XPT2046_SetCoordMode(mode);
-            printf(">>> MODE UP: %d\r\n", mode);
-            g_last_button_hit = 2;
-            g_needs_redraw = 1;
-        }
-        else if (x >= 120 && x <= 200) {
+        if (x >= 120 && x <= 200) {
             /* Mərkəz - kalibrasiya sıfırla */
             g_last_btn_x = 120; g_last_btn_y = 0;
             g_last_btn_w = 80; g_last_btn_h = 22;
@@ -1137,25 +1108,9 @@ void Touch_HandleMenu(uint16_t x, uint16_t y) {
     printf("Touch Menu: x=%d, y=%d\r\n", x, y);
     
     /* ============================================
-     * BAŞLIQ - MODE DƏYİŞDİRMƏ (y < 35)
+     * BAŞLIQ - MODE DƏYİŞDİRMƏ SİLİNİB
+     * DÜZƏLİŞ: Yalnız Mode 1 istifadə olunur
      * ============================================ */
-    if (y < 35) {
-        uint8_t mode = XPT2046_GetCoordMode();
-        
-        if (x < 50) {
-            mode = (mode > 0) ? (mode - 1) : 7;
-            XPT2046_SetCoordMode(mode);
-            printf(">>> MODE DOWN: %d\r\n", mode);
-            g_needs_redraw = 1;
-        }
-        else if (x > 270) {
-            mode = (mode < 7) ? (mode + 1) : 0;
-            XPT2046_SetCoordMode(mode);
-            printf(">>> MODE UP: %d\r\n", mode);
-            g_needs_redraw = 1;
-        }
-        return;
-    }
     
     /* ============================================
      * MENYU DÜYMƏLƏRİ - DÜZƏLDİLMİŞ ZONALAR
@@ -1555,9 +1510,7 @@ void AutoCal_RegisterMainPageButtons(void)
         XPT2046_AutoCal_RegisterButton(btn_x, btn_y, 32, 35, name, BTN_MAIN_PRESET_0 + i);
     }
     
-    /* Mode dəyişdirmə düymələri - başlıq paneli */
-    XPT2046_AutoCal_RegisterButton(0, 0, 50, 22, "MODE_DN", BTN_MAIN_MODE_DOWN);
-    XPT2046_AutoCal_RegisterButton(270, 0, 50, 22, "MODE_UP", BTN_MAIN_MODE_UP);
+    /* DÜZƏLİŞ: Mode dəyişdirmə düymələri silinib, yalnız Mode 1 istifadə olunur */
 }
 
 /**

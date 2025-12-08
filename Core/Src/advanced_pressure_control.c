@@ -298,7 +298,17 @@ void AdvancedPressureControl_SetZME_PWM(float percent) {
  */
 void AdvancedPressureControl_SetDRV_PWM(float percent) {
     percent = AdvancedPressureControl_ClampValue(percent, DRV_PWM_MIN, DRV_PWM_MAX);
-    uint32_t compare_value = (uint32_t)((percent / 100.0f) * __HAL_TIM_GET_AUTORELOAD(&htim3));
+    
+    // DÜZƏLİŞ: DRV-nin 0-10% aralığında dead zone var
+    // 0-10% = tam açıq (heç bir fərq yoxdur)
+    // 10-40% = yavaş-yavaş bağlanır
+    // PWM tətbiqində: percent < 10% → 0% kimi tətbiq et (tam açıq)
+    float pwm_to_apply = percent;
+    if (percent < 10.0f) {
+        pwm_to_apply = 0.0f;  // Dead zone: 0-10% = tam açıq
+    }
+    
+    uint32_t compare_value = (uint32_t)((pwm_to_apply / 100.0f) * __HAL_TIM_GET_AUTORELOAD(&htim3));
     __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, compare_value);
 }
 
@@ -479,15 +489,16 @@ void AdvancedPressureControl_ControlMotorSpeed(void) {
     } MotorFeedforwardMap_t;
     
     // Feedforward xəritəsi - motorun qeyri-xəttiliyini nəzərə alır
+    // DÜZƏLİŞ: 50 bar-da 10%, 300 bar-da 50%
     static const MotorFeedforwardMap_t motor_map[] = {
         {0.0f,   5.0f},   // 0 bar -> 5% (minimum)
-        {25.0f,  7.0f},   // 25 bar -> 7%
+        {25.0f,  7.5f},   // 25 bar -> 7.5%
         {50.0f,  10.0f},  // 50 bar -> 10%
-        {100.0f, 15.0f},  // 100 bar -> 15%
-        {150.0f, 18.0f},  // 150 bar -> 18%
-        {200.0f, 21.0f},  // 200 bar -> 21%
-        {250.0f, 23.0f},  // 250 bar -> 23%
-        {300.0f, 25.0f}   // 300 bar -> 25% (maksimum)
+        {100.0f, 20.0f},  // 100 bar -> 20%
+        {150.0f, 30.0f},  // 150 bar -> 30%
+        {200.0f, 38.0f},  // 200 bar -> 38%
+        {250.0f, 44.0f},  // 250 bar -> 44%
+        {300.0f, 50.0f}   // 300 bar -> 50% (maksimum)
     };
     const uint8_t map_size = sizeof(motor_map) / sizeof(motor_map[0]);
     
@@ -612,42 +623,65 @@ float AdvancedPressureControl_CalculateZMEBaseFromSP(float sp) {
  * @param sp: Setpoint (bar)
  * @retval DRV baza dəyəri (%)
  * 
+ * DÜZƏLİŞ: DRV davranışı
+ * - 0-10% = tam açıq (dead zone - heç bir fərq yoxdur)
+ * - 10-40% = yavaş-yavaş bağlanır (xətti)
+ * 
  * Məntiq:
- * - SP = 0 bar → DRV baza = 26% (bağlı, təzyiq artırır)
- * - SP = 50 bar → DRV baza = 13% (açıq, təzyiq boşalda bilir)
- * - Linear interpolation
+ * - SP = 0 bar → DRV baza = 10% (tam açıq - dead zone)
+ * - SP = 300 bar → DRV baza = 40% (tam bağlı)
+ * - Linear interpolation: 0 bar → 10%, 300 bar → 40%
  */
 float AdvancedPressureControl_CalculateDRVBaseFromSP(float sp) {
-    // SP = 0 bar → DRV baza = 26%
-    // SP = 50 bar → DRV baza = 13%
-    // Linear interpolation
+    // SP = 0 bar → DRV baza = 10% (tam açıq - dead zone)
+    // SP = 300 bar → DRV baza = 40% (tam bağlı)
+    // Linear interpolation: 0 bar → 10%, 300 bar → 40%
     
     if (sp <= 0.0f) {
-        return 26.0f;  // Minimum SP üçün DRV baza dəyəri
+        return 10.0f;  // Minimum SP üçün 10% (tam açıq - dead zone)
     }
     
-    if (sp >= 50.0f) {
-        return 13.0f;  // 50 bar və yuxarı üçün 13% (açıq)
+    if (sp >= 300.0f) {
+        return 40.0f;  // 300 bar və yuxarı üçün 40% (tam bağlı)
     }
     
-    // Linear interpolation: 0 bar → 26%, 50 bar → 13%
-    float drv_base = 26.0f - (sp / 50.0f) * (26.0f - 13.0f);
+    // Linear interpolation: 0 bar → 10%, 300 bar → 40%
+    // Formula: 10% + (sp / 300) * (40% - 10%) = 10% + (sp / 300) * 30%
+    float drv_base = 10.0f + (sp / 300.0f) * 30.0f;
     return drv_base;
 }
 
 /**
- * @brief DRV İdarəetməsi (DÜZ Məntiq - Baza + PID Təshisi)
+ * @brief DRV İdarəetməsi (TƏRS Məntiq - Baza - PID Təshisi)
  * @param control_output: PID çıxışı (-PWM_TRIM_LIMIT to +PWM_TRIM_LIMIT)
  */
 void AdvancedPressureControl_ControlDRV(float control_output) {
-    // DRV İdarəetməsi (DÜZ: +Control Output DRV-ni bağlayır)
-    // Baza mövqe + PID təshisi
-    // control_output müsbət → təzyiq artırmaq lazımdır → DRV bağlanmalıdır (PWM artır)
-    // control_output mənfi → təzyiq azaltmaq lazımdır → DRV açılmalıdır (PWM azalır)
-    float drv_pwm = g_drv_base_pwm + control_output;
+    // DRV İdarəetməsi (TƏRS MƏNTİQ - Normally Open)
+    // 
+    // DÜZƏLİŞ: DRV-nin davranışı
+    // - 0-10% = tam açıq (dead zone - heç bir fərq yoxdur)
+    // - 10-40% = yavaş-yavaş bağlanır (xətti)
+    // 
+    // Bizim sistemdə:
+    // Error = target - current
+    // Error müsbət (təzyiq aşağı) → pid_output müsbət → təzyiq artırmaq lazımdır → DRV bağlanmalıdır (PWM artır)
+    // Error mənfi (təzyiq yüksək) → pid_output mənfi → təzyiq azaltmaq lazımdır → DRV açılmalıdır (PWM azalır)
+    // 
+    // Düzgün məntiq (TƏRS):
+    // - control_output müsbət (təzyiq artırmaq) → DRV bağlanır → drv_pwm artır → drv_pwm = base - control_output
+    // - control_output mənfi (təzyiq azaltmaq) → DRV açılır → drv_pwm azalır → drv_pwm = base - control_output
+    // 
+    // QEYD: Tərs məntiq istifadə olunur: base - control_output
+    float drv_pwm = g_drv_base_pwm - control_output;
 
     // DRV Limitləməsi (0-40%)
     drv_pwm = AdvancedPressureControl_ClampValue(drv_pwm, DRV_PWM_MIN, DRV_PWM_MAX);
+    
+    // DÜZƏLİŞ: 0-10% aralığında DRV tam açıqdır (dead zone)
+    // Əgər drv_pwm < 10%, onda 0% kimi tətbiq et (tam açıq)
+    // Amma display üçün real dəyəri saxla
+    // PWM tətbiqində: drv_pwm < 10% → 0% kimi tətbiq et
+    // Amma status-da real dəyəri göstər
     
     g_system_status.drv_pwm_percent = drv_pwm;
 }
