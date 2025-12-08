@@ -166,12 +166,33 @@ static bool AdvancedPressureControl_IsCalibrationRangeValid(uint16_t adc_min_val
  * qaytarırıq.
  */
 uint16_t AdvancedPressureControl_ReadADC(void) {
-    static uint16_t last_valid_adc = ADC_MIN;
+    static uint16_t last_valid_adc = 0;  // DÜZƏLİŞ: 0-dan başla, ADC_MIN deyil
     static uint32_t error_count = 0;
     static uint32_t debug_count = 0;
     static uint16_t last_read_value = 0;
     static uint32_t same_value_count = 0;
+    static bool adc_initialized = false;
     debug_count++;
+    
+    // DÜZƏLİŞ: ADC-nin işlədiyini yoxla
+    uint32_t adc_state = HAL_ADC_GetState(&hadc3);
+    
+    // ADC-nin ilk dəfə işlədiyini yoxla
+    if (!adc_initialized || ((adc_state & HAL_ADC_STATE_READY) == 0 && (adc_state & HAL_ADC_STATE_BUSY) == 0)) {
+        // ADC hazır deyil və məşğul deyil - yenidən başlat
+        if (debug_count <= 5 || (debug_count % 100 == 0)) {
+            printf("WARNING: ADC not ready, state=0x%08lX, restarting...\r\n", adc_state);
+        }
+        HAL_ADC_Stop(&hadc3);
+        HAL_Delay(10);  // DÜZƏLİŞ: Daha uzun gözlə
+        if (HAL_ADC_Start(&hadc3) != HAL_OK) {
+            printf("ERROR: ADC restart failed!\r\n");
+            return last_valid_adc;
+        }
+        // DÜZƏLİŞ: İlk konversiyanın tamamlanmasını gözlə
+        HAL_Delay(20);  // Continuous mode-da ilk konversiya üçün gözlə
+        adc_initialized = true;
+    }
 
     /* KRİTİK DÜZƏLİŞ: Continuous mode-da ADC davamlı konversiya edir
      * Əsas problem: Dəyəri oxuyub EOC flag-i təmizlədikdən sonra, yeni konversiyanın
@@ -193,30 +214,40 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
     /* KRİTİK DÜZƏLİŞ: Continuous mode-da yeni konversiyanın tamamlanmasını gözlə
      * EOC flag-inin qalxması yeni dəyərin hazır olduğunu göstərir */
     uint32_t start_time = HAL_GetTick();
-    uint32_t timeout_ms = 50;  // DÜZƏLİŞ: Continuous mode üçün daha uzun timeout (50ms)
+    uint32_t timeout_ms = 100;  // DÜZƏLİŞ: Continuous mode üçün daha uzun timeout (100ms)
     
     // EOC flag-inin qalxmasını gözlə (yeni konversiya tamamlanıb)
-    while (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC) == RESET) {
-        if ((HAL_GetTick() - start_time) >= timeout_ms) {
-            error_count++;
-            uint32_t adc_state = HAL_ADC_GetState(&hadc3);
-            
-            // ADC-nin işlədiyini yoxla
-            if ((adc_state & HAL_ADC_STATE_REG_BUSY) == 0U) {
-                // ADC dayanıb - yenidən başlat
-                HAL_ADC_Stop(&hadc3);
-                HAL_Delay(5);
-                if (HAL_ADC_Start(&hadc3) != HAL_OK) {
-                    return last_valid_adc;
+    // DÜZƏLİŞ: Əgər EOC flag artıq qalxıbsa, dərhal oxu
+    if (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC) == RESET) {
+        // EOC flag qalxmayıb - gözlə
+        while (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC) == RESET) {
+            if ((HAL_GetTick() - start_time) >= timeout_ms) {
+                error_count++;
+                uint32_t adc_state = HAL_ADC_GetState(&hadc3);
+                
+                // DÜZƏLİŞ: Debug mesajı əlavə et
+                if (debug_count <= 5 || (debug_count % 100 == 0)) {
+                    printf("ERROR: ADC EOC timeout! State=0x%08lX\r\n", adc_state);
                 }
-                HAL_Delay(10);
-                start_time = HAL_GetTick();
-                continue;
+                
+                // ADC-nin işlədiyini yoxla
+                if ((adc_state & HAL_ADC_STATE_REG_BUSY) == 0U) {
+                    // ADC dayanıb - yenidən başlat
+                    HAL_ADC_Stop(&hadc3);
+                    HAL_Delay(10);
+                    if (HAL_ADC_Start(&hadc3) != HAL_OK) {
+                        return last_valid_adc;
+                    }
+                    HAL_Delay(20);  // İlk konversiya üçün gözlə
+                    start_time = HAL_GetTick();
+                    continue;
+                }
+                // DÜZƏLİŞ: Əgər timeout baş veribsə, amma ADC işləyirsə, dəyəri oxumağa cəhd et
+                break;
             }
-            return last_valid_adc;
+            // CPU-nu bloklamamaq üçün qısa gecikmə
+            for(volatile uint32_t i = 0; i < 1000; i++);
         }
-        // CPU-nu bloklamamaq üçün qısa gecikmə
-        for(volatile uint32_t i = 0; i < 1000; i++);
     }
 
     /* EOC flag qalxıb - dəyəri oxu və flag-i təmizlə */
@@ -256,16 +287,32 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
     if (adc_value == 0U) {
         zero_count++;
         error_count++;
+        
+        // DÜZƏLİŞ: Real ADC dəyərini qaytar (0), last_valid_adc deyil
+        // Bu, istifadəçiyə ADC-nin həqiqətən 0 oxuduğunu göstərir
+        // Hardware problemi varsa, bu dəyər göstərilməlidir
+        
         // Ardıcıl 0 oxunuşları zamanı ADC-ni yenidən başlat
         if (zero_count > 50) {
+            if (debug_count % 100 == 0) {
+                printf("WARNING: ADC stuck at 0, restarting...\r\n");
+            }
             HAL_ADC_Stop(&hadc3);
-            HAL_Delay(5);
+            HAL_Delay(10);
             HAL_ADC_Start(&hadc3);
+            HAL_Delay(20);  // İlk konversiya üçün gözlə
+            adc_initialized = false;  // Yenidən init et
             zero_count = 0;
         }
-        return last_valid_adc;
+        
+        // DÜZƏLİŞ: Həmişə real ADC dəyərini qaytar (0)
+        // last_valid_adc istifadə etmə, çünki bu, hardware problemini gizlədir
+        last_valid_adc = 0U;  // Update last_valid_adc
+        return 0U;
     } else {
         zero_count = 0;
+        // DÜZƏLİŞ: Uğurlu oxunuş zamanı last_valid_adc-i yenilə
+        last_valid_adc = adc_value;
     }
 
     // Uğurlu oxunuş - error_count-u sıfırla
@@ -276,6 +323,12 @@ uint16_t AdvancedPressureControl_ReadADC(void) {
     // DEBUG: Yalnız ilk 5 oxunuşda göstər (UART tıxanmasının qarşısını almaq üçün)
     if (debug_count <= 5) {
         printf("DEBUG ADC[%lu]: value=%u\r\n", debug_count, adc_value);
+    }
+    
+    // DÜZƏLİŞ: ADC 0 olduqda debug mesajı göstər (hər 100 çağırışda bir)
+    if (adc_value == 0U && (debug_count % 100 == 0)) {
+        printf("WARNING: ADC reading is 0! Check hardware connection.\r\n");
+        printf("  ADC State: 0x%08lX\r\n", HAL_ADC_GetState(&hadc3));
     }
 
     last_valid_adc = adc_value;
@@ -352,6 +405,13 @@ static float AdvancedPressureControl_ConvertAdcToPressure(uint16_t adc_raw) {
                g_calibration.adc_min, g_calibration.adc_max,
                g_calibration.pressure_min, g_calibration.pressure_max);
         first_call = false;
+    }
+
+    // DÜZƏLİŞ: ADC 0 olduqda 0.0 bar qaytar (hardware problemi göstərir)
+    if (adc_raw == 0U) {
+        // ADC 0 oxuyur - bu hardware problemi ola bilər
+        // Təzyiq 0.0 bar qaytar ki, istifadəçi problemi görsün
+        return 0.0f;
     }
 
     // DÜZƏLİŞ: Lineyar çevirmə düsturu - offset istifadə edilir
@@ -912,6 +972,11 @@ void AdvancedPressureControl_Step(void) {
     
     if (!g_control_initialized) {
         // Sistem başlanmayıb - PWM-ləri sıfırla və çıx
+        // DÜZƏLİŞ: Status strukturunu da yenilə ki, UI-da düzgün göstərilsin
+        g_system_status.zme_pwm_percent = 0.0f;
+        g_system_status.drv_pwm_percent = 0.0f;
+        g_system_status.motor_pwm_percent = 0.0f;
+        
         AdvancedPressureControl_SetZME_PWM(0.0f);
         AdvancedPressureControl_SetDRV_PWM(0.0f);
         AdvancedPressureControl_SetMotor_PWM(0.0f);
@@ -920,6 +985,11 @@ void AdvancedPressureControl_Step(void) {
     if (!g_system_status.control_enabled) {
         // Nəzarət deaktiv - motor sürətini təyin et, PID-ni atla
         AdvancedPressureControl_ControlMotorSpeed();
+        
+        // DÜZƏLİŞ: Status strukturunu da yenilə ki, UI-da düzgün göstərilsin
+        g_system_status.zme_pwm_percent = ZME_PWM_MAX;  // ZME bağlı (30.0%)
+        g_system_status.drv_pwm_percent = DRV_PWM_MIN;  // DRV açıq (0.0%)
+        
         AdvancedPressureControl_SetZME_PWM(ZME_PWM_MAX);  // ZME bağlı
         AdvancedPressureControl_SetDRV_PWM(DRV_PWM_MIN);  // DRV açıq
         return;
@@ -938,6 +1008,19 @@ void AdvancedPressureControl_Step(void) {
     // KRİTİK DÜZƏLİŞ: Xam ADC dəyərini də Status strukturuna yaz (UI üçün)
     uint16_t raw_adc = AdvancedPressureControl_ReadADC();
     g_system_status.raw_adc_value = raw_adc;
+    
+    // DÜZƏLİŞ: ADC 0 olduqda debug mesajı göstər
+    static uint32_t adc_zero_debug_count = 0;
+    if (raw_adc == 0U) {
+        adc_zero_debug_count++;
+        if (adc_zero_debug_count <= 10 || (adc_zero_debug_count % 100 == 0)) {
+            printf("ERROR: ADC=0 at step #%lu! Check ADC hardware.\r\n", step_count);
+            printf("  ADC State: 0x%08lX, Channel: ADC_CHANNEL_3\r\n", HAL_ADC_GetState(&hadc3));
+        }
+    } else {
+        adc_zero_debug_count = 0;  // Reset counter when ADC is valid
+    }
+    
     // DÜZƏLİŞ: ReadPressure() istifadə et ki, ADC clamp və filtrləmə düzgün işləsin
     g_system_status.current_pressure = AdvancedPressureControl_ReadPressure();
     
@@ -1100,6 +1183,10 @@ void AdvancedPressureControl_Init(void) {
     g_zme_base_pwm = ZME_BASE_PWM_DEFAULT;
     g_drv_base_pwm = DRV_BASE_PWM_DEFAULT;
     
+    // DÜZƏLİŞ: Motor PWM-in ilkin dəyərini təyin et (ekranda 0.0% göstərilməməsi üçün)
+    // Motor sürətini target_pressure-ə görə hesabla
+    AdvancedPressureControl_ControlMotorSpeed();
+    
     // Flash-dan PID parametrlərini yüklə
     AdvancedPressureControl_LoadPIDParamsFromFlash();
     
@@ -1122,8 +1209,21 @@ void AdvancedPressureControl_Init(void) {
     g_system_status.control_enabled = true;
     g_control_initialized = true;
     
-    printf("PID Init: SP=%.1f bar, Kp=%.3f\r\n", 
-           g_system_status.target_pressure, g_pid_zme.Kp);
+    // DÜZƏLİŞ: ZME və DRV PWM-lərinin ilkin dəyərlərini təyin et (ekranda 0.0% göstərilməməsi üçün)
+    // SP-yə görə baza dəyərlərini hesabla
+    g_zme_base_pwm = AdvancedPressureControl_CalculateZMEBaseFromSP(g_system_status.target_pressure);
+    g_drv_base_pwm = AdvancedPressureControl_CalculateDRVBaseFromSP(g_system_status.target_pressure);
+    
+    // İlkin PWM dəyərlərini status strukturuna yaz (control_output = 0 olduğu üçün baza dəyərləri istifadə et)
+    g_system_status.zme_pwm_percent = g_zme_base_pwm;
+    g_system_status.drv_pwm_percent = g_drv_base_pwm;
+    
+    // PWM-ləri tətbiq et
+    AdvancedPressureControl_SetZME_PWM(g_system_status.zme_pwm_percent);
+    AdvancedPressureControl_SetDRV_PWM(g_system_status.drv_pwm_percent);
+    
+    printf("PID Init: SP=%.1f bar, Motor=%.1f%%, Kp=%.3f\r\n", 
+           g_system_status.target_pressure, g_system_status.motor_pwm_percent, g_pid_zme.Kp);
 }
 
 /**

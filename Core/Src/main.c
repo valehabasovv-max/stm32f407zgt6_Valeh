@@ -404,12 +404,7 @@ void Screen_DrawMain(void) {
     float current_p = status->current_pressure;
     float target_p = status->target_pressure;
     
-    /* Təzyiq dəyəri */
-    ILI9341_FillRect(115, 30, 90, 50, COLOR_BG_DARK);
-    char press_str[16];
-    sprintf(press_str, "%.1f", current_p);
-    
-    /* Rəng seçimi */
+    /* Rəng seçimi - press_color dəyişəni if blokundan əvvəl elan edilməlidir */
     uint16_t press_color;
     if (fabsf(current_p - target_p) < 5.0f) {
         press_color = COLOR_ACCENT_GREEN;
@@ -419,8 +414,23 @@ void Screen_DrawMain(void) {
         press_color = COLOR_ACCENT_YELLOW;
     }
     
-    ILI9341_DrawString(115, 35, press_str, press_color, COLOR_BG_DARK, 3);
-    ILI9341_DrawString(115, 65, "BAR", COLOR_TEXT_GREY, COLOR_BG_DARK, 1);
+    /* DÜZƏLİŞ: ADC 0 olduqda xəbərdarlıq göstər */
+    ILI9341_FillRect(115, 30, 90, 50, COLOR_BG_DARK);
+    if (status->raw_adc_value == 0U) {
+        // ADC 0 oxuyur - hardware problemi ola bilər
+        ILI9341_DrawString(115, 35, "ADC=0", COLOR_ACCENT_RED, COLOR_BG_DARK, 2);
+        ILI9341_DrawString(115, 55, "CHECK", COLOR_ACCENT_RED, COLOR_BG_DARK, 1);
+        ILI9341_DrawString(115, 65, "HW PA3", COLOR_ACCENT_RED, COLOR_BG_DARK, 1);
+        // Progress bar üçün qırmızı rəng istifadə et
+        press_color = COLOR_ACCENT_RED;
+    } else {
+        /* Təzyiq dəyəri */
+        char press_str[16];
+        sprintf(press_str, "%.1f", current_p);
+        
+        ILI9341_DrawString(115, 35, press_str, press_color, COLOR_BG_DARK, 3);
+        ILI9341_DrawString(115, 65, "BAR", COLOR_TEXT_GREY, COLOR_BG_DARK, 1);
+    }
     
     /* Hədəf göstəricisi */
     char target_str[24];
@@ -1619,7 +1629,50 @@ int main(void)
   MX_ADC3_Init();
   
   /* ADC başlat */
-  HAL_ADC_Start(&hadc3);
+  // DÜZƏLİŞ: ADC-ni əvvəlcə stop et (əgər əvvəldən başlanıbsa)
+  HAL_ADC_Stop(&hadc3);
+  HAL_Delay(10);
+  
+  if (HAL_ADC_Start(&hadc3) != HAL_OK) {
+    printf("ERROR: ADC3 Start failed!\r\n");
+    Error_Handler();
+  }
+  
+  /* ADC-nin işlədiyini yoxla */
+  HAL_Delay(20);  // DÜZƏLİŞ: ADC-nin başlanması üçün daha uzun gözlə (continuous mode üçün)
+  uint32_t adc_state = HAL_ADC_GetState(&hadc3);
+  printf("ADC3 State after start: 0x%08lX\r\n", adc_state);
+  
+  /* İlk ADC oxunuşunu test et */
+  // DÜZƏLİŞ: Continuous mode-da ilk konversiyanın tamamlanmasını gözlə
+  uint32_t test_start = HAL_GetTick();
+  bool eoc_found = false;
+  while ((HAL_GetTick() - test_start) < 100) {  // 100ms timeout
+    if (__HAL_ADC_GET_FLAG(&hadc3, ADC_FLAG_EOC) != RESET) {
+      uint16_t test_adc = HAL_ADC_GetValue(&hadc3);
+      __HAL_ADC_CLEAR_FLAG(&hadc3, ADC_FLAG_EOC);
+      printf("ADC3 Initial test read: %u (Channel 3, PA3)\r\n", test_adc);
+      if (test_adc == 0) {
+        printf("WARNING: ADC reading is 0! Check hardware connection on PA3.\r\n");
+        printf("  - Verify PA3 pin connection\r\n");
+        printf("  - Check sensor power supply\r\n");
+        printf("  - Verify ADC3_IN3 channel configuration\r\n");
+      }
+      eoc_found = true;
+      break;
+    }
+    HAL_Delay(1);
+  }
+  
+  if (!eoc_found) {
+    printf("WARNING: ADC EOC flag not set after 100ms!\r\n");
+    printf("  ADC State: 0x%08lX\r\n", HAL_ADC_GetState(&hadc3));
+    // DÜZƏLİŞ: Yenidən başlat
+    HAL_ADC_Stop(&hadc3);
+    HAL_Delay(10);
+    HAL_ADC_Start(&hadc3);
+    HAL_Delay(20);
+  }
   
   MX_TIM3_Init();
   MX_TIM6_Init();
