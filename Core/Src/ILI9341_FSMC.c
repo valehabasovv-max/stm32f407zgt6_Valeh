@@ -815,11 +815,8 @@ void ILI9341_ShowCalibrationPage(void)
     sprintf(calib_info, "X: %d-%d, Y: %d-%d", x_min, x_max, y_min, y_max);
     ILI9341_DrawString(20, 100, calib_info, ILI9341_COLOR_CYAN, ILI9341_COLOR_BLACK, 1);
     
-    // Coordinate mode buttons
-    ILI9341_DrawControlButton(20, 130, 60, 30, ILI9341_COLOR_WHITE, "Mode 0", 1);
-    ILI9341_DrawControlButton(90, 130, 60, 30, ILI9341_COLOR_WHITE, "Mode 1", 1);
-    ILI9341_DrawControlButton(160, 130, 60, 30, ILI9341_COLOR_WHITE, "Mode 2", 1);
-    ILI9341_DrawControlButton(230, 130, 60, 30, ILI9341_COLOR_WHITE, "Mode 3", 1);
+    // DÜZƏLİŞ: Mode düymələri silinib, yalnız Mode 1 istifadə olunur
+    ILI9341_DrawString(20, 130, "Mode: 1 (Fixed)", ILI9341_COLOR_GREEN, ILI9341_COLOR_BLACK, 1);
     
     // Back button
     ILI9341_DrawControlButton(20, 200, 80, 30, ILI9341_COLOR_WHITE, "Back", 1);
@@ -1073,21 +1070,9 @@ void ILI9341_HandlePressureControlTouch(void)
                 // REMOVED: case 3 (Pressure limit page) - PRES LIM bölməsi silindi
                     
                 case 7: // Touch Calibration page
-                    // Mode buttons
-                    if (screen_x >= 20 && screen_x <= 80 && screen_y >= 130 && screen_y <= 160) {
-                        XPT2046_SetCoordMode(0);
-                    }
-                    else if (screen_x >= 90 && screen_x <= 150 && screen_y >= 130 && screen_y <= 160) {
-                        XPT2046_SetCoordMode(1);
-                    }
-                    else if (screen_x >= 160 && screen_x <= 220 && screen_y >= 130 && screen_y <= 160) {
-                        XPT2046_SetCoordMode(2);
-                    }
-                    else if (screen_x >= 230 && screen_x <= 290 && screen_y >= 130 && screen_y <= 160) {
-                        XPT2046_SetCoordMode(3);
-                    }
+                    // DÜZƏLİŞ: Mode düymələri silinib, yalnız Mode 1 istifadə olunur
                     // Back button
-                    else if (screen_x >= 20 && screen_x <= 100 && screen_y >= 200 && screen_y <= 230) {
+                    if (screen_x >= 20 && screen_x <= 100 && screen_y >= 200 && screen_y <= 230) {
                         ILI9341_ShowMenuPage();
                     }
                     break;
